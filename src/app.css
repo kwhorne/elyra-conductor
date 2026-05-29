@@ -10,7 +10,7 @@
   --accent-2: #2f3650;
   --green: #9ece6a;
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --font-mono: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
 }
 
 * {

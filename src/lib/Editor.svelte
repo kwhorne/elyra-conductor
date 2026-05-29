@@ -49,6 +49,8 @@
       theme: "vs-dark",
       automaticLayout: true,
       fontSize: 13,
+      fontFamily: '"JetBrains Mono", "SF Mono", Menlo, monospace',
+      fontLigatures: true,
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
     });

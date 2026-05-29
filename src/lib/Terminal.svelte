@@ -16,7 +16,7 @@
   onMount(async () => {
     term = new Terminal({
       fontSize: 13,
-      fontFamily: 'var(--font-mono), Menlo, monospace',
+      fontFamily: '"JetBrains Mono", "SF Mono", Menlo, monospace',
       cursorBlink: true,
       allowProposedApi: true,
       theme: {
@@ -29,6 +29,11 @@
     fit = new FitAddon();
     term.loadAddon(fit);
     term.open(el);
+    // Wait for the bundled font so xterm measures glyphs with correct metrics.
+    try {
+      await document.fonts.load('13px "JetBrains Mono"');
+      await document.fonts.ready;
+    } catch {}
     fit.fit();
 
     const unData = await listen(`pty://data/${id}`, (e) => {

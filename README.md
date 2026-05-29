@@ -68,6 +68,10 @@ dividers between panes are drag-to-resize.
 | Terminal | [`xterm.js`](https://xtermjs.org/) ↔ [`portable-pty`](https://crates.io/crates/portable-pty) |
 | Editor | [Monaco](https://microsoft.github.io/monaco-editor/) (quick-edit) |
 | Dialogs | `tauri-plugin-dialog` (native file/folder pickers) |
+| Mono font | [JetBrains Mono](https://www.jetbrains.com/lp/mono/) bundled via `@fontsource` (offline, consistent everywhere) |
+
+The UI uses the OS system font (`-apple-system` → SF Pro on macOS); terminals and
+the editor use the bundled **JetBrains Mono** (with ligatures in the editor).
 
 ## Prerequisites
 
