@@ -2,7 +2,7 @@
 import { deflateSync } from "node:zlib";
 import { writeFileSync, mkdirSync } from "node:fs";
 
-const size = 512;
+const size = 1024;
 const [r, g, b] = [0x7a, 0xa2, 0xf7]; // accent blue
 const bg = [0x16, 0x16, 0x1e];
 
