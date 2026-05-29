@@ -30,8 +30,19 @@ pub fn agent_spawn(
 ) -> Result<(), String> {
     let bin = crate::projects::find_bin("elyra").ok_or("elyra not found on PATH")?;
 
-    let mut cmd = Command::new(bin);
+    // elyra is a Node script (`#!/usr/bin/env node`). A GUI-launched app has a
+    // minimal PATH without nvm/node, so give the child the login-shell PATH
+    // (plus the dir holding the resolved elyra binary, where node also lives).
+    let mut path = crate::projects::login_shell_path()
+        .or_else(|| std::env::var("PATH").ok())
+        .unwrap_or_default();
+    if let Some(dir) = std::path::Path::new(&bin).parent() {
+        path = format!("{}:{}", dir.display(), path);
+    }
+
+    let mut cmd = Command::new(&bin);
     cmd.arg("--mode").arg("rpc");
+    cmd.env("PATH", path);
     if std::path::Path::new(&cwd).is_dir() {
         cmd.current_dir(&cwd);
     }

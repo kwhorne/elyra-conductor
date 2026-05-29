@@ -166,6 +166,20 @@
     bump();
   }
 
+  async function restart() {
+    entries = [];
+    curIdx = -1;
+    pendingUI = null;
+    busy = false;
+    exited = false;
+    try {
+      await invoke("agent_spawn", { id, cwd });
+    } catch (e) {
+      entries.push({ kind: "note", level: "error", text: `Could not start Elyra: ${e}` });
+      exited = true;
+    }
+  }
+
   function onKeydown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -210,6 +224,9 @@
     {#if statusText}<span class="status">{statusText}</span>{/if}
     {#if busy}
       <button class="abort" onclick={() => send({ type: "abort" })}>Stop</button>
+    {/if}
+    {#if exited}
+      <button class="restart" onclick={restart}>↻ Restart</button>
     {/if}
   </div>
 
@@ -284,6 +301,7 @@
   .busy { color: var(--accent); font-size: 11px; }
   .status { color: var(--text-dim); font-size: 11px; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .abort { margin-left: auto; background: transparent; border: 1px solid var(--border); color: var(--red); border-radius: 6px; padding: 3px 10px; font-size: 11px; }
+  .restart { margin-left: auto; background: var(--accent); border: none; color: #fff; border-radius: 6px; padding: 3px 10px; font-size: 11px; }
   .messages { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
   .msg { display: flex; flex-direction: column; gap: 3px; }
   .who { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); }

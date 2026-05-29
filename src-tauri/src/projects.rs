@@ -173,6 +173,23 @@ pub fn find_bin(bin: &str) -> Option<String> {
     resolve_via_login_shell(bin)
 }
 
+/// The user's full PATH as seen by their login shell (includes nvm/asdf dirs).
+/// GUI-launched apps otherwise get a minimal PATH that breaks `#!/usr/bin/env node`.
+pub fn login_shell_path() -> Option<String> {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let out = std::process::Command::new(&shell)
+        .arg("-lic")
+        .arg("printf 'CONDUCTOR_PATH:%s\\n' \"$PATH\"")
+        .output()
+        .ok()?;
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("CONDUCTOR_PATH:"))
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+}
+
 fn resolve_via_login_shell(bin: &str) -> Option<String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
     let out = std::process::Command::new(&shell)
