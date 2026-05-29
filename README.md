@@ -46,11 +46,15 @@ Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
 | `⌘K` | Open command palette |
 | `⌘D` | Split active pane right |
 | `⇧⌘D` | Split active pane down |
-| `⌘W` | Close active pane |
+| `⌘W` | Close active pane (or close the editor when it is focused) |
 | `⌘B` | Toggle file sidebar |
 | `⌘S` | Save file (when editor is focused) |
 
 > On Linux/Windows, `Ctrl` substitutes for `⌘`.
+
+While the editor is focused it owns all the usual editor keys — `⌘F` find,
+`⌘/` toggle comment, `⌘D` multi-cursor, `⌘K` chords, and so on — and the app's
+pane shortcuts step aside. Close the editor with `⌘W` or the **✕** button.
 
 Each pane also has hover controls (split right / split down / close), and the
 dividers between panes are drag-to-resize.

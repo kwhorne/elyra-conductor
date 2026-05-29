@@ -4,7 +4,7 @@
   import "./monaco-setup.js";
   import { invoke } from "@tauri-apps/api/core";
 
-  let { path } = $props();
+  let { path, onclose } = $props();
 
   let el;
   let editor;
@@ -74,6 +74,7 @@
     <span class="fname">{basename(currentPath)}{dirty ? " •" : ""}</span>
     <span class="status">{status}</span>
     <button onclick={save} disabled={!currentPath}>Save ⌘S</button>
+    <button class="close" title="Close editor (⌘W)" onclick={() => onclose?.()}>✕</button>
   </div>
   <div class="monaco" bind:this={el}></div>
 </div>
@@ -113,6 +114,15 @@
   .editor-bar button:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+  .editor-bar button.close {
+    background: transparent;
+    border: 1px solid var(--border);
+    padding: 3px 7px;
+  }
+  .editor-bar button.close:hover {
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .monaco {
     flex: 1;

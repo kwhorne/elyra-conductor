@@ -183,18 +183,37 @@
     return list;
   });
 
+  // Is keyboard focus currently inside the Monaco editor?
+  function inEditorContext() {
+    const el = document.activeElement;
+    return !!(el && el.closest && el.closest(".editor-area"));
+  }
+
   function onGlobalKey(e) {
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === "k") {
+    if (!mod) return;
+    const k = e.key.toLowerCase();
+
+    // While editing, let Monaco own its shortcuts (multi-cursor ⌘D, find ⌘F,
+    // ⌘K chords, etc). We only add ⌘W to close the editor.
+    if (inEditorContext()) {
+      if (k === "w") {
+        e.preventDefault();
+        showEditor = false;
+      }
+      return;
+    }
+
+    if (k === "k") {
       e.preventDefault();
       paletteOpen = !paletteOpen;
-    } else if (mod && e.key.toLowerCase() === "d") {
+    } else if (k === "d") {
       e.preventDefault();
       if (activeTermId) splitPane(activeTermId, e.shiftKey ? "col" : "row");
-    } else if (mod && e.key.toLowerCase() === "w") {
+    } else if (k === "w") {
       e.preventDefault();
       if (activeTermId) closePane(activeTermId);
-    } else if (mod && e.key.toLowerCase() === "b") {
+    } else if (k === "b") {
       e.preventDefault();
       showFiles = !showFiles;
     }
@@ -297,7 +316,7 @@
       </div>
 
       {#if showEditor}
-        <div class="editor-area"><Editor path={editorPath} /></div>
+        <div class="editor-area"><Editor path={editorPath} onclose={() => (showEditor = false)} /></div>
       {/if}
 
       {#if showFiles}
