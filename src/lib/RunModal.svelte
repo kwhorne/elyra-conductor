@@ -5,10 +5,9 @@
 
   let finished = $state(false);
   let exitCode = $state(null);
+  let runId = $state(null);
   let closeTimer = null;
-
-  // Unique id per run so reopening remounts a fresh PTY.
-  let runId = $derived(open ? `run-${cwd}-${command}-${title}` : null);
+  let seq = 0;
 
   // The shell exits as soon as the command completes, so the modal can
   // auto-close once the whole flow has been shown.
@@ -23,11 +22,13 @@
     closeTimer = setTimeout(() => onclose?.(), delay);
   }
 
-  // Reset state each time the modal (re)opens.
+  // Reset state each time the modal (re)opens. The id must be free of dots and
+  // other characters Tauri forbids in event names, so use a plain counter.
   $effect(() => {
     if (open) {
       finished = false;
       exitCode = null;
+      runId = `run-${++seq}`;
     } else {
       clearTimeout(closeTimer);
     }
