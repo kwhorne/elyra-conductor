@@ -20,10 +20,18 @@ pnpm tauri signer generate -w ~/.tauri/elyra-conductor.key
 
 ## Cutting a release
 
-1. **Bump the version** in `package.json`, `src-tauri/tauri.conf.json`, and
-   `src-tauri/Cargo.toml` (keep them in sync), then commit.
+1. **Update the changelog.** In [CHANGELOG.md](CHANGELOG.md), rename the
+   `[Unreleased]` heading to `[<version>] — <YYYY-MM-DD>`, then add a fresh empty
+   `[Unreleased]` section above it. Update the comparison links at the bottom of
+   the file (add a `compare/v<prev>...v<version>` line and re-point `[Unreleased]`
+   to `compare/v<version>...HEAD`). This section becomes the GitHub release notes
+   in step 5.
 
-2. **Build a signed bundle.** Use the helper script — it loads the signing key,
+2. **Bump the version** in `package.json`, `src-tauri/tauri.conf.json`, and
+   `src-tauri/Cargo.toml` (keep them in sync), then commit (changelog + bump
+   together).
+
+3. **Build a signed bundle.** Use the helper script — it loads the signing key,
    cleans stale DMG mounts, and sets `CI=true` so create-dmg skips the flaky
    AppleScript window-styling step:
 
@@ -43,11 +51,12 @@ pnpm tauri signer generate -w ~/.tauri/elyra-conductor.key
    > (that's what `latest.json` points to — the signature is over the file
    > contents, not the name, so renaming is safe).
 
-3. **The update manifest** (`latest.json`) is generated automatically by the
+4. **The update manifest** (`latest.json`) is generated automatically by the
    release script. To regenerate it manually: `node scripts/make-latest-json.mjs`.
 
-4. **Create the GitHub release** for tag `v<version>` and upload these assets
-   (rename the tarball/sig to the stable space-free name):
+5. **Create the GitHub release** for tag `v<version>` (use the new changelog
+   section as the release notes) and upload these assets (rename the tarball/sig
+   to the stable space-free name):
    - `Elyra Conductor_<version>_aarch64.dmg`
    - `elyra-conductor.app.tar.gz`  (the `Elyra Conductor.app.tar.gz`)
    - `elyra-conductor.app.tar.gz.sig`
