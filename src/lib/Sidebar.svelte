@@ -1,83 +1,104 @@
 <script>
   let {
     projects = [],
+    pinned = [],
     editors = [],
     activePath = null,
     onselect,
     onopen,
     onroot,
     onrefresh,
+    onpin,
     root = "",
   } = $props();
 
   let filter = $state("");
 
-  let filtered = $derived(
-    projects.filter((p) =>
-      p.name.toLowerCase().includes(filter.toLowerCase())
-    )
-  );
+  let pinnedPaths = $derived(new Set(pinned.map((p) => p.path)));
 
-  function pickRoot() {
-    onroot?.();
+  function match(p) {
+    return p.name.toLowerCase().includes(filter.toLowerCase());
   }
+
+  let filteredPinned = $derived(pinned.filter(match));
+  let filteredUnpinned = $derived(
+    projects.filter((p) => !pinnedPaths.has(p.path) && match(p))
+  );
 </script>
 
 <div class="sidebar">
   <div class="header">
     <span class="title">Projects</span>
     <button class="root-btn" title="Refresh projects & git status" onclick={() => onrefresh?.()}>⟳</button>
-    <button class="root-btn" title="Change folder" onclick={pickRoot}>⋯</button>
+    <button class="root-btn" title="Change folder" onclick={() => onroot?.()}>⋯</button>
   </div>
   <div class="root-path" title={root}>{root || "No folder selected"}</div>
 
-  <input
-    class="search"
-    placeholder="Search projects…"
-    bind:value={filter}
-  />
+  <input class="search" placeholder="Search projects…" bind:value={filter} />
+
+  {#snippet item(p)}
+    <div
+      class="item"
+      class:active={p.path === activePath}
+      role="button"
+      tabindex="0"
+      onclick={() => onselect?.(p)}
+      onkeydown={(e) => e.key === "Enter" && onselect?.(p)}
+    >
+      <div class="row1">
+        <span class="name">{p.name}</span>
+        <span class="spacer"></span>
+        {#if p.dirty}
+          <span class="dirty" title="Uncommitted changes">●</span>
+        {/if}
+        {#if p.ahead}
+          <span class="track up" title="{p.ahead} ahead of upstream">↑{p.ahead}</span>
+        {/if}
+        {#if p.behind}
+          <span class="track down" title="{p.behind} behind upstream">↓{p.behind}</span>
+        {/if}
+        {#if p.is_git}
+          <span class="branch">⎇ {p.branch ?? "detached"}</span>
+        {/if}
+        <button
+          class="pin"
+          class:pinned={pinnedPaths.has(p.path)}
+          title={pinnedPaths.has(p.path) ? "Unpin" : "Pin"}
+          onclick={(e) => {
+            e.stopPropagation();
+            onpin?.(p);
+          }}>📌</button
+        >
+      </div>
+      {#if p.path === activePath}
+        <div class="actions">
+          {#each editors as ed}
+            <button
+              onclick={(e) => {
+                e.stopPropagation();
+                onopen?.(ed, p);
+              }}>{ed}</button
+            >
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/snippet}
 
   <div class="list">
-    {#each filtered as p (p.path)}
-      <div
-        class="item"
-        class:active={p.path === activePath}
-        role="button"
-        tabindex="0"
-        onclick={() => onselect?.(p)}
-        onkeydown={(e) => e.key === "Enter" && onselect?.(p)}
-      >
-        <div class="row1">
-          <span class="name">{p.name}</span>
-          <span class="spacer"></span>
-          {#if p.dirty}
-            <span class="dirty" title="Uncommitted changes">●</span>
-          {/if}
-          {#if p.ahead}
-            <span class="track up" title="{p.ahead} ahead of upstream">↑{p.ahead}</span>
-          {/if}
-          {#if p.behind}
-            <span class="track down" title="{p.behind} behind upstream">↓{p.behind}</span>
-          {/if}
-          {#if p.is_git}
-            <span class="branch">⎇ {p.branch ?? "detached"}</span>
-          {/if}
-        </div>
-        {#if p.path === activePath}
-          <div class="actions">
-            {#each editors as ed}
-              <button
-                onclick={(e) => {
-                  e.stopPropagation();
-                  onopen?.(ed, p);
-                }}>{ed}</button
-              >
-            {/each}
-          </div>
-        {/if}
-      </div>
+    {#if filteredPinned.length > 0}
+      <div class="section-label">Pinned</div>
+      {#each filteredPinned as p (p.path)}
+        {@render item(p)}
+      {/each}
+      <div class="section-label">Projects</div>
+    {/if}
+
+    {#each filteredUnpinned as p (p.path)}
+      {@render item(p)}
     {/each}
-    {#if filtered.length === 0}
+
+    {#if filteredPinned.length === 0 && filteredUnpinned.length === 0}
       <div class="empty">No projects</div>
     {/if}
   </div>
@@ -142,6 +163,13 @@
     overflow-y: auto;
     padding: 0 6px 10px;
   }
+  .section-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-dim);
+    padding: 8px 8px 4px;
+  }
   .item {
     padding: 7px 8px;
     border-radius: 7px;
@@ -183,6 +211,27 @@
   }
   .track.down {
     color: #f7768e;
+  }
+  .pin {
+    background: transparent;
+    border: none;
+    font-size: 11px;
+    line-height: 1;
+    padding: 0 2px;
+    opacity: 0;
+    filter: grayscale(1);
+    transition: opacity 0.12s;
+    align-self: center;
+  }
+  .item:hover .pin {
+    opacity: 0.55;
+  }
+  .pin.pinned {
+    opacity: 1;
+    filter: none;
+  }
+  .pin:hover {
+    opacity: 1;
   }
   .actions {
     display: flex;

@@ -27,6 +27,8 @@ Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
 - 📁 **Project switcher** — scans a folder (default `~/Code`), shows the current
   git branch, dirty state, and ahead/behind counts per repository, with instant
   fuzzy search.
+- 📌 **Pinned projects** — pin favourites to a sticky section at the top of the
+  sidebar; they persist (even across folder changes) until you unpin them.
 - 🪟 **Split panes** — split any terminal horizontally or vertically, nest freely,
   and drag the dividers to resize. Panes never lose their session on relayout.
 - 🖥️ **Real terminals** — one PTY per pane, powered by `portable-pty` and rendered

@@ -15,6 +15,7 @@
 
   let root = $state("");
   let projects = $state([]);
+  let pinned = $state([]); // [{ path, name, is_git, branch, dirty, ahead, behind }]
   let editors = $state([]);
   let activeProject = $state(null);
 
@@ -161,6 +162,25 @@
     }
   }
 
+  function togglePin(project) {
+    if (pinned.some((p) => p.path === project.path)) {
+      pinned = pinned.filter((p) => p.path !== project.path);
+    } else {
+      pinned = [
+        ...pinned,
+        {
+          path: project.path,
+          name: project.name,
+          is_git: project.is_git,
+          branch: project.branch,
+          dirty: project.dirty,
+          ahead: project.ahead,
+          behind: project.behind,
+        },
+      ];
+    }
+  }
+
   let lastGitRefresh = 0;
   function refreshGitStatusThrottled() {
     const now = Date.now();
@@ -172,19 +192,23 @@
   // Enrich each git project with dirty/ahead/behind, in parallel, after the
   // initial (fast) listing is shown.
   async function loadGitStatus() {
-    const current = projects;
-    await Promise.all(
-      current.map(async (p) => {
-        if (!p.is_git) return;
-        try {
-          const s = await invoke("git_status", { path: p.path });
-          p.branch = s.branch ?? p.branch;
-          p.dirty = s.dirty;
-          p.ahead = s.ahead;
-          p.behind = s.behind;
-        } catch {}
-      })
-    );
+    // Refresh both the scanned projects and the pinned list (pinned may point
+    // outside the current root, so we resolve their status independently).
+    const enrich = async (p, assumeGit) => {
+      if (!assumeGit && !p.is_git) return;
+      try {
+        const s = await invoke("git_status", { path: p.path });
+        p.is_git = p.is_git || !!s.branch;
+        p.branch = s.branch ?? p.branch;
+        p.dirty = s.dirty;
+        p.ahead = s.ahead;
+        p.behind = s.behind;
+      } catch {}
+    };
+    await Promise.all([
+      ...projects.map((p) => enrich(p, false)),
+      ...pinned.map((p) => enrich(p, true)),
+    ]);
   }
 
   function makeLeaf(cwd, title) {
@@ -402,6 +426,7 @@
     return {
       root,
       activeProjectPath: activeProject?.path ?? null,
+      pinned: pinned.map((p) => ({ path: p.path, name: p.name })),
       showFiles,
       showHidden,
       theme,
@@ -434,6 +459,7 @@
     }
     if (!saved) return false;
 
+    if (Array.isArray(saved.pinned)) pinned = saved.pinned.map((p) => ({ ...p }));
     if (saved.activeProjectPath)
       activeProject = projects.find((p) => p.path === saved.activeProjectPath) ?? null;
     showFiles = saved.showFiles ?? true;
@@ -488,6 +514,7 @@
 
     await loadProjects();
     restore();
+    loadGitStatus(); // enrich pinned items resolved during restore
     loaded = true;
   });
 
@@ -501,6 +528,7 @@
 <div class="app">
   <Sidebar
     {projects}
+    {pinned}
     {editors}
     {root}
     activePath={activeProject?.path}
@@ -508,6 +536,7 @@
     onopen={openInEditor}
     onroot={changeRoot}
     onrefresh={loadProjects}
+    onpin={togglePin}
   />
 
   <div class="main">
