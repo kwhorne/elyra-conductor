@@ -2,7 +2,8 @@
 name = "elyra-conductor"
 version = "0.1.0"
 description = "Local project conductor: switcher, terminals, quick-edit"
-authors = ["you"]
+authors = ["kwhorne <kh@gets.no>"]
+license = "MIT"
 edition = "2021"
 
 [lib]
