@@ -1,4 +1,4 @@
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::Mutex;
@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter, State};
 struct PtySession {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
-    child: Box<dyn Child + Send + Sync>,
+    killer: Box<dyn ChildKiller + Send + Sync>,
 }
 
 #[derive(Default)]
@@ -42,7 +42,8 @@ pub fn pty_spawn(
     }
     cmd.env("TERM", "xterm-256color");
 
-    let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let killer = child.clone_killer();
     drop(pair.slave);
 
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
@@ -60,7 +61,9 @@ pub fn pty_spawn(
                 Err(_) => break,
             }
         }
-        let _ = app.emit(&format!("pty://exit/{id_for_thread}"), ());
+        // The pty reached EOF because the child exited; collect its code.
+        let code: i64 = child.wait().map(|s| s.exit_code() as i64).unwrap_or(-1);
+        let _ = app.emit(&format!("pty://exit/{id_for_thread}"), code);
     });
 
     state.sessions.lock().unwrap().insert(
@@ -68,7 +71,7 @@ pub fn pty_spawn(
         PtySession {
             master: pair.master,
             writer,
-            child,
+            killer,
         },
     );
 
@@ -113,7 +116,7 @@ pub fn pty_resize(
 #[tauri::command]
 pub fn pty_kill(state: State<PtyManager>, id: String) -> Result<(), String> {
     if let Some(mut session) = state.sessions.lock().unwrap().remove(&id) {
-        let _ = session.child.kill();
+        let _ = session.killer.kill();
     }
     Ok(())
 }

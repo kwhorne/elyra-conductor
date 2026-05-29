@@ -4,6 +4,7 @@
   let { open = false, cwd = "", command = "", title = "", onclose } = $props();
 
   let finished = $state(false);
+  let exitCode = $state(null);
   let closeTimer = null;
 
   // Unique id per run so reopening remounts a fresh PTY.
@@ -13,16 +14,20 @@
   // auto-close once the whole flow has been shown.
   let runCommand = $derived(`${command}; exit`);
 
-  function handleExit() {
+  function handleExit(code) {
     finished = true;
+    exitCode = code;
     clearTimeout(closeTimer);
-    closeTimer = setTimeout(() => onclose?.(), 1600);
+    // Linger a bit longer on failure so the error stays readable.
+    const delay = code === 0 ? 1600 : 3500;
+    closeTimer = setTimeout(() => onclose?.(), delay);
   }
 
   // Reset state each time the modal (re)opens.
   $effect(() => {
     if (open) {
       finished = false;
+      exitCode = null;
     } else {
       clearTimeout(closeTimer);
     }
@@ -45,9 +50,13 @@
           <Terminal id={runId} {cwd} {runCommand} onexit={handleExit} />
         {/key}
       </div>
-      <div class="foot" class:done={finished}>
+      <div class="foot" class:done={finished && exitCode === 0} class:fail={finished && exitCode !== 0}>
         {#if finished}
-          ✓ Finished — closing…
+          {#if exitCode === 0}
+            ✓ Finished (exit 0) — closing…
+          {:else}
+            ✗ Failed (exit {exitCode}) — closing…
+          {/if}
         {:else}
           ● Running…
         {/if}
@@ -134,5 +143,8 @@
   }
   .foot.done {
     color: var(--green);
+  }
+  .foot.fail {
+    color: #f7768e;
   }
 </style>

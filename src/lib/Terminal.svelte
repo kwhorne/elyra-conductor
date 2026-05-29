@@ -39,9 +39,11 @@
     const unData = await listen(`pty://data/${id}`, (e) => {
       term.write(new Uint8Array(e.payload));
     });
-    const unExit = await listen(`pty://exit/${id}`, () => {
-      term.write("\r\n\x1b[90m[process exited]\x1b[0m\r\n");
-      onexit?.();
+    const unExit = await listen(`pty://exit/${id}`, (e) => {
+      const code = typeof e.payload === "number" ? e.payload : null;
+      const tail = code != null && code >= 0 ? ` (code ${code})` : "";
+      term.write(`\r\n\x1b[90m[process exited${tail}]\x1b[0m\r\n`);
+      onexit?.(code);
     });
     cleanup.push(unData, unExit);
 
