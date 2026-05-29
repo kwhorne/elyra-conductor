@@ -24,6 +24,7 @@
   let editorPath = $state(null);
   let paletteOpen = $state(false);
   let showFiles = $state(true);
+  let showHidden = $state(false);
   let loaded = $state(false);
 
   const STORAGE_KEY = "conductor:state";
@@ -266,6 +267,7 @@
     list.push({ id: "act:close-pane", title: "Close pane", hint: "\u2318W", group: "action", icon: "\u00D7", action: () => activeTermId && closePane(activeTermId) });
     list.push({ id: "act:toggle-editor", title: showEditor ? "Hide editor" : "Show editor", group: "action", icon: "\u270E", action: () => (showEditor = !showEditor) });
     list.push({ id: "act:toggle-files", title: showFiles ? "Hide file sidebar" : "Show file sidebar", hint: "\u2318B", group: "action", icon: "\u{1F5C2}", action: () => (showFiles = !showFiles) });
+    list.push({ id: "act:toggle-hidden", title: showHidden ? "Hide node_modules/.git in tree" : "Show all files in tree", group: "action", icon: "\u{1F441}", action: () => (showHidden = !showHidden) });
     list.push({ id: "act:quick-edit", title: "Quick edit file\u2026", group: "action", icon: "\u270E", action: quickEdit });
     list.push({ id: "act:change-root", title: "Change projects folder\u2026", group: "action", icon: "\u{1F4C2}", action: changeRoot });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
@@ -326,6 +328,7 @@
       root,
       activeProjectPath: activeProject?.path ?? null,
       showFiles,
+      showHidden,
       showEditor,
       editorPath,
       activeTabIndex: tabs.findIndex((t) => t.id === activeTabId),
@@ -358,6 +361,7 @@
     if (saved.activeProjectPath)
       activeProject = projects.find((p) => p.path === saved.activeProjectPath) ?? null;
     showFiles = saved.showFiles ?? true;
+    showHidden = saved.showHidden ?? false;
     showEditor = saved.showEditor ?? false;
     editorPath = saved.editorPath ?? null;
 
@@ -481,7 +485,14 @@
       {/if}
 
       {#if showFiles}
-        <FileExplorer root={fileRoot} onopen={openFile} oncontext={onFileContext} activePath={editorPath} />
+        <FileExplorer
+          root={fileRoot}
+          onopen={openFile}
+          oncontext={onFileContext}
+          activePath={editorPath}
+          showAll={showHidden}
+          ontoggleall={() => (showHidden = !showHidden)}
+        />
       {/if}
     </div>
   </div>

@@ -1,8 +1,11 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import FileTree from "./FileTree.svelte";
+  import { filterEntries } from "./fileFilter.js";
 
-  let { root, onopen, oncontext, activePath = null } = $props();
+  let { root, onopen, oncontext, activePath = null, showAll = false, ontoggleall } = $props();
+
+  let visible = $derived(filterEntries(entries, showAll));
 
   let entries = $state([]);
   let loadedRoot = $state(null);
@@ -37,6 +40,11 @@
   <div class="head">
     <span class="title">Files</span>
     <span class="root" title={root}>{basename(root)}</span>
+    <button
+      class="refresh"
+      class:on={showAll}
+      title={showAll ? "Hiding nothing — click to hide node_modules/.git/…" : "Show all (incl. node_modules/.git)"}
+      onclick={() => ontoggleall?.()}>{showAll ? "👁" : "⊘"}</button>
     <button class="refresh" title="Refresh" onclick={refresh}>⟳</button>
   </div>
   <div class="list">
@@ -47,8 +55,8 @@
     {:else if entries.length === 0}
       <div class="empty">Empty folder</div>
     {:else}
-      {#each entries as e (e.path)}
-        <FileTree entry={e} {onopen} {oncontext} {activePath} depth={0} />
+      {#each visible as e (e.path)}
+        <FileTree entry={e} {onopen} {oncontext} {activePath} {showAll} depth={0} />
       {/each}
     {/if}
   </div>
@@ -92,6 +100,9 @@
   }
   .refresh:hover {
     color: var(--text);
+  }
+  .refresh.on {
+    color: var(--accent);
   }
   .list {
     flex: 1;

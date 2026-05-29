@@ -202,7 +202,7 @@ elyra-conductor/
 - [x] Git status (dirty / ahead / behind) in the sidebar
 - [x] Persist tabs + split layout across restarts (fresh shells, same structure)
 - [x] Notification rings — pulse a tab when a background terminal has new output
-- [ ] Hide `node_modules` / `.git` in the file tree (toggle)
+- [x] Hide `node_modules` / `.git` in the file tree (toggle, default hides noise)
 - [ ] Tab/pane titles derived from the running process (e.g. `bun dev`)
 - [ ] Persisted projects & favorites (SQLite via `tauri-plugin-sql`)
 

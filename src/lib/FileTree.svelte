@@ -1,12 +1,15 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import Self from "./FileTree.svelte";
+  import { filterEntries } from "./fileFilter.js";
 
-  let { entry, onopen, oncontext, activePath = null, depth = 0 } = $props();
+  let { entry, onopen, oncontext, activePath = null, depth = 0, showAll = false } = $props();
 
   let expanded = $state(false);
   let children = $state(null); // null = not loaded yet
   let loading = $state(false);
+
+  let visibleChildren = $derived(children ? filterEntries(children, showAll) : []);
 
   async function onClick() {
     if (entry.is_dir) {
@@ -48,8 +51,8 @@
 </button>
 
 {#if expanded && children}
-  {#each children as c (c.path)}
-    <Self entry={c} {onopen} {oncontext} {activePath} depth={depth + 1} />
+  {#each visibleChildren as c (c.path)}
+    <Self entry={c} {onopen} {oncontext} {activePath} {showAll} depth={depth + 1} />
   {/each}
 {/if}
 
