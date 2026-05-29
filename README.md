@@ -189,6 +189,7 @@ elyra-conductor/
 | Command | Purpose |
 |---------|---------|
 | `pty_spawn` / `pty_write` / `pty_resize` / `pty_kill` | Terminal session lifecycle |
+| `pty_title` | Foreground process name of a pty (for dynamic tab/pane titles) |
 | `list_projects` | Scan the root folder, return projects + git branch |
 | `git_status` | Per-project dirty / ahead / behind state |
 | `detect_editors` / `open_in_editor` | Find and launch external editors |
@@ -203,7 +204,7 @@ elyra-conductor/
 - [x] Persist tabs + split layout across restarts (fresh shells, same structure)
 - [x] Notification rings — pulse a tab when a background terminal has new output
 - [x] Hide `node_modules` / `.git` in the file tree (toggle, default hides noise)
-- [ ] Tab/pane titles derived from the running process (e.g. `bun dev`)
+- [x] Tab/pane titles derived from the running process (e.g. `bun`, `vim`)
 - [ ] Persisted projects & favorites (SQLite via `tauri-plugin-sql`)
 
 ## License

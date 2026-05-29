@@ -113,6 +113,40 @@ pub fn pty_resize(
     Ok(())
 }
 
+/// Name of the foreground process running in the pty (e.g. "bun", "vim").
+/// Returns None when it's just an idle shell, so the UI can keep its own title.
+#[tauri::command]
+pub fn pty_title(state: State<PtyManager>, id: String) -> Option<String> {
+    let pid = {
+        let sessions = state.sessions.lock().unwrap();
+        sessions.get(&id)?.master.process_group_leader()?
+    };
+
+    let out = std::process::Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "comm="])
+        .output()
+        .ok()?;
+    let raw = String::from_utf8_lossy(&out.stdout);
+    let line = raw.trim();
+    if line.is_empty() {
+        return None;
+    }
+    // comm may be a full path and login shells appear as "-zsh".
+    let base = line
+        .rsplit('/')
+        .next()
+        .unwrap_or(line)
+        .trim_start_matches('-');
+
+    const SHELLS: &[&str] = &[
+        "zsh", "bash", "sh", "fish", "dash", "tcsh", "ksh", "login",
+    ];
+    if SHELLS.contains(&base) {
+        return None;
+    }
+    Some(base.to_string())
+}
+
 #[tauri::command]
 pub fn pty_kill(state: State<PtyManager>, id: String) -> Result<(), String> {
     if let Some(mut session) = state.sessions.lock().unwrap().remove(&id) {

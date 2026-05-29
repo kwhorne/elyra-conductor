@@ -83,3 +83,10 @@ export function setRatio(node, id, ratio) {
 export function firstLeaf(node) {
   return node.kind === "leaf" ? node : firstLeaf(node.a);
 }
+
+/** All leaves in the tree (left-to-right). */
+export function allLeaves(node) {
+  if (!node) return [];
+  if (node.kind === "leaf") return [node];
+  return [...allLeaves(node.a), ...allLeaves(node.b)];
+}

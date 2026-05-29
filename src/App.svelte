@@ -9,7 +9,7 @@
   import FileExplorer from "./lib/FileExplorer.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import RunModal from "./lib/RunModal.svelte";
-  import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf } from "./lib/layout.js";
+  import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf, allLeaves } from "./lib/layout.js";
 
   let root = $state("");
   let projects = $state([]);
@@ -105,6 +105,28 @@
 
   let drag = null; // { ...divider, container } during resize
   let activity = $state({}); // tabId -> true when a background tab produced output
+  let titles = $state({}); // termId -> foreground process name (or null)
+
+  // Title shown on a tab: the foreground process of any of its panes, else the
+  // project/shell name.
+  function tabTitle(t) {
+    for (const l of allLeaves(t.root)) {
+      if (titles[l.termId]) return titles[l.termId];
+    }
+    return t.title;
+  }
+
+  async function pollTitles() {
+    const ids = [];
+    for (const t of tabs) for (const l of allLeaves(t.root)) ids.push(l.termId);
+    if (ids.length === 0) return;
+    const results = await Promise.all(
+      ids.map(async (id) => [id, await invoke("pty_title", { id }).catch(() => null)])
+    );
+    const next = {};
+    for (const [id, name] of results) next[id] = name;
+    titles = next;
+  }
 
   let idSeq = 0;
   const nextId = (p) => `${p}-${++idSeq}`;
@@ -391,9 +413,12 @@
     refreshGitStatusThrottled();
   }
 
+  let titleTimer = null;
+
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
     window.addEventListener("focus", onWindowFocus);
+    titleTimer = setInterval(pollTitles, 1800);
     editors = await invoke("detect_editors");
     terminalName = await invoke("detect_terminal");
 
@@ -422,6 +447,7 @@
   onDestroy(() => {
     window.removeEventListener("keydown", onGlobalKey);
     window.removeEventListener("focus", onWindowFocus);
+    clearInterval(titleTimer);
   });
 </script>
 
@@ -443,7 +469,7 @@
         {#each tabs as t (t.id)}
           <div class="tab" class:active={t.id === activeTabId} class:ring={activity[t.id]}>
             {#if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
-            <button class="tab-label" onclick={() => { activeTabId = t.id; activeTermId = firstLeaf(t.root).termId; }}>{t.title}</button>
+            <button class="tab-label" onclick={() => { activeTabId = t.id; activeTermId = firstLeaf(t.root).termId; }}>{tabTitle(t)}</button>
             <button class="tab-x" onclick={() => closeTab(t.id)}>×</button>
           </div>
         {/each}
@@ -477,6 +503,9 @@
                 role="presentation"
                 onpointerdown={() => (activeTermId = leaf.termId)}
               >
+                {#if titles[leaf.termId]}
+                  <span class="pane-proc">{titles[leaf.termId]}</span>
+                {/if}
                 <div class="pane-tools">
                   <button title="Split right (⌘D)" onclick={() => splitPane(leaf.termId, "row")}>▥</button>
                   <button title="Split down (⇧⌘D)" onclick={() => splitPane(leaf.termId, "col")}>▤</button>
@@ -561,6 +590,7 @@
   .term-area { position: absolute; inset: 0; }
   .pane { position: absolute; overflow: hidden; box-shadow: inset 0 0 0 1px var(--border); }
   .pane.active { box-shadow: inset 0 0 0 1px var(--accent); }
+  .pane-proc { position: absolute; top: 3px; left: 6px; z-index: 5; font-family: var(--font-mono); font-size: 10px; color: var(--accent); background: rgba(30, 31, 43, 0.85); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; pointer-events: none; }
   .pane-tools { position: absolute; top: 3px; right: 6px; z-index: 5; display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s; }
   .pane:hover .pane-tools { opacity: 1; }
   .pane-tools button { background: rgba(30, 31, 43, 0.9); border: 1px solid var(--border); color: var(--text-dim); border-radius: 4px; font-size: 11px; line-height: 1; padding: 2px 5px; }
