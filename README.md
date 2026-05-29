@@ -199,7 +199,7 @@ elyra-conductor/
 
 ## Roadmap
 
-- [x] Git status (dirty / ahead / behind) in the sidebar
+- [x] Git status (dirty / ahead / behind) in the sidebar (refresh button + auto on window focus)
 - [x] Persist tabs + split layout across restarts (fresh shells, same structure)
 - [x] Notification rings — pulse a tab when a background terminal has new output
 - [x] Hide `node_modules` / `.git` in the file tree (toggle, default hides noise)

@@ -6,6 +6,7 @@
     onselect,
     onopen,
     onroot,
+    onrefresh,
     root = "",
   } = $props();
 
@@ -25,6 +26,7 @@
 <div class="sidebar">
   <div class="header">
     <span class="title">Projects</span>
+    <button class="root-btn" title="Refresh projects & git status" onclick={() => onrefresh?.()}>⟳</button>
     <button class="root-btn" title="Change folder" onclick={pickRoot}>⋯</button>
   </div>
   <div class="root-path" title={root}>{root || "No folder selected"}</div>
@@ -101,12 +103,18 @@
     font-size: 13px;
   }
   .root-btn {
-    margin-left: auto;
     background: transparent;
     border: none;
     color: var(--text-dim);
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1;
+    padding: 0 4px;
+  }
+  .root-btn:first-of-type {
+    margin-left: auto;
+  }
+  .root-btn:hover {
+    color: var(--text);
   }
   .root-path {
     padding: 0 12px 8px;

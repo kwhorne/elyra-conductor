@@ -123,6 +123,14 @@
     }
   }
 
+  let lastGitRefresh = 0;
+  function refreshGitStatusThrottled() {
+    const now = Date.now();
+    if (now - lastGitRefresh < 3000) return;
+    lastGitRefresh = now;
+    loadGitStatus();
+  }
+
   // Enrich each git project with dirty/ahead/behind, in parallel, after the
   // initial (fast) listing is shown.
   async function loadGitStatus() {
@@ -379,8 +387,13 @@
     return true;
   }
 
+  function onWindowFocus() {
+    refreshGitStatusThrottled();
+  }
+
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
+    window.addEventListener("focus", onWindowFocus);
     editors = await invoke("detect_editors");
     terminalName = await invoke("detect_terminal");
 
@@ -406,7 +419,10 @@
     loaded = true;
   });
 
-  onDestroy(() => window.removeEventListener("keydown", onGlobalKey));
+  onDestroy(() => {
+    window.removeEventListener("keydown", onGlobalKey);
+    window.removeEventListener("focus", onWindowFocus);
+  });
 </script>
 
 <div class="app">
@@ -418,6 +434,7 @@
     onselect={selectProject}
     onopen={openInEditor}
     onroot={changeRoot}
+    onrefresh={loadProjects}
   />
 
   <div class="main">
