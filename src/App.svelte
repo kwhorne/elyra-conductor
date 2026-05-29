@@ -11,6 +11,8 @@
   import RunModal from "./lib/RunModal.svelte";
   import CommitDialog from "./lib/CommitDialog.svelte";
   import ShortcutsModal from "./lib/ShortcutsModal.svelte";
+  import { check as checkUpdate } from "@tauri-apps/plugin-updater";
+  import { relaunch } from "@tauri-apps/plugin-process";
   import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf, allLeaves } from "./lib/layout.js";
 
   let root = $state("");
@@ -27,6 +29,49 @@
   let editorPath = $state(null);
   let paletteOpen = $state(false);
   let helpOpen = $state(false);
+
+  // ---------- auto-update ----------
+  let update = $state(null);
+  let updateStatus = $state(""); // '' | 'downloading' | 'ready' | 'error'
+  let updateProgress = $state(0);
+  let updateError = $state("");
+  let updateDismissed = $state(false);
+
+  async function checkForUpdate(manual = false) {
+    try {
+      const u = await checkUpdate();
+      if (u) {
+        update = u;
+        updateDismissed = false;
+      } else if (manual) {
+        alert("You're on the latest version.");
+      }
+    } catch (e) {
+      if (manual) alert(`Update check failed: ${e}`);
+      else console.warn("update check failed", e);
+    }
+  }
+
+  async function installUpdate() {
+    if (!update) return;
+    updateStatus = "downloading";
+    let total = 0;
+    let got = 0;
+    try {
+      await update.downloadAndInstall((ev) => {
+        if (ev.event === "Started") total = ev.data?.contentLength ?? 0;
+        else if (ev.event === "Progress") {
+          got += ev.data.chunkLength;
+          updateProgress = total ? Math.round((got / total) * 100) : 0;
+        } else if (ev.event === "Finished") updateProgress = 100;
+      });
+      updateStatus = "ready";
+      await relaunch();
+    } catch (e) {
+      updateStatus = "error";
+      updateError = String(e);
+    }
+  }
   let showFiles = $state(true);
   let showHidden = $state(false);
   let theme = $state("dark");
@@ -366,6 +411,7 @@
     if (activeProject?.is_git)
       list.push({ id: "act:commit", title: `Git: commit ${activeProject.name}\u2026`, group: "action", icon: "\u2387", action: openCommit });
     list.push({ id: "act:help", title: "Keyboard shortcuts", hint: "\u2318/", group: "action", icon: "?", action: () => (helpOpen = true) });
+    list.push({ id: "act:check-update", title: "Check for updates\u2026", group: "action", icon: "\u21BB", action: () => checkForUpdate(true) });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
     if (activeProject)
       for (const ed of editors)
@@ -516,6 +562,7 @@
     restore();
     loadGitStatus(); // enrich pinned items resolved during restore
     loaded = true;
+    checkForUpdate(false); // silent check on startup
   });
 
   onDestroy(() => {
@@ -661,6 +708,23 @@
   />
 
   <ShortcutsModal open={helpOpen} onclose={() => (helpOpen = false)} />
+
+  {#if update && !updateDismissed}
+    <div class="update-toast">
+      {#if updateStatus === "downloading"}
+        <span>⬇ Downloading update… {updateProgress}%</span>
+      {:else if updateStatus === "ready"}
+        <span>✓ Restarting…</span>
+      {:else if updateStatus === "error"}
+        <span class="err">Update failed: {updateError}</span>
+        <button onclick={() => (updateDismissed = true)}>Dismiss</button>
+      {:else}
+        <span>⬆ Update available: <strong>v{update.version}</strong></span>
+        <button class="primary" onclick={installUpdate}>Install &amp; restart</button>
+        <button onclick={() => (updateDismissed = true)}>Later</button>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -704,4 +768,33 @@
   .divider:hover { background: var(--accent); opacity: 0.4; }
   .editor-area { width: 50%; min-width: 320px; border-left: 1px solid var(--border); }
   .placeholder { color: var(--text-dim); padding: 24px; }
+  .update-toast {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 180;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+  .update-toast .err { color: var(--red); }
+  .update-toast button {
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+  .update-toast button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
 </style>

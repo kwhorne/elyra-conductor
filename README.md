@@ -47,6 +47,8 @@ Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
 - ↔️ **Drag-to-reorder tabs**.
 - ⎇ **Git commit dialog** — review changes, write a message, commit (and push)
   without leaving the app (`⌘↵` to commit).
+- ⬆️ **Auto-update** — checks GitHub Releases on startup (and via the palette) and
+  installs signed updates with one click. See [RELEASING.md](RELEASING.md).
 - ✏️ **Inline quick-edit** — a Monaco editor panel for fast edits (⌘S to save),
   without leaving the app.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
@@ -217,6 +219,11 @@ elyra-conductor/
 - [x] Hide `node_modules` / `.git` in the file tree (toggle, default hides noise)
 - [x] Tab/pane titles derived from the running process (e.g. `bun`, `vim`)
 - [ ] Persisted projects & favorites (SQLite via `tauri-plugin-sql`)
+
+## Releasing
+
+See [RELEASING.md](RELEASING.md) for how to cut a signed release that the in-app
+updater can consume.
 
 ## License
 

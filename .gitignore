@@ -6,3 +6,6 @@ dist
 # Rust / Tauri
 src-tauri/target
 src-tauri/gen/schemas
+
+# Updater manifest (generated per release, uploaded to GitHub Releases)
+latest.json
