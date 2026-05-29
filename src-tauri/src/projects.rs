@@ -163,10 +163,29 @@ pub fn find_bin(bin: &str) -> Option<String> {
     candidates.push(PathBuf::from(format!("/opt/homebrew/bin/{bin}")));
     candidates.push(PathBuf::from(format!("/usr/local/bin/{bin}")));
 
-    candidates
-        .into_iter()
-        .find(|p| p.is_file())
-        .map(|p| p.to_string_lossy().to_string())
+    if let Some(p) = candidates.into_iter().find(|p| p.is_file()) {
+        return Some(p.to_string_lossy().to_string());
+    }
+
+    // Fallback for GUI launches: a Finder/`open`-launched app gets a minimal PATH
+    // that misses version managers (nvm, asdf, …). Ask the user's login shell to
+    // resolve the binary, which sources their profile.
+    resolve_via_login_shell(bin)
+}
+
+fn resolve_via_login_shell(bin: &str) -> Option<String> {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let out = std::process::Command::new(&shell)
+        .arg("-lic")
+        .arg(format!("command -v {bin} 2>/dev/null"))
+        .output()
+        .ok()?;
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    stdout
+        .lines()
+        .map(|l| l.trim())
+        .find(|l| l.starts_with('/') && std::path::Path::new(l).is_file())
+        .map(|l| l.to_string())
 }
 
 #[tauri::command]
