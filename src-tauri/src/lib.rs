@@ -17,6 +17,8 @@ pub fn run() {
             projects::list_projects,
             projects::detect_editors,
             projects::open_in_editor,
+            projects::detect_terminal,
+            projects::run_in_external_terminal,
             projects::home_dir,
             fs::list_dir,
             fs::read_file,

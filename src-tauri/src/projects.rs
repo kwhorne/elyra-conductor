@@ -81,6 +81,61 @@ pub fn detect_editors() -> Vec<String> {
         .collect()
 }
 
+/// Name of the external terminal we will launch (for labelling the UI).
+#[tauri::command]
+pub fn detect_terminal() -> String {
+    if std::path::Path::new("/Applications/iTerm.app").exists() {
+        "iTerm2".to_string()
+    } else {
+        "Terminal".to_string()
+    }
+}
+
+/// Run an executable file in an external macOS terminal (iTerm2 if present,
+/// otherwise Terminal.app), executing `./<name>` from the file's directory.
+#[tauri::command]
+pub fn run_in_external_terminal(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    let dir = p
+        .parent()
+        .map(|d| d.to_string_lossy().to_string())
+        .unwrap_or_else(|| ".".to_string());
+    let base = p
+        .file_name()
+        .map(|b| b.to_string_lossy().to_string())
+        .ok_or_else(|| "invalid path".to_string())?;
+
+    // Single-quote the shell parts so spaces are safe.
+    let shell_cmd = format!("cd '{dir}' && './{base}'");
+
+    let script = if std::path::Path::new("/Applications/iTerm.app").exists() {
+        format!(
+            "tell application \"iTerm\"\n\
+             activate\n\
+             create window with default profile\n\
+             tell current session of current window\n\
+             write text \"{shell_cmd}\"\n\
+             end tell\n\
+             end tell"
+        )
+    } else {
+        format!(
+            "tell application \"Terminal\"\n\
+             activate\n\
+             do script \"{shell_cmd}\"\n\
+             end tell"
+        )
+    };
+
+    std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .spawn()
+        .map_err(|e| format!("osascript failed: {e}"))?;
+
+    Ok(())
+}
+
 #[tauri::command]
 pub fn open_in_editor(editor: String, path: String) -> Result<(), String> {
     let bin = EDITORS

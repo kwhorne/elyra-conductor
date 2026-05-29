@@ -6,7 +6,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
-  let { id, cwd } = $props();
+  let { id, cwd, runCommand = null } = $props();
 
   let el;
   let term;
@@ -52,6 +52,13 @@
       cols: term.cols,
       rows: term.rows,
     });
+
+    // Optionally auto-run a command (e.g. ./deploy.sh) once the shell is up.
+    if (runCommand) {
+      try {
+        await invoke("pty_write", { id, data: runCommand + "\r" });
+      } catch {}
+    }
 
     const ro = new ResizeObserver(() => {
       fit.fit();

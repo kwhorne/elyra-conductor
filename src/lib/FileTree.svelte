@@ -2,7 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import Self from "./FileTree.svelte";
 
-  let { entry, onopen, activePath = null, depth = 0 } = $props();
+  let { entry, onopen, oncontext, activePath = null, depth = 0 } = $props();
 
   let expanded = $state(false);
   let children = $state(null); // null = not loaded yet
@@ -31,6 +31,10 @@
   class:active={entry.path === activePath}
   style:padding-left="{8 + depth * 12}px"
   onclick={onClick}
+  oncontextmenu={(e) => {
+    e.preventDefault();
+    oncontext?.(entry, e.clientX, e.clientY);
+  }}
 >
   {#if entry.is_dir}
     <span class="chev">{expanded ? "▾" : "▸"}</span>
@@ -45,7 +49,7 @@
 
 {#if expanded && children}
   {#each children as c (c.path)}
-    <Self entry={c} {onopen} {activePath} depth={depth + 1} />
+    <Self entry={c} {onopen} {oncontext} {activePath} depth={depth + 1} />
   {/each}
 {/if}
 

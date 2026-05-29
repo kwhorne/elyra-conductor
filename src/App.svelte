@@ -7,6 +7,8 @@
   import Editor from "./lib/Editor.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
   import FileExplorer from "./lib/FileExplorer.svelte";
+  import ContextMenu from "./lib/ContextMenu.svelte";
+  import RunModal from "./lib/RunModal.svelte";
   import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf } from "./lib/layout.js";
 
   let root = $state("");
@@ -29,6 +31,56 @@
     editorPath = path;
     showEditor = true;
   }
+
+  // ---------- file context menu + run modal ----------
+  let terminalName = $state("Terminal");
+  let ctx = $state({ open: false, x: 0, y: 0, entry: null });
+  let runModal = $state({ open: false, cwd: "", command: "", title: "" });
+
+  function dirOf(path) {
+    const i = path.lastIndexOf("/");
+    return i > 0 ? path.slice(0, i) : "/";
+  }
+  function baseOf(path) {
+    return path.split("/").pop();
+  }
+
+  function onFileContext(entry, x, y) {
+    ctx = { open: true, x, y, entry };
+  }
+
+  function runInModal(entry) {
+    runModal = {
+      open: true,
+      cwd: dirOf(entry.path),
+      command: `./${baseOf(entry.path)}`,
+      title: baseOf(entry.path),
+    };
+  }
+
+  async function runExternal(entry) {
+    try {
+      await invoke("run_in_external_terminal", { path: entry.path });
+    } catch (e) {
+      alert(`Could not run in ${terminalName}: ${e}`);
+    }
+  }
+
+  let ctxItems = $derived.by(() => {
+    const e = ctx.entry;
+    if (!e) return [];
+    if (e.is_dir) {
+      return [
+        { label: "Open new terminal here", icon: "\u{1F5A5}", action: () => newTab(e.path, baseOf(e.path)) },
+      ];
+    }
+    return [
+      { label: "Open in editor", icon: "\u270E", action: () => openFile(e.path) },
+      { separator: true },
+      { label: `Run ./${baseOf(e.path)} (modal)`, icon: "\u25B6", action: () => runInModal(e) },
+      { label: `Run in ${terminalName}`, icon: "\u{1F680}", action: () => runExternal(e) },
+    ];
+  });
 
   let panesEl;
   let drag = null; // { divider, } during resize
@@ -222,6 +274,7 @@
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
     editors = await invoke("detect_editors");
+    terminalName = await invoke("detect_terminal");
     try {
       const home = await invoke("home_dir");
       root = `${home}/Code`;
@@ -320,12 +373,28 @@
       {/if}
 
       {#if showFiles}
-        <FileExplorer root={fileRoot} onopen={openFile} activePath={editorPath} />
+        <FileExplorer root={fileRoot} onopen={openFile} oncontext={onFileContext} activePath={editorPath} />
       {/if}
     </div>
   </div>
 
   <CommandPalette open={paletteOpen} {commands} onclose={() => (paletteOpen = false)} />
+
+  <ContextMenu
+    open={ctx.open}
+    x={ctx.x}
+    y={ctx.y}
+    items={ctxItems}
+    onclose={() => (ctx = { ...ctx, open: false })}
+  />
+
+  <RunModal
+    open={runModal.open}
+    cwd={runModal.cwd}
+    command={runModal.command}
+    title={runModal.title}
+    onclose={() => (runModal = { ...runModal, open: false })}
+  />
 </div>
 
 <style>

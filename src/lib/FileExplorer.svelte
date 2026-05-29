@@ -2,7 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import FileTree from "./FileTree.svelte";
 
-  let { root, onopen, activePath = null } = $props();
+  let { root, onopen, oncontext, activePath = null } = $props();
 
   let entries = $state([]);
   let loadedRoot = $state(null);
@@ -48,7 +48,7 @@
       <div class="empty">Empty folder</div>
     {:else}
       {#each entries as e (e.path)}
-        <FileTree entry={e} {onopen} {activePath} depth={0} />
+        <FileTree entry={e} {onopen} {oncontext} {activePath} depth={0} />
       {/each}
     {/if}
   </div>

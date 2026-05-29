@@ -34,6 +34,8 @@ Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
   fuzzy-searchable list.
 - 🗂️ **File sidebar (⌘B)** — a lazy-loaded recursive file tree of the active
   project. Click a file to open it in the editor. On by default.
+- ▶️ **Run files** — right-click a file in the sidebar to run `./<file>` either in
+  an in-app terminal modal or in your external terminal (iTerm2 / Terminal.app).
 - ✏️ **Inline quick-edit** — a Monaco editor panel for fast edits (⌘S to save),
   without leaving the app.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
@@ -185,6 +187,7 @@ elyra-conductor/
 | `pty_spawn` / `pty_write` / `pty_resize` / `pty_kill` | Terminal session lifecycle |
 | `list_projects` | Scan the root folder, return projects + git branch |
 | `detect_editors` / `open_in_editor` | Find and launch external editors |
+| `detect_terminal` / `run_in_external_terminal` | Run a file in iTerm2 / Terminal.app |
 | `home_dir` | Resolve `$HOME` for the default root |
 | `list_dir` | Directory listing for the file tree (dirs first) |
 | `read_file` / `write_file` | Back the Monaco editor |
