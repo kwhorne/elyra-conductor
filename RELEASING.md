@@ -33,9 +33,14 @@ pnpm tauri signer generate -w ~/.tauri/elyra-conductor.key
    ```
 
    This produces, in `src-tauri/target/release/bundle/`:
-   - `dmg/elyra-conductor_<version>_aarch64.dmg` — installer for new users
-   - `macos/elyra-conductor.app.tar.gz` — the updater payload
-   - `macos/elyra-conductor.app.tar.gz.sig` — its signature
+   - `dmg/Elyra Conductor_<version>_aarch64.dmg` — installer for new users
+   - `macos/Elyra Conductor.app.tar.gz` — the updater payload
+   - `macos/Elyra Conductor.app.tar.gz.sig` — its signature
+
+   > The bundle name comes from `productName` ("Elyra Conductor"). Upload the
+   > updater tarball under the stable, space-free name **`elyra-conductor.app.tar.gz`**
+   > (that's what `latest.json` points to — the signature is over the file
+   > contents, not the name, so renaming is safe).
 
 3. **Generate the update manifest:**
 
@@ -45,9 +50,10 @@ pnpm tauri signer generate -w ~/.tauri/elyra-conductor.key
 
    This writes `latest.json` pointing at the release URL for the current version.
 
-4. **Create the GitHub release** for tag `v<version>` and upload these assets:
-   - `elyra-conductor_<version>_aarch64.dmg`
-   - `elyra-conductor.app.tar.gz`
+4. **Create the GitHub release** for tag `v<version>` and upload these assets
+   (rename the tarball/sig to the stable space-free name):
+   - `Elyra Conductor_<version>_aarch64.dmg`
+   - `elyra-conductor.app.tar.gz`  (the `Elyra Conductor.app.tar.gz`)
    - `elyra-conductor.app.tar.gz.sig`
    - `latest.json`
 
