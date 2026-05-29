@@ -1,10 +1,8 @@
 <div align="center">
 
-# elyra-conductor
+# Elyra Conductor
 
 **A local project conductor — switch projects, run terminals, split panes, browse files, and quick-edit, all in one window.**
-
-Inspired by [CMUX](https://cmux.com/), built on the [Tauri](https://tauri.app/) stack.
 
 </div>
 
@@ -12,7 +10,7 @@ Inspired by [CMUX](https://cmux.com/), built on the [Tauri](https://tauri.app/) 
 
 ## Overview
 
-`elyra-conductor` gives you a single cockpit for all your local projects. Pick a
+Elyra Conductor gives you a single cockpit for all your local projects. Pick a
 project from the sidebar and it opens in a terminal tab rooted at that folder.
 Split the terminal into as many panes as you like, browse the project's files,
 quick-edit a file inline with Monaco, or launch the whole project in your real
