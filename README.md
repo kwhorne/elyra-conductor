@@ -20,6 +20,23 @@ It is **not** a Ghostty wrapper or a native Swift app — it's cross-platform
 Rust + web, so the heavy lifting (PTYs, filesystem, process launching) lives in
 Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
 
+## Design principles & non-goals
+
+**Elyra Conductor orchestrates; it does not reason.** It is a launcher, terminal
+multiplexer, and host UI — never an AI agent. AI lives entirely in external tools
+(e.g. the [Elyra](https://github.com/kwhorne/elyra) CLI), which Conductor treats
+like any other process (Zed, iTerm, git).
+
+Conductor will **never**:
+- call an LLM or bundle an AI SDK
+- store or manage API keys
+- define prompts, system prompts, tools, or models
+- contain agent/reasoning logic or built-in "AI features"
+
+Rule of thumb: **if a feature needs an API key or a model call, it belongs in
+Elyra, not in Conductor.** See [ARCHITECTURE.md](ARCHITECTURE.md) for the full
+boundary (including how the planned RPC integration stays a *host*, not an agent).
+
 ## Features
 
 - 📁 **Project switcher** — scans a folder (default `~/Code`), shows the current
