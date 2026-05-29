@@ -6,7 +6,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
-  let { id, cwd, runCommand = null } = $props();
+  let { id, cwd, runCommand = null, onexit = null } = $props();
 
   let el;
   let term;
@@ -41,6 +41,7 @@
     });
     const unExit = await listen(`pty://exit/${id}`, () => {
       term.write("\r\n\x1b[90m[process exited]\x1b[0m\r\n");
+      onexit?.();
     });
     cleanup.push(unData, unExit);
 

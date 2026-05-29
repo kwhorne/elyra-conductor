@@ -3,8 +3,30 @@
 
   let { open = false, cwd = "", command = "", title = "", onclose } = $props();
 
+  let finished = $state(false);
+  let closeTimer = null;
+
   // Unique id per run so reopening remounts a fresh PTY.
   let runId = $derived(open ? `run-${cwd}-${command}-${title}` : null);
+
+  // The shell exits as soon as the command completes, so the modal can
+  // auto-close once the whole flow has been shown.
+  let runCommand = $derived(`${command}; exit`);
+
+  function handleExit() {
+    finished = true;
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => onclose?.(), 1600);
+  }
+
+  // Reset state each time the modal (re)opens.
+  $effect(() => {
+    if (open) {
+      finished = false;
+    } else {
+      clearTimeout(closeTimer);
+    }
+  });
 </script>
 
 <svelte:window onkeydown={(e) => open && e.key === "Escape" && onclose?.()} />
@@ -20,8 +42,15 @@
       </div>
       <div class="term-host">
         {#key runId}
-          <Terminal id={runId} {cwd} runCommand={command} />
+          <Terminal id={runId} {cwd} {runCommand} onexit={handleExit} />
         {/key}
+      </div>
+      <div class="foot" class:done={finished}>
+        {#if finished}
+          ✓ Finished — closing…
+        {:else}
+          ● Running…
+        {/if}
       </div>
     </div>
   </div>
@@ -94,5 +123,16 @@
     flex: 1;
     min-height: 0;
     position: relative;
+  }
+  .foot {
+    padding: 5px 12px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    background: var(--bg-3);
+    border-top: 1px solid var(--border);
+  }
+  .foot.done {
+    color: var(--green);
   }
 </style>
