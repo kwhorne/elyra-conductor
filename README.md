@@ -62,6 +62,7 @@ Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
 | `⌘S` | Save file (when editor is focused) |
 | `⌘F` | Find in terminal (when a terminal is focused) |
 | `⌘↵` | Commit (in the commit dialog) |
+| `⌘/` | Show keyboard-shortcuts help |
 
 > On Linux/Windows, `Ctrl` substitutes for `⌘`.
 

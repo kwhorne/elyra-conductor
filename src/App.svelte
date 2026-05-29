@@ -10,6 +10,7 @@
   import ContextMenu from "./lib/ContextMenu.svelte";
   import RunModal from "./lib/RunModal.svelte";
   import CommitDialog from "./lib/CommitDialog.svelte";
+  import ShortcutsModal from "./lib/ShortcutsModal.svelte";
   import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf, allLeaves } from "./lib/layout.js";
 
   let root = $state("");
@@ -24,6 +25,7 @@
   let showEditor = $state(false);
   let editorPath = $state(null);
   let paletteOpen = $state(false);
+  let helpOpen = $state(false);
   let showFiles = $state(true);
   let showHidden = $state(false);
   let theme = $state("dark");
@@ -339,6 +341,7 @@
     list.push({ id: "act:change-root", title: "Change projects folder\u2026", group: "action", icon: "\u{1F4C2}", action: changeRoot });
     if (activeProject?.is_git)
       list.push({ id: "act:commit", title: `Git: commit ${activeProject.name}\u2026`, group: "action", icon: "\u2387", action: openCommit });
+    list.push({ id: "act:help", title: "Keyboard shortcuts", hint: "\u2318/", group: "action", icon: "?", action: () => (helpOpen = true) });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
     if (activeProject)
       for (const ed of editors)
@@ -379,6 +382,9 @@
     } else if (k === "b") {
       e.preventDefault();
       showFiles = !showFiles;
+    } else if (k === "/") {
+      e.preventDefault();
+      helpOpen = !helpOpen;
     }
   }
 
@@ -532,6 +538,7 @@
         <button class:on={showEditor} onclick={() => (showEditor = !showEditor)}>{showEditor ? "Hide editor" : "Show editor"}</button>
         <button class:on={showFiles} title="Toggle file sidebar (⌘B)" onclick={() => (showFiles = !showFiles)}>Files</button>
         <button title="Toggle theme" onclick={() => (theme = theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀" : "☽"}</button>
+        <button title="Keyboard shortcuts (⌘/)" onclick={() => (helpOpen = true)}>?</button>
         {#if activeProject?.is_git}
           <button title="Commit changes" onclick={openCommit}>⎇ Commit</button>
         {/if}
@@ -623,6 +630,8 @@
     onclose={() => (commit = { ...commit, open: false })}
     oncommitted={() => loadProjects()}
   />
+
+  <ShortcutsModal open={helpOpen} onclose={() => (helpOpen = false)} />
 </div>
 
 <style>
