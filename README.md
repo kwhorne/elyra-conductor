@@ -24,7 +24,7 @@ Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
 
 **Elyra Conductor orchestrates; it does not reason.** It is a launcher, terminal
 multiplexer, and host UI — never an AI agent. AI lives entirely in external tools
-(e.g. the [Elyra](https://github.com/kwhorne/elyra) CLI), which Conductor treats
+(e.g. the [Elyra](https://elyracode.com) CLI), which Conductor treats
 like any other process (Zed, iTerm, git).
 
 Conductor will **never**:
@@ -68,7 +68,7 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   without leaving the app.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
   project in Zed, VS Code, or Cursor.
-- 🤖 **Elyra agent** — if the [Elyra](https://github.com/kwhorne/elyra) coding
+- 🤖 **Elyra agent** — if the [Elyra](https://elyracode.com) coding
   agent CLI is installed, spin up an agent in a tab for any project (sidebar
   button, palette, or right-click), or "Ask Elyra about this file".
 

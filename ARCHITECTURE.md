@@ -4,7 +4,7 @@
 
 Elyra Conductor is an **orchestrator / launcher / terminal multiplexer / host UI**.
 It is **not** an AI agent. All intelligence lives in external programs — chiefly the
-[Elyra](https://github.com/kwhorne/elyra) coding-agent CLI — which Conductor runs and
+[Elyra](https://elyracode.com) coding-agent CLI — which Conductor runs and
 displays the same way it runs Zed, iTerm, or git.
 
 This boundary is a hard rule, not a preference. It keeps Conductor small, auditable,
