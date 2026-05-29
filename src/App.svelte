@@ -4,7 +4,6 @@
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import Sidebar from "./lib/Sidebar.svelte";
   import Terminal from "./lib/Terminal.svelte";
-  import Editor from "./lib/Editor.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
   import FileExplorer from "./lib/FileExplorer.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -90,6 +89,16 @@
     editorPath = path;
     showEditor = true;
   }
+
+  // Monaco is heavy (~2.5MB). Load it on demand (and preload when idle) instead
+  // of at startup, so the app opens fast.
+  let EditorComp = $state(null);
+  function loadEditor() {
+    if (!EditorComp) import("./lib/Editor.svelte").then((m) => (EditorComp = m.default));
+  }
+  $effect(() => {
+    if (showEditor) loadEditor();
+  });
 
   // ---------- notification rings ----------
   function markActivity(tabId) {
@@ -562,7 +571,18 @@
     restore();
     loadGitStatus(); // enrich pinned items resolved during restore
     loaded = true;
+
+    // Dismiss the startup splash once the UI is ready.
+    const splash = document.getElementById("splash");
+    if (splash) {
+      splash.classList.add("hide");
+      setTimeout(() => splash.remove(), 450);
+    }
+
     checkForUpdate(false); // silent check on startup
+    // Preload the editor in the background so the first open is instant.
+    if ("requestIdleCallback" in window) requestIdleCallback(loadEditor);
+    else setTimeout(loadEditor, 1500);
   });
 
   onDestroy(() => {
@@ -665,7 +685,13 @@
       </div>
 
       {#if showEditor}
-        <div class="editor-area"><Editor path={editorPath} {theme} onclose={() => (showEditor = false)} /></div>
+        <div class="editor-area">
+          {#if EditorComp}
+            <EditorComp path={editorPath} {theme} onclose={() => (showEditor = false)} />
+          {:else}
+            <div class="editor-loading">Loading editor…</div>
+          {/if}
+        </div>
       {/if}
 
       {#if showFiles}
@@ -768,6 +794,7 @@
   .divider:hover { background: var(--accent); opacity: 0.4; }
   .editor-area { width: 50%; min-width: 320px; border-left: 1px solid var(--border); }
   .placeholder { color: var(--text-dim); padding: 24px; }
+  .editor-loading { color: var(--text-dim); padding: 16px; font-size: 12px; }
   .update-toast {
     position: fixed;
     bottom: 16px;
