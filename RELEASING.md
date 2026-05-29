@@ -23,16 +23,17 @@ pnpm tauri signer generate -w ~/.tauri/elyra-conductor.key
 1. **Bump the version** in `package.json`, `src-tauri/tauri.conf.json`, and
    `src-tauri/Cargo.toml` (keep them in sync), then commit.
 
-2. **Build a signed bundle** (the signing env vars are required because
-   `createUpdaterArtifacts` is enabled):
+2. **Build a signed bundle.** Use the helper script — it loads the signing key,
+   cleans stale DMG mounts, and sets `CI=true` so create-dmg skips the flaky
+   AppleScript window-styling step:
 
    ```bash
-   export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/elyra-conductor.key)"
-   export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""   # empty if the key has no password
-   pnpm tauri build
+   ./scripts/release-build.sh
+   # (set TAURI_SIGNING_PRIVATE_KEY_PASSWORD=... first if your key has a password)
    ```
 
-   This produces, in `src-tauri/target/release/bundle/`:
+   It runs `pnpm tauri build` and then `make-latest-json.mjs` for you. The build
+   produces, in `src-tauri/target/release/bundle/`:
    - `dmg/Elyra Conductor_<version>_aarch64.dmg` — installer for new users
    - `macos/Elyra Conductor.app.tar.gz` — the updater payload
    - `macos/Elyra Conductor.app.tar.gz.sig` — its signature
@@ -42,13 +43,8 @@ pnpm tauri signer generate -w ~/.tauri/elyra-conductor.key
    > (that's what `latest.json` points to — the signature is over the file
    > contents, not the name, so renaming is safe).
 
-3. **Generate the update manifest:**
-
-   ```bash
-   node scripts/make-latest-json.mjs
-   ```
-
-   This writes `latest.json` pointing at the release URL for the current version.
+3. **The update manifest** (`latest.json`) is generated automatically by the
+   release script. To regenerate it manually: `node scripts/make-latest-json.mjs`.
 
 4. **Create the GitHub release** for tag `v<version>` and upload these assets
    (rename the tarball/sig to the stable space-free name):
