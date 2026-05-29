@@ -1,0 +1,102 @@
+{
+  "navigation": [
+    {
+      "title": "Start here",
+      "items": [
+        {
+          "title": "Overview",
+          "path": "index.md"
+        },
+        {
+          "title": "Quickstart",
+          "path": "quickstart.md"
+        },
+        {
+          "title": "Using Conductor",
+          "path": "usage.md"
+        }
+      ]
+    },
+    {
+      "title": "Features",
+      "items": [
+        {
+          "title": "Projects & sidebar",
+          "path": "projects.md"
+        },
+        {
+          "title": "Terminals & panes",
+          "path": "terminals.md"
+        },
+        {
+          "title": "Workspaces",
+          "path": "workspaces.md"
+        },
+        {
+          "title": "Tasks",
+          "path": "tasks.md"
+        },
+        {
+          "title": "Files & editor",
+          "path": "files-and-editor.md"
+        },
+        {
+          "title": "Git",
+          "path": "git.md"
+        },
+        {
+          "title": "Command palette",
+          "path": "command-palette.md"
+        },
+        {
+          "title": "Keyboard shortcuts",
+          "path": "keybindings.md"
+        }
+      ]
+    },
+    {
+      "title": "Elyra integration",
+      "items": [
+        {
+          "title": "Elyra agent",
+          "path": "elyra-agent.md"
+        }
+      ]
+    },
+    {
+      "title": "Architecture",
+      "items": [
+        {
+          "title": "Architecture & boundaries",
+          "path": "architecture.md"
+        },
+        {
+          "title": "Tauri commands",
+          "path": "tauri-commands.md"
+        },
+        {
+          "title": "State & persistence",
+          "path": "persistence.md"
+        }
+      ]
+    },
+    {
+      "title": "Operations",
+      "items": [
+        {
+          "title": "Releasing & auto-update",
+          "path": "releasing.md"
+        },
+        {
+          "title": "Development",
+          "path": "development.md"
+        },
+        {
+          "title": "Troubleshooting",
+          "path": "troubleshooting.md"
+        }
+      ]
+    }
+  ],
+  "redirects": []
+}

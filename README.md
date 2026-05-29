@@ -254,6 +254,18 @@ elyra-conductor/
 - [x] Tab/pane titles derived from the running process (e.g. `bun`, `vim`)
 - [ ] Persisted projects & favorites (SQLite via `tauri-plugin-sql`)
 
+## Documentation
+
+Full documentation lives in [`docs/`](docs/) (start at [`docs/index.md`](docs/index.md)) —
+features, architecture & boundaries, the Tauri command reference, persistence, the Elyra
+agent integration, releasing, development, and troubleshooting.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the full version history. Notable changes are
+recorded there following [Keep a Changelog](https://keepachangelog.com/) and
+[Semantic Versioning](https://semver.org/).
+
 ## Releasing
 
 See [RELEASING.md](RELEASING.md) for how to cut a signed release that the in-app
