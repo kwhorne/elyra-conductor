@@ -96,9 +96,28 @@
     if (!root) return;
     try {
       projects = await invoke("list_projects", { root });
+      loadGitStatus();
     } catch (e) {
       console.error(e);
     }
+  }
+
+  // Enrich each git project with dirty/ahead/behind, in parallel, after the
+  // initial (fast) listing is shown.
+  async function loadGitStatus() {
+    const current = projects;
+    await Promise.all(
+      current.map(async (p) => {
+        if (!p.is_git) return;
+        try {
+          const s = await invoke("git_status", { path: p.path });
+          p.branch = s.branch ?? p.branch;
+          p.dirty = s.dirty;
+          p.ahead = s.ahead;
+          p.behind = s.behind;
+        } catch {}
+      })
+    );
   }
 
   function makeLeaf(cwd, title) {

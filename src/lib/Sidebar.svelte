@@ -47,6 +47,16 @@
       >
         <div class="row1">
           <span class="name">{p.name}</span>
+          <span class="spacer"></span>
+          {#if p.dirty}
+            <span class="dirty" title="Uncommitted changes">●</span>
+          {/if}
+          {#if p.ahead}
+            <span class="track up" title="{p.ahead} ahead of upstream">↑{p.ahead}</span>
+          {/if}
+          {#if p.behind}
+            <span class="track down" title="{p.behind} behind upstream">↓{p.behind}</span>
+          {/if}
           {#if p.is_git}
             <span class="branch">⎇ {p.branch ?? "detached"}</span>
           {/if}
@@ -143,11 +153,28 @@
   .name {
     font-weight: 500;
   }
+  .spacer {
+    flex: 1 1 auto;
+  }
   .branch {
-    margin-left: auto;
     font-size: 10px;
     color: var(--text-dim);
     font-family: var(--font-mono);
+  }
+  .dirty {
+    color: #e0af68;
+    font-size: 9px;
+    line-height: 1;
+  }
+  .track {
+    font-size: 10px;
+    font-family: var(--font-mono);
+  }
+  .track.up {
+    color: var(--green);
+  }
+  .track.down {
+    color: #f7768e;
   }
   .actions {
     display: flex;

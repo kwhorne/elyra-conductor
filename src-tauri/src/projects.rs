@@ -52,6 +52,52 @@ pub fn list_projects(root: String) -> Result<Vec<Project>, String> {
     Ok(out)
 }
 
+#[derive(Serialize)]
+pub struct GitStatus {
+    branch: Option<String>,
+    dirty: bool,
+    ahead: u32,
+    behind: u32,
+}
+
+fn git(path: &str, args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(args)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+#[tauri::command]
+pub fn git_status(path: String) -> GitStatus {
+    let branch = git(&path, &["rev-parse", "--abbrev-ref", "HEAD"]).filter(|b| !b.is_empty());
+    let dirty = git(&path, &["status", "--porcelain"])
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+
+    // "<behind>\t<ahead>" relative to the upstream branch (empty if no upstream).
+    let (ahead, behind) = git(&path, &["rev-list", "--left-right", "--count", "@{u}...HEAD"])
+        .and_then(|s| {
+            let mut parts = s.split_whitespace();
+            let behind = parts.next()?.parse().ok()?;
+            let ahead = parts.next()?.parse().ok()?;
+            Some((ahead, behind))
+        })
+        .unwrap_or((0, 0));
+
+    GitStatus {
+        branch,
+        dirty,
+        ahead,
+        behind,
+    }
+}
+
 /// Known CLI launchers for supported editors.
 const EDITORS: &[(&str, &str)] = &[("zed", "zed"), ("vscode", "code"), ("cursor", "cursor")];
 

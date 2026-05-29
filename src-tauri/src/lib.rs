@@ -15,6 +15,7 @@ pub fn run() {
             pty::pty_resize,
             pty::pty_kill,
             projects::list_projects,
+            projects::git_status,
             projects::detect_editors,
             projects::open_in_editor,
             projects::detect_terminal,

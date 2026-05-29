@@ -25,7 +25,8 @@ Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
 ## Features
 
 - 📁 **Project switcher** — scans a folder (default `~/Code`), shows the current
-  git branch per repository, with instant fuzzy search.
+  git branch, dirty state, and ahead/behind counts per repository, with instant
+  fuzzy search.
 - 🪟 **Split panes** — split any terminal horizontally or vertically, nest freely,
   and drag the dividers to resize. Panes never lose their session on relayout.
 - 🖥️ **Real terminals** — one PTY per pane, powered by `portable-pty` and rendered
@@ -186,6 +187,7 @@ elyra-conductor/
 |---------|---------|
 | `pty_spawn` / `pty_write` / `pty_resize` / `pty_kill` | Terminal session lifecycle |
 | `list_projects` | Scan the root folder, return projects + git branch |
+| `git_status` | Per-project dirty / ahead / behind state |
 | `detect_editors` / `open_in_editor` | Find and launch external editors |
 | `detect_terminal` / `run_in_external_terminal` | Run a file in iTerm2 / Terminal.app |
 | `home_dir` | Resolve `$HOME` for the default root |
@@ -194,7 +196,7 @@ elyra-conductor/
 
 ## Roadmap
 
-- [ ] Git status (dirty / ahead / behind) and last commit in the sidebar
+- [x] Git status (dirty / ahead / behind) in the sidebar
 - [ ] Persist tabs + split layout across restarts
 - [ ] Notification rings — flash a tab when a process is waiting for input
 - [ ] Hide `node_modules` / `.git` in the file tree (toggle)
