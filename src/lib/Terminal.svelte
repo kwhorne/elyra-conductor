@@ -3,11 +3,27 @@
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import { SearchAddon } from "@xterm/addon-search";
+  import { SerializeAddon } from "@xterm/addon-serialize";
   import "@xterm/xterm/css/xterm.css";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
-  let { id, cwd, runCommand = null, onexit = null, onactivity = null, theme = "dark" } = $props();
+  let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark" } = $props();
+
+  // Scrollback persistence. A pty can't be revived across restarts, so we only
+  // restore the *visual* history (read-only) and start a fresh shell beneath it.
+  const SB_KEY = persistKey ? `conductor:sb:${persistKey}` : null;
+  const SB_MAX = 60000; // cap stored bytes per pane to stay well under quota
+  let serializeAddon;
+  let sbTimer;
+  function saveScrollback() {
+    if (!SB_KEY || !serializeAddon) return;
+    try {
+      let data = serializeAddon.serialize({ scrollback: 1000 });
+      if (data.length > SB_MAX) data = data.slice(data.length - SB_MAX);
+      if (data.trim()) localStorage.setItem(SB_KEY, data);
+    } catch {}
+  }
 
   let lastActivity = 0;
 
@@ -65,6 +81,8 @@
     term.loadAddon(fit);
     search = new SearchAddon();
     term.loadAddon(search);
+    serializeAddon = new SerializeAddon();
+    term.loadAddon(serializeAddon);
     term.open(el);
 
     // Intercept Cmd/Ctrl+F to open the in-terminal search instead of the shell.
@@ -98,7 +116,22 @@
     });
     cleanup.push(unData, unExit);
 
-    term.onData((d) => invoke("pty_write", { id, data: d }));
+    term.onData((d) => {
+      invoke("pty_write", { id, data: d });
+      onuserinput?.(id, d);
+    });
+
+    // Replay last session's scrollback as read-only history before the new
+    // shell starts, so context isn't lost across restarts.
+    if (SB_KEY) {
+      try {
+        const prev = localStorage.getItem(SB_KEY);
+        if (prev) {
+          term.write(prev);
+          term.write("\r\n\x1b[90m\u2500\u2500 previous session (restored) \u2500\u2500\x1b[0m\r\n");
+        }
+      } catch {}
+    }
 
     await invoke("pty_spawn", {
       id,
@@ -106,6 +139,9 @@
       cols: term.cols,
       rows: term.rows,
     });
+
+    // Periodically snapshot the buffer so a hard window close still persists it.
+    if (SB_KEY) sbTimer = setInterval(saveScrollback, 4000);
 
     // Optionally auto-run a command (e.g. ./deploy.sh) once the shell is up.
     if (runCommand) {
@@ -130,6 +166,8 @@
   });
 
   onDestroy(() => {
+    clearInterval(sbTimer);
+    saveScrollback();
     cleanup.forEach((fn) => fn?.());
     invoke("pty_kill", { id }).catch(() => {});
     term?.dispose();

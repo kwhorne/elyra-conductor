@@ -62,6 +62,18 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
 - ↔️ **Drag-to-reorder tabs**.
 - ⎇ **Git commit dialog** — review changes, write a message, commit (and push)
   without leaving the app (`⌘↵` to commit).
+- 🗄️ **Workspaces** — save the whole layout (projects, tabs, split panes, open
+  file, theme) as a named workspace and reopen it later from the palette
+  (**Save workspace…** / **Load workspace: …**). Global across project folders.
+- ▶️ **Per-project tasks** — Conductor scans `package.json`, `composer.json`,
+  `Makefile`, and `justfile` for the active project and lists them in the palette
+  (**Run: …**); pick one to launch it in a fresh terminal tab. Just a launcher —
+  the command runs in your shell, no interpretation.
+- ⎁ **Broadcast input** — toggle **⌁ Sync** (toolbar or palette) to mirror your
+  keystrokes to every pane in the active tab, tmux `synchronize-panes`-style.
+- 💾 **Scrollback restore** — each pane's recent output is persisted and replayed
+  as read-only history on restart (a fresh shell starts beneath it; live ptys
+  can't be revived without a daemon).
 - ⬆️ **Auto-update** — checks GitHub Releases on startup (and via the palette) and
   installs signed updates with one click. See [RELEASING.md](RELEASING.md).
 - ✏️ **Inline quick-edit** — a Monaco editor panel for fast edits (⌘S to save),

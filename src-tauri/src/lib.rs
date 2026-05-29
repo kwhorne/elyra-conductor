@@ -36,6 +36,7 @@ pub fn run() {
             fs::list_dir,
             fs::read_file,
             fs::write_file,
+            fs::list_tasks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

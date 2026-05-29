@@ -83,7 +83,40 @@
     document.documentElement.dataset.theme = theme;
   });
 
+  // ---------- per-project tasks (npm/make/just/composer) ----------
+  let projectTasks = $state([]); // [{ label, command, source }]
+  $effect(() => {
+    const p = activeProject?.path;
+    if (!p) {
+      projectTasks = [];
+      return;
+    }
+    invoke("list_tasks", { path: p })
+      .then((t) => (projectTasks = Array.isArray(t) ? t : []))
+      .catch(() => (projectTasks = []));
+  });
+  function runTask(task) {
+    const cwd = activeProject?.path ?? root;
+    newTab(cwd, task.label, task.command);
+  }
+
+  // ---------- broadcast input (synchronize panes, tmux-style) ----------
+  let broadcast = $state(false);
+  function onPaneInput(srcId, data) {
+    if (!broadcast) return;
+    const tab = activeTab;
+    if (!tab || tab.kind !== "term") return;
+    // Mirror the keystrokes to every other pane in the active tab. The source
+    // pane already wrote to its own pty; siblings echo back via pty://data.
+    for (const l of allLeaves(tab.root)) {
+      if (l.termId !== srcId) invoke("pty_write", { id: l.termId, data }).catch(() => {});
+    }
+  }
+
   const STORAGE_KEY = "conductor:state";
+  const WORKSPACES_KEY = "conductor:workspaces";
+  let workspaces = $state({}); // { name -> snapshot }
+  let activeWorkspace = $state(null);
 
   let fileRoot = $derived(activeProject?.path ?? root);
 
@@ -279,8 +312,10 @@
     ]);
   }
 
-  function makeLeaf(cwd, title, runOnce = null) {
-    return { kind: "leaf", id: nextId("n"), termId: nextId("term"), cwd, title: title ?? "shell", runOnce };
+  function makeLeaf(cwd, title, runOnce = null, key = null) {
+    // `key` is a stable per-pane id that survives serialize/restore, so the
+    // saved scrollback can be matched back to the right pane after restart.
+    return { kind: "leaf", id: nextId("n"), termId: nextId("term"), key: key ?? crypto.randomUUID(), cwd, title: title ?? "shell", runOnce };
   }
 
   // ---------- Elyra agent (RPC host) ----------
@@ -451,6 +486,7 @@
     list.push({ id: "act:toggle-files", title: showFiles ? "Hide file sidebar" : "Show file sidebar", hint: "\u2318B", group: "action", icon: "\u{1F5C2}", action: () => (showFiles = !showFiles) });
     list.push({ id: "act:toggle-hidden", title: showHidden ? "Hide node_modules/.git in tree" : "Show all files in tree", group: "action", icon: "\u{1F441}", action: () => (showHidden = !showHidden) });
     list.push({ id: "act:toggle-theme", title: theme === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "action", icon: theme === "dark" ? "\u2600" : "\u263D", action: () => (theme = theme === "dark" ? "light" : "dark") });
+    list.push({ id: "act:toggle-broadcast", title: broadcast ? "Stop broadcasting input" : "Broadcast input to all panes", group: "action", icon: "\u2301", action: () => (broadcast = !broadcast) });
     list.push({ id: "act:quick-edit", title: "Quick edit file\u2026", group: "action", icon: "\u270E", action: quickEdit });
     list.push({ id: "act:change-root", title: "Change projects folder\u2026", group: "action", icon: "\u{1F4C2}", action: changeRoot });
     if (activeProject?.is_git)
@@ -458,6 +494,13 @@
     list.push({ id: "act:help", title: "Keyboard shortcuts", hint: "\u2318/", group: "action", icon: "?", action: () => (helpOpen = true) });
     list.push({ id: "act:check-update", title: "Check for updates\u2026", group: "action", icon: "\u21BB", action: () => checkForUpdate(true) });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
+    list.push({ id: "act:save-workspace", title: "Save workspace\u2026", group: "action", icon: "\u{1F4BE}", action: saveWorkspacePrompt });
+    for (const name of Object.keys(workspaces)) {
+      list.push({ id: `ws:load:${name}`, title: `Load workspace: ${name}`, hint: workspaces[name]?.root ?? "", group: "workspace", icon: "\u{1F5C4}", action: () => loadWorkspace(name) });
+      list.push({ id: `ws:del:${name}`, title: `Delete workspace: ${name}`, group: "workspace", icon: "\u{1F5D1}", action: () => deleteWorkspace(name) });
+    }
+    for (const task of projectTasks)
+      list.push({ id: `task:${task.source}:${task.label}`, title: `Run: ${task.label}`, hint: `${task.command}  \u00B7  ${task.source}`, group: "task", icon: "\u25B6", action: () => runTask(task) });
     if (activeProject)
       for (const ed of editors)
         list.push({ id: `act:open-${ed}`, title: `Open ${activeProject.name} in ${ed}`, group: "action", icon: "\u{1F680}", action: () => openInEditor(ed, activeProject) });
@@ -505,11 +548,11 @@
 
   // ---------- persistence ----------
   function stripTree(n) {
-    if (n.kind === "leaf") return { kind: "leaf", cwd: n.cwd, title: n.title };
+    if (n.kind === "leaf") return { kind: "leaf", cwd: n.cwd, title: n.title, key: n.key };
     return { kind: "split", dir: n.dir, ratio: n.ratio, a: stripTree(n.a), b: stripTree(n.b) };
   }
   function reviveTree(n) {
-    if (n.kind === "leaf") return makeLeaf(n.cwd, n.title);
+    if (n.kind === "leaf") return makeLeaf(n.cwd, n.title, null, n.key);
     return { kind: "split", id: nextId("s"), dir: n.dir, ratio: n.ratio ?? 0.5, a: reviveTree(n.a), b: reviveTree(n.b) };
   }
 
@@ -532,6 +575,25 @@
     };
   }
 
+  // Remove saved scrollback for panes that no longer exist (closed panes/tabs),
+  // so localStorage doesn't accumulate orphaned buffers.
+  const SB_PREFIX = "conductor:sb:";
+  function pruneScrollback() {
+    try {
+      const live = new Set();
+      for (const t of tabs) {
+        if (t.kind !== "term") continue;
+        for (const l of allLeaves(t.root)) live.add(l.key);
+      }
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(SB_PREFIX) && !live.has(k.slice(SB_PREFIX.length))) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch {}
+  }
+
   let saveTimer = null;
   $effect(() => {
     const isLoaded = loaded;
@@ -542,21 +604,20 @@
       try {
         localStorage.setItem(STORAGE_KEY, snapshot);
       } catch {}
+      pruneScrollback();
     }, 250);
   });
 
-  function restore() {
-    let saved;
-    try {
-      saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
-    } catch {
-      saved = null;
-    }
+  // Apply a serialized snapshot (from auto-save or a named workspace) to the
+  // live state. Does not touch `root` — callers load projects for the right
+  // root first when switching workspaces.
+  function applySnapshot(saved) {
     if (!saved) return false;
 
     if (Array.isArray(saved.pinned)) pinned = saved.pinned.map((p) => ({ ...p }));
-    if (saved.activeProjectPath)
-      activeProject = projects.find((p) => p.path === saved.activeProjectPath) ?? null;
+    activeProject = saved.activeProjectPath
+      ? projects.find((p) => p.path === saved.activeProjectPath) ?? null
+      : null;
     showFiles = saved.showFiles ?? true;
     showHidden = saved.showHidden ?? false;
     theme = saved.theme ?? "dark";
@@ -571,8 +632,66 @@
       );
       const at = tabs[saved.activeTabIndex] ?? tabs[0];
       focusTab(at);
+    } else {
+      tabs = [];
+      activeTabId = null;
+      activeTermId = null;
     }
     return true;
+  }
+
+  function restore() {
+    let saved;
+    try {
+      saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+    } catch {
+      saved = null;
+    }
+    return applySnapshot(saved);
+  }
+
+  // ---------- named workspaces ----------
+  // A workspace is just a serialized snapshot stored under a name, reusing the
+  // exact same shape as the auto-saved session. Global (across root folders).
+  function loadWorkspaces() {
+    try {
+      workspaces = JSON.parse(localStorage.getItem(WORKSPACES_KEY) ?? "{}") ?? {};
+    } catch {
+      workspaces = {};
+    }
+  }
+  function persistWorkspaces() {
+    try {
+      localStorage.setItem(WORKSPACES_KEY, JSON.stringify(workspaces));
+    } catch {}
+  }
+  function saveWorkspacePrompt() {
+    const name = prompt("Save current layout as workspace:", activeWorkspace ?? "")?.trim();
+    if (!name) return;
+    workspaces = { ...workspaces, [name]: serialize() };
+    activeWorkspace = name;
+    persistWorkspaces();
+  }
+  async function loadWorkspace(name) {
+    const snap = workspaces[name];
+    if (!snap) return;
+    // The workspace may point at a different projects folder; switch to it and
+    // re-scan so activeProject resolution works before applying the snapshot.
+    if (snap.root && snap.root !== root) {
+      root = snap.root;
+      await loadProjects();
+    }
+    applySnapshot(snap);
+    activeWorkspace = name;
+  }
+  function deleteWorkspace(name) {
+    if (!workspaces[name]) return;
+    if (!confirm(`Delete workspace "${name}"?`)) return;
+    const next = { ...workspaces };
+    delete next[name];
+    workspaces = next;
+    if (activeWorkspace === name) activeWorkspace = null;
+    persistWorkspaces();
   }
 
   function onWindowFocus() {
@@ -588,6 +707,7 @@
     editors = await invoke("detect_editors");
     terminalName = await invoke("detect_terminal");
     elyraVersion = await invoke("detect_elyra");
+    loadWorkspaces();
 
     let saved;
     try {
@@ -674,6 +794,7 @@
         <button onclick={quickEdit}>Quick edit</button>
         <button class:on={showEditor} onclick={() => (showEditor = !showEditor)}>{showEditor ? "Hide editor" : "Show editor"}</button>
         <button class:on={showFiles} title="Toggle file sidebar (⌘B)" onclick={() => (showFiles = !showFiles)}>Files</button>
+        <button class:on={broadcast} title="Broadcast input to all panes in this tab" onclick={() => (broadcast = !broadcast)}>⌁ Sync</button>
         <button title="Toggle theme" onclick={() => (theme = theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀" : "☽"}</button>
         <button title="Keyboard shortcuts (⌘/)" onclick={() => (helpOpen = true)}>?</button>
         {#if activeProject?.is_git}
@@ -715,7 +836,7 @@
                   <button title="Split down (⇧⌘D)" onclick={() => splitPane(leaf.termId, "col")}>▤</button>
                   <button title="Close pane (⌘W)" onclick={() => closePane(leaf.termId)}>×</button>
                 </div>
-                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} runCommand={leaf.runOnce ?? null} onactivity={() => markActivity(tab.id)} />
+                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} persistKey={leaf.key} runCommand={leaf.runOnce ?? null} onactivity={() => markActivity(tab.id)} onuserinput={onPaneInput} />
               </div>
             {/each}
 
