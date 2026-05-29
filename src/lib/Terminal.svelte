@@ -6,9 +6,14 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
-  let { id, cwd, runCommand = null, onexit = null, onactivity = null } = $props();
+  let { id, cwd, runCommand = null, onexit = null, onactivity = null, theme = "dark" } = $props();
 
   let lastActivity = 0;
+
+  const THEMES = {
+    dark: { background: "#1a1b26", foreground: "#c0caf5", cursor: "#c0caf5", selectionBackground: "#2f3650" },
+    light: { background: "#ffffff", foreground: "#2a2e3a", cursor: "#2a2e3a", selectionBackground: "#dbe4f7" },
+  };
 
   let el;
   let term;
@@ -21,12 +26,7 @@
       fontFamily: '"JetBrains Mono", "SF Mono", Menlo, monospace',
       cursorBlink: true,
       allowProposedApi: true,
-      theme: {
-        background: "#1a1b26",
-        foreground: "#c0caf5",
-        cursor: "#c0caf5",
-        selectionBackground: "#2f3650",
-      },
+      theme: THEMES[theme] ?? THEMES.dark,
     });
     fit = new FitAddon();
     term.loadAddon(fit);
@@ -80,6 +80,11 @@
     term.focus();
   });
 
+  // React to theme changes after mount.
+  $effect(() => {
+    if (term) term.options.theme = THEMES[theme] ?? THEMES.dark;
+  });
+
   onDestroy(() => {
     cleanup.forEach((fn) => fn?.());
     invoke("pty_kill", { id }).catch(() => {});
@@ -94,6 +99,6 @@
     width: 100%;
     height: 100%;
     padding: 6px 8px;
-    background: #1a1b26;
+    background: var(--bg-2);
   }
 </style>

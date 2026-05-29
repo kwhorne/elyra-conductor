@@ -25,7 +25,13 @@
   let paletteOpen = $state(false);
   let showFiles = $state(true);
   let showHidden = $state(false);
+  let theme = $state("dark");
   let loaded = $state(false);
+
+  // Apply theme to the document root (drives all CSS variables).
+  $effect(() => {
+    document.documentElement.dataset.theme = theme;
+  });
 
   const STORAGE_KEY = "conductor:state";
 
@@ -298,6 +304,7 @@
     list.push({ id: "act:toggle-editor", title: showEditor ? "Hide editor" : "Show editor", group: "action", icon: "\u270E", action: () => (showEditor = !showEditor) });
     list.push({ id: "act:toggle-files", title: showFiles ? "Hide file sidebar" : "Show file sidebar", hint: "\u2318B", group: "action", icon: "\u{1F5C2}", action: () => (showFiles = !showFiles) });
     list.push({ id: "act:toggle-hidden", title: showHidden ? "Hide node_modules/.git in tree" : "Show all files in tree", group: "action", icon: "\u{1F441}", action: () => (showHidden = !showHidden) });
+    list.push({ id: "act:toggle-theme", title: theme === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "action", icon: theme === "dark" ? "\u2600" : "\u263D", action: () => (theme = theme === "dark" ? "light" : "dark") });
     list.push({ id: "act:quick-edit", title: "Quick edit file\u2026", group: "action", icon: "\u270E", action: quickEdit });
     list.push({ id: "act:change-root", title: "Change projects folder\u2026", group: "action", icon: "\u{1F4C2}", action: changeRoot });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
@@ -359,6 +366,7 @@
       activeProjectPath: activeProject?.path ?? null,
       showFiles,
       showHidden,
+      theme,
       showEditor,
       editorPath,
       activeTabIndex: tabs.findIndex((t) => t.id === activeTabId),
@@ -392,6 +400,7 @@
       activeProject = projects.find((p) => p.path === saved.activeProjectPath) ?? null;
     showFiles = saved.showFiles ?? true;
     showHidden = saved.showHidden ?? false;
+    theme = saved.theme ?? "dark";
     showEditor = saved.showEditor ?? false;
     editorPath = saved.editorPath ?? null;
 
@@ -480,6 +489,7 @@
         <button onclick={quickEdit}>Quick edit</button>
         <button class:on={showEditor} onclick={() => (showEditor = !showEditor)}>{showEditor ? "Hide editor" : "Show editor"}</button>
         <button class:on={showFiles} title="Toggle file sidebar (⌘B)" onclick={() => (showFiles = !showFiles)}>Files</button>
+        <button title="Toggle theme" onclick={() => (theme = theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀" : "☽"}</button>
       </div>
     </div>
 
@@ -511,7 +521,7 @@
                   <button title="Split down (⇧⌘D)" onclick={() => splitPane(leaf.termId, "col")}>▤</button>
                   <button title="Close pane (⌘W)" onclick={() => closePane(leaf.termId)}>×</button>
                 </div>
-                <Terminal id={leaf.termId} cwd={leaf.cwd} onactivity={() => markActivity(tab.id)} />
+                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} onactivity={() => markActivity(tab.id)} />
               </div>
             {/each}
 
@@ -527,7 +537,7 @@
       </div>
 
       {#if showEditor}
-        <div class="editor-area"><Editor path={editorPath} onclose={() => (showEditor = false)} /></div>
+        <div class="editor-area"><Editor path={editorPath} {theme} onclose={() => (showEditor = false)} /></div>
       {/if}
 
       {#if showFiles}

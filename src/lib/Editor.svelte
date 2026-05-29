@@ -4,7 +4,7 @@
   import "./monaco-setup.js";
   import { invoke } from "@tauri-apps/api/core";
 
-  let { path, onclose } = $props();
+  let { path, onclose, theme = "dark" } = $props();
 
   let el;
   let editor;
@@ -46,7 +46,7 @@
 
   onMount(() => {
     editor = monaco.editor.create(el, {
-      theme: "vs-dark",
+      theme: theme === "light" ? "vs" : "vs-dark",
       automaticLayout: true,
       fontSize: 13,
       fontFamily: '"JetBrains Mono", "SF Mono", Menlo, monospace',
@@ -62,6 +62,11 @@
   // React to path prop changes
   $effect(() => {
     if (editor && path && path !== currentPath) openFile(path);
+  });
+
+  // React to theme changes (Monaco theme is global).
+  $effect(() => {
+    monaco.editor.setTheme(theme === "light" ? "vs" : "vs-dark");
   });
 
   onDestroy(() => editor?.dispose());
@@ -86,7 +91,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #1e1e1e;
+    background: var(--bg-2);
   }
   .editor-bar {
     display: flex;
