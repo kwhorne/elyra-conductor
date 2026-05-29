@@ -6,7 +6,9 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
-  let { id, cwd, runCommand = null, onexit = null } = $props();
+  let { id, cwd, runCommand = null, onexit = null, onactivity = null } = $props();
+
+  let lastActivity = 0;
 
   let el;
   let term;
@@ -38,6 +40,11 @@
 
     const unData = await listen(`pty://data/${id}`, (e) => {
       term.write(new Uint8Array(e.payload));
+      const now = Date.now();
+      if (onactivity && now - lastActivity > 350) {
+        lastActivity = now;
+        onactivity();
+      }
     });
     const unExit = await listen(`pty://exit/${id}`, (e) => {
       const code = typeof e.payload === "number" ? e.payload : null;

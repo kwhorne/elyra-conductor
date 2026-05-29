@@ -37,6 +37,9 @@ Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
   project. Click a file to open it in the editor. On by default.
 - ▶️ **Run files** — right-click a file in the sidebar to run `./<file>` either in
   an in-app terminal modal or in your external terminal (iTerm2 / Terminal.app).
+- 🔔 **Notification rings** — a tab pulses green when a background terminal
+  produces output, and clears when you switch to it. Tabs stay alive in the
+  background, so nothing is lost when you switch.
 - ✏️ **Inline quick-edit** — a Monaco editor panel for fast edits (⌘S to save),
   without leaving the app.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
@@ -198,7 +201,7 @@ elyra-conductor/
 
 - [x] Git status (dirty / ahead / behind) in the sidebar
 - [x] Persist tabs + split layout across restarts (fresh shells, same structure)
-- [ ] Notification rings — flash a tab when a process is waiting for input
+- [x] Notification rings — pulse a tab when a background terminal has new output
 - [ ] Hide `node_modules` / `.git` in the file tree (toggle)
 - [ ] Tab/pane titles derived from the running process (e.g. `bun dev`)
 - [ ] Persisted projects & favorites (SQLite via `tauri-plugin-sql`)

@@ -35,6 +35,23 @@
     showEditor = true;
   }
 
+  // ---------- notification rings ----------
+  function markActivity(tabId) {
+    if (tabId !== activeTabId && !activity[tabId]) {
+      activity = { ...activity, [tabId]: true };
+    }
+  }
+
+  // Clear the indicator when its tab becomes active.
+  $effect(() => {
+    const id = activeTabId;
+    if (id && activity[id]) {
+      const next = { ...activity };
+      delete next[id];
+      activity = next;
+    }
+  });
+
   // ---------- file context menu + run modal ----------
   let terminalName = $state("Terminal");
   let ctx = $state({ open: false, x: 0, y: 0, entry: null });
@@ -85,8 +102,8 @@
     ];
   });
 
-  let panesEl;
-  let drag = null; // { divider, } during resize
+  let drag = null; // { ...divider, container } during resize
+  let activity = $state({}); // tabId -> true when a background tab produced output
 
   let idSeq = 0;
   const nextId = (p) => `${p}-${++idSeq}`;
@@ -184,13 +201,13 @@
   // ---------- divider drag ----------
   function startDrag(e, d) {
     e.preventDefault();
-    drag = d;
+    drag = { ...d, container: e.currentTarget.parentElement };
     window.addEventListener("pointermove", onDrag);
     window.addEventListener("pointerup", endDrag);
   }
   function onDrag(e) {
-    if (!drag || !panesEl || !activeTab) return;
-    const box = panesEl.getBoundingClientRect();
+    if (!drag || !drag.container || !activeTab) return;
+    const box = drag.container.getBoundingClientRect();
     let ratio;
     if (drag.dir === "row") {
       const regionLeft = box.left + (drag.rect.x / 100) * box.width;
@@ -403,7 +420,8 @@
     <div class="topbar">
       <div class="tabs">
         {#each tabs as t (t.id)}
-          <div class="tab" class:active={t.id === activeTabId}>
+          <div class="tab" class:active={t.id === activeTabId} class:ring={activity[t.id]}>
+            {#if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
             <button class="tab-label" onclick={() => { activeTabId = t.id; activeTermId = firstLeaf(t.root).termId; }}>{t.title}</button>
             <button class="tab-x" onclick={() => closeTab(t.id)}>×</button>
           </div>
@@ -419,53 +437,42 @@
     </div>
 
     <div class="panes">
-      <div class="term-area" bind:this={panesEl}>
-        {#if geo.leaves.length === 0}
+      <div class="term-stack">
+        {#if tabs.length === 0}
           <div class="placeholder">Select a project or press ＋ to open a terminal. <kbd>⌘D</kbd> to split.</div>
         {/if}
 
-        {#each geo.leaves as leaf (leaf.termId)}
-          <div
-            class="pane"
-            class:active={leaf.termId === activeTermId}
-            style:left="{leaf.rect.x}%"
-            style:top="{leaf.rect.y}%"
-            style:width="{leaf.rect.w}%"
-            style:height="{leaf.rect.h}%"
-            role="presentation"
-            onpointerdown={() => (activeTermId = leaf.termId)}
-          >
-            <div class="pane-tools">
-              <button title="Split right (⌘D)" onclick={() => splitPane(leaf.termId, "row")}>▥</button>
-              <button title="Split down (⇧⌘D)" onclick={() => splitPane(leaf.termId, "col")}>▤</button>
-              <button title="Close pane (⌘W)" onclick={() => closePane(leaf.termId)}>×</button>
-            </div>
-            <Terminal id={leaf.termId} cwd={leaf.cwd} />
-          </div>
-        {/each}
+        {#each tabs as tab (tab.id)}
+          {@const g = geometry(tab.root)}
+          <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
+            {#each g.leaves as leaf (leaf.termId)}
+              <div
+                class="pane"
+                class:active={leaf.termId === activeTermId && tab.id === activeTabId}
+                style:left="{leaf.rect.x}%"
+                style:top="{leaf.rect.y}%"
+                style:width="{leaf.rect.w}%"
+                style:height="{leaf.rect.h}%"
+                role="presentation"
+                onpointerdown={() => (activeTermId = leaf.termId)}
+              >
+                <div class="pane-tools">
+                  <button title="Split right (⌘D)" onclick={() => splitPane(leaf.termId, "row")}>▥</button>
+                  <button title="Split down (⇧⌘D)" onclick={() => splitPane(leaf.termId, "col")}>▤</button>
+                  <button title="Close pane (⌘W)" onclick={() => closePane(leaf.termId)}>×</button>
+                </div>
+                <Terminal id={leaf.termId} cwd={leaf.cwd} onactivity={() => markActivity(tab.id)} />
+              </div>
+            {/each}
 
-        {#each geo.dividers as d (d.id)}
-          {#if d.dir === "row"}
-            <div
-              class="divider row"
-              style:left="{d.pos}%"
-              style:top="{d.rect.y}%"
-              style:height="{d.rect.h}%"
-              role="separator"
-              aria-orientation="vertical"
-              onpointerdown={(e) => startDrag(e, d)}
-            ></div>
-          {:else}
-            <div
-              class="divider col"
-              style:top="{d.pos}%"
-              style:left="{d.rect.x}%"
-              style:width="{d.rect.w}%"
-              role="separator"
-              aria-orientation="horizontal"
-              onpointerdown={(e) => startDrag(e, d)}
-            ></div>
-          {/if}
+            {#each g.dividers as d (d.id)}
+              {#if d.dir === "row"}
+                <div class="divider row" style:left="{d.pos}%" style:top="{d.rect.y}%" style:height="{d.rect.h}%" role="separator" aria-orientation="vertical" onpointerdown={(e) => startDrag(e, d)}></div>
+              {:else}
+                <div class="divider col" style:top="{d.pos}%" style:left="{d.rect.x}%" style:width="{d.rect.w}%" role="separator" aria-orientation="horizontal" onpointerdown={(e) => startDrag(e, d)}></div>
+              {/if}
+            {/each}
+          </div>
         {/each}
       </div>
 
@@ -509,6 +516,9 @@
   .tabs { display: flex; align-items: center; gap: 4px; overflow-x: auto; flex: 1; }
   .tab { display: flex; align-items: center; background: var(--bg-3); border: 1px solid transparent; border-radius: 6px; padding: 0 2px 0 4px; }
   .tab.active { border-color: var(--accent); }
+  .tab.ring { border-color: var(--green); }
+  .ring-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-left: 6px; flex: none; animation: ring-pulse 1.2s ease-in-out infinite; }
+  @keyframes ring-pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(158, 206, 106, 0.6); } 50% { opacity: 0.5; box-shadow: 0 0 0 4px rgba(158, 206, 106, 0); } }
   .tab-label { background: transparent; border: none; color: var(--text); padding: 4px 6px; font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tab-x { background: transparent; border: none; color: var(--text-dim); padding: 0 4px; font-size: 14px; }
   .tab-x:hover { color: var(--text); }
@@ -519,7 +529,8 @@
   .kbd-btn { display: flex; align-items: center; gap: 6px; }
   kbd { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); }
   .panes { flex: 1; display: flex; min-height: 0; }
-  .term-area { flex: 1; position: relative; min-width: 0; background: #1a1b26; overflow: hidden; }
+  .term-stack { flex: 1; position: relative; min-width: 0; background: #1a1b26; overflow: hidden; }
+  .term-area { position: absolute; inset: 0; }
   .pane { position: absolute; overflow: hidden; box-shadow: inset 0 0 0 1px var(--border); }
   .pane.active { box-shadow: inset 0 0 0 1px var(--accent); }
   .pane-tools { position: absolute; top: 3px; right: 6px; z-index: 5; display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s; }
