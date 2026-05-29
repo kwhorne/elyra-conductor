@@ -98,6 +98,57 @@ pub fn git_status(path: String) -> GitStatus {
     }
 }
 
+#[derive(Serialize)]
+pub struct GitChange {
+    status: String,
+    file: String,
+}
+
+#[tauri::command]
+pub fn git_changes(path: String) -> Vec<GitChange> {
+    git(&path, &["status", "--porcelain"])
+        .map(|s| {
+            s.lines()
+                .filter(|l| l.len() >= 3)
+                .map(|l| GitChange {
+                    status: l[0..2].trim().to_string(),
+                    file: l[3..].to_string(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn run_git_capture(path: &str, args: &[&str], log: &mut String) -> Result<(), String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(args)
+        .output()
+        .map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    log.push_str(&format!("$ git {}\n{stdout}{stderr}\n", args.join(" ")));
+    if !out.status.success() {
+        return Err(format!("git {} failed:\n{stderr}", args.join(" ")));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn git_commit(path: String, message: String, push: bool) -> Result<String, String> {
+    if message.trim().is_empty() {
+        return Err("Commit message is empty".to_string());
+    }
+    let mut log = String::new();
+    run_git_capture(&path, &["add", "-A"], &mut log)?;
+    run_git_capture(&path, &["commit", "-m", &message], &mut log)?;
+    if push {
+        run_git_capture(&path, &["push"], &mut log)?;
+    }
+    Ok(log)
+}
+
 /// Known CLI launchers for supported editors.
 const EDITORS: &[(&str, &str)] = &[("zed", "zed"), ("vscode", "code"), ("cursor", "cursor")];
 

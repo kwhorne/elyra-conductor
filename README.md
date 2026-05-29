@@ -40,6 +40,11 @@ Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
 - 🔔 **Notification rings** — a tab pulses green when a background terminal
   produces output, and clears when you switch to it. Tabs stay alive in the
   background, so nothing is lost when you switch.
+- 🔎 **Terminal search** — `⌘F` opens an in-terminal find bar (↵ / ⇧↵ to step).
+- 🌓 **Light / dark theme** — toggle in the toolbar or palette; persisted.
+- ↔️ **Drag-to-reorder tabs**.
+- ⎇ **Git commit dialog** — review changes, write a message, commit (and push)
+  without leaving the app (`⌘↵` to commit).
 - ✏️ **Inline quick-edit** — a Monaco editor panel for fast edits (⌘S to save),
   without leaving the app.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
@@ -55,6 +60,8 @@ Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
 | `⌘W` | Close active pane (or close the editor when it is focused) |
 | `⌘B` | Toggle file sidebar |
 | `⌘S` | Save file (when editor is focused) |
+| `⌘F` | Find in terminal (when a terminal is focused) |
+| `⌘↵` | Commit (in the commit dialog) |
 
 > On Linux/Windows, `Ctrl` substitutes for `⌘`.
 
@@ -192,6 +199,7 @@ elyra-conductor/
 | `pty_title` | Foreground process name of a pty (for dynamic tab/pane titles) |
 | `list_projects` | Scan the root folder, return projects + git branch |
 | `git_status` | Per-project dirty / ahead / behind state |
+| `git_changes` / `git_commit` | List working-tree changes; stage, commit, optionally push |
 | `detect_editors` / `open_in_editor` | Find and launch external editors |
 | `detect_terminal` / `run_in_external_terminal` | Run a file in iTerm2 / Terminal.app |
 | `home_dir` | Resolve `$HOME` for the default root |

@@ -9,6 +9,7 @@
   import FileExplorer from "./lib/FileExplorer.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import RunModal from "./lib/RunModal.svelte";
+  import CommitDialog from "./lib/CommitDialog.svelte";
   import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf, allLeaves } from "./lib/layout.js";
 
   let root = $state("");
@@ -63,6 +64,13 @@
   let terminalName = $state("Terminal");
   let ctx = $state({ open: false, x: 0, y: 0, entry: null });
   let runModal = $state({ open: false, cwd: "", command: "", title: "" });
+  let commit = $state({ open: false, path: "", name: "" });
+
+  function openCommit() {
+    const p = activeProject ?? projects.find((x) => x.path === activeTab?.projectPath);
+    if (!p) return;
+    commit = { open: true, path: p.path, name: p.name };
+  }
 
   function dirOf(path) {
     const i = path.lastIndexOf("/");
@@ -329,6 +337,8 @@
     list.push({ id: "act:toggle-theme", title: theme === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "action", icon: theme === "dark" ? "\u2600" : "\u263D", action: () => (theme = theme === "dark" ? "light" : "dark") });
     list.push({ id: "act:quick-edit", title: "Quick edit file\u2026", group: "action", icon: "\u270E", action: quickEdit });
     list.push({ id: "act:change-root", title: "Change projects folder\u2026", group: "action", icon: "\u{1F4C2}", action: changeRoot });
+    if (activeProject?.is_git)
+      list.push({ id: "act:commit", title: `Git: commit ${activeProject.name}\u2026`, group: "action", icon: "\u2387", action: openCommit });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
     if (activeProject)
       for (const ed of editors)
@@ -522,6 +532,9 @@
         <button class:on={showEditor} onclick={() => (showEditor = !showEditor)}>{showEditor ? "Hide editor" : "Show editor"}</button>
         <button class:on={showFiles} title="Toggle file sidebar (⌘B)" onclick={() => (showFiles = !showFiles)}>Files</button>
         <button title="Toggle theme" onclick={() => (theme = theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀" : "☽"}</button>
+        {#if activeProject?.is_git}
+          <button title="Commit changes" onclick={openCommit}>⎇ Commit</button>
+        {/if}
       </div>
     </div>
 
@@ -601,6 +614,14 @@
     command={runModal.command}
     title={runModal.title}
     onclose={() => (runModal = { ...runModal, open: false })}
+  />
+
+  <CommitDialog
+    open={commit.open}
+    path={commit.path}
+    projectName={commit.name}
+    onclose={() => (commit = { ...commit, open: false })}
+    oncommitted={() => loadProjects()}
   />
 </div>
 

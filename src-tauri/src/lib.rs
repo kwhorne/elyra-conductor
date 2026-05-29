@@ -17,6 +17,8 @@ pub fn run() {
             pty::pty_title,
             projects::list_projects,
             projects::git_status,
+            projects::git_changes,
+            projects::git_commit,
             projects::detect_editors,
             projects::open_in_editor,
             projects::detect_terminal,
