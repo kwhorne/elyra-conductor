@@ -9,6 +9,8 @@
     onroot,
     onrefresh,
     onpin,
+    onagent,
+    elyra = false,
     root = "",
   } = $props();
 
@@ -72,6 +74,16 @@
       </div>
       {#if p.path === activePath}
         <div class="actions">
+          {#if elyra}
+            <button
+              class="agent"
+              title="Open an Elyra agent in this project"
+              onclick={(e) => {
+                e.stopPropagation();
+                onagent?.(p);
+              }}>🤖 elyra</button
+            >
+          {/if}
           {#each editors as ed}
             <button
               onclick={(e) => {
@@ -248,6 +260,13 @@
   }
   .actions button:hover {
     border-color: var(--accent);
+  }
+  .actions button.agent {
+    border-color: #f9731680;
+    color: #fb923c;
+  }
+  .actions button.agent:hover {
+    border-color: #fb923c;
   }
   .empty {
     color: var(--text-dim);

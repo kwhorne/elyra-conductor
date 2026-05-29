@@ -22,6 +22,7 @@ pub fn run() {
             projects::git_changes,
             projects::git_commit,
             projects::detect_editors,
+            projects::detect_elyra,
             projects::open_in_editor,
             projects::detect_terminal,
             projects::run_in_external_terminal,

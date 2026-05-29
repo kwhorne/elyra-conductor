@@ -178,6 +178,15 @@ pub fn detect_editors() -> Vec<String> {
         .collect()
 }
 
+/// Detect the Elyra coding agent CLI (returns its version string if present).
+#[tauri::command]
+pub fn detect_elyra() -> Option<String> {
+    let bin = find_bin("elyra")?;
+    let out = std::process::Command::new(&bin).arg("--version").output().ok()?;
+    let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    Some(if v.is_empty() { "installed".to_string() } else { v })
+}
+
 /// Name of the external terminal we will launch (for labelling the UI).
 #[tauri::command]
 pub fn detect_terminal() -> String {

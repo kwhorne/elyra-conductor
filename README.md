@@ -51,6 +51,9 @@ Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
   without leaving the app.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
   project in Zed, VS Code, or Cursor.
+- 🤖 **Elyra agent** — if the [Elyra](https://github.com/kwhorne/elyra) coding
+  agent CLI is installed, spin up an agent in a tab for any project (sidebar
+  button, palette, or right-click), or "Ask Elyra about this file".
 
 ## Keyboard shortcuts
 

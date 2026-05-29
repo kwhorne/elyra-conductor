@@ -18,6 +18,7 @@
   let projects = $state([]);
   let pinned = $state([]); // [{ path, name, is_git, branch, dirty, ahead, behind }]
   let editors = $state([]);
+  let elyraVersion = $state(null);
   let activeProject = $state(null);
 
   let tabs = $state([]); // { id, title, projectPath, root }
@@ -162,16 +163,24 @@
     const e = ctx.entry;
     if (!e) return [];
     if (e.is_dir) {
-      return [
+      const items = [
         { label: "Open new terminal here", icon: "\u{1F5A5}", action: () => newTab(e.path, baseOf(e.path)) },
       ];
+      if (elyraVersion)
+        items.push({ label: "New Elyra agent here", icon: "\u{1F916}", action: () => newElyraAgent(e.path, baseOf(e.path)) });
+      return items;
     }
-    return [
+    const items = [
       { label: "Open in editor", icon: "\u270E", action: () => openFile(e.path) },
+    ];
+    if (elyraVersion)
+      items.push({ label: "Ask Elyra about this file", icon: "\u{1F916}", action: () => askElyra(e) });
+    items.push(
       { separator: true },
       { label: `Run ./${baseOf(e.path)} (modal)`, icon: "\u25B6", action: () => runInModal(e) },
-      { label: `Run in ${terminalName}`, icon: "\u{1F680}", action: () => runExternal(e) },
-    ];
+      { label: `Run in ${terminalName}`, icon: "\u{1F680}", action: () => runExternal(e) }
+    );
+    return items;
   });
 
   let drag = null; // { ...divider, container } during resize
@@ -265,13 +274,23 @@
     ]);
   }
 
-  function makeLeaf(cwd, title) {
-    return { kind: "leaf", id: nextId("n"), termId: nextId("term"), cwd, title: title ?? "shell" };
+  function makeLeaf(cwd, title, runOnce = null) {
+    return { kind: "leaf", id: nextId("n"), termId: nextId("term"), cwd, title: title ?? "shell", runOnce };
+  }
+
+  // ---------- Elyra agent ----------
+  function newElyraAgent(cwd, name) {
+    newTab(cwd, name ?? "elyra", "elyra");
+  }
+  function askElyra(entry) {
+    const dir = dirOf(entry.path);
+    const base = baseOf(entry.path);
+    newTab(dir, base, `elyra @${base} "Explain what this file does"`);
   }
 
   // ---------- tabs ----------
-  function newTab(cwd, title) {
-    const leaf = makeLeaf(cwd, title);
+  function newTab(cwd, title, runOnce = null) {
+    const leaf = makeLeaf(cwd, title, runOnce);
     const tab = { id: nextId("tab"), title: title ?? "shell", projectPath: cwd, root: leaf };
     tabs = [...tabs, tab];
     activeTabId = tab.id;
@@ -408,6 +427,8 @@
     for (const t of tabs)
       list.push({ id: `tab:${t.id}`, title: t.title, hint: t.projectPath, group: "tab", icon: "\u{1F5C2}", action: () => { activeTabId = t.id; activeTermId = firstLeaf(t.root).termId; } });
     list.push({ id: "act:new-tab", title: "New terminal tab", hint: "", group: "action", icon: "\u002B", action: () => newTab(activeProject?.path ?? root, activeProject?.name) });
+    if (elyraVersion)
+      list.push({ id: "act:new-elyra", title: "New Elyra agent here", group: "action", icon: "\u{1F916}", action: () => newElyraAgent(activeProject?.path ?? root, activeProject?.name) });
     list.push({ id: "act:split-right", title: "Split right", hint: "\u2318D", group: "action", icon: "\u25A5", action: () => activeTermId && splitPane(activeTermId, "row") });
     list.push({ id: "act:split-down", title: "Split down", hint: "\u21E7\u2318D", group: "action", icon: "\u25A4", action: () => activeTermId && splitPane(activeTermId, "col") });
     list.push({ id: "act:close-pane", title: "Close pane", hint: "\u2318W", group: "action", icon: "\u00D7", action: () => activeTermId && closePane(activeTermId) });
@@ -549,6 +570,7 @@
     titleTimer = setInterval(pollTitles, 1800);
     editors = await invoke("detect_editors");
     terminalName = await invoke("detect_terminal");
+    elyraVersion = await invoke("detect_elyra");
 
     let saved;
     try {
@@ -604,6 +626,8 @@
     onroot={changeRoot}
     onrefresh={loadProjects}
     onpin={togglePin}
+    elyra={!!elyraVersion}
+    onagent={(p) => newElyraAgent(p.path, p.name)}
   />
 
   <div class="main">
@@ -669,7 +693,7 @@
                   <button title="Split down (⇧⌘D)" onclick={() => splitPane(leaf.termId, "col")}>▤</button>
                   <button title="Close pane (⌘W)" onclick={() => closePane(leaf.termId)}>×</button>
                 </div>
-                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} onactivity={() => markActivity(tab.id)} />
+                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} runCommand={leaf.runOnce ?? null} onactivity={() => markActivity(tab.id)} />
               </div>
             {/each}
 
