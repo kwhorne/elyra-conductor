@@ -35,9 +35,10 @@ versioned, extensible, and reusable.
 Conductor spawns the `elyra` binary in a terminal tab/pane (in the project's cwd).
 Identical in spirit to "Open in Zed". No AI logic enters Conductor.
 
-### Level 1 (planned) — RPC host, not agent
-Conductor may spawn `elyra --mode rpc` and render a native panel for it. To stay on
-the right side of the boundary, Conductor acts strictly as a **host/renderer**:
+### Level 1 (implemented) — RPC host, not agent
+Conductor spawns `elyra --mode rpc` (Rust JSONL bridge in `agent.rs`) and renders a
+native panel (`AgentPanel.svelte`). To stay on the right side of the boundary,
+Conductor acts strictly as a **host/renderer**:
 
 - **Transport only:** read/write JSON-RPC (JSONL) over the child process's stdio.
 - **UI mapping only:** Elyra's host requests map to UI —

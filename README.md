@@ -68,9 +68,12 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   without leaving the app.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
   project in Zed, VS Code, or Cursor.
-- 🤖 **Elyra agent** — if the [Elyra](https://elyracode.com) coding
-  agent CLI is installed, spin up an agent in a tab for any project (sidebar
-  button, palette, or right-click), or "Ask Elyra about this file".
+- 🤖 **Elyra agent** — if the [Elyra](https://elyracode.com) coding agent CLI is
+  installed, open a **native agent panel** in a tab (sidebar button, palette, or
+  right-click → "Ask Elyra about this file"). Conductor drives `elyra --mode rpc`
+  over JSON-RPC: stream replies, see tool activity, answer confirm/select/input
+  prompts, and get a notification ring when the agent needs you. All AI stays in
+  Elyra — Conductor is only the host UI (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 
 ## Keyboard shortcuts
 
@@ -220,6 +223,7 @@ elyra-conductor/
 |---------|---------|
 | `pty_spawn` / `pty_write` / `pty_resize` / `pty_kill` | Terminal session lifecycle |
 | `pty_title` | Foreground process name of a pty (for dynamic tab/pane titles) |
+| `agent_spawn` / `agent_send` / `agent_kill` | JSONL transport to `elyra --mode rpc` (host only) |
 | `list_projects` | Scan the root folder, return projects + git branch |
 | `git_status` | Per-project dirty / ahead / behind state |
 | `git_changes` / `git_commit` | List working-tree changes; stage, commit, optionally push |

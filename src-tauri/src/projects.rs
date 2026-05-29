@@ -152,7 +152,7 @@ pub fn git_commit(path: String, message: String, push: bool) -> Result<String, S
 /// Known CLI launchers for supported editors.
 const EDITORS: &[(&str, &str)] = &[("zed", "zed"), ("vscode", "code"), ("cursor", "cursor")];
 
-fn find_bin(bin: &str) -> Option<String> {
+pub fn find_bin(bin: &str) -> Option<String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(paths) = std::env::var("PATH") {
         for dir in std::env::split_paths(&paths) {

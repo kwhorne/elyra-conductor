@@ -4,6 +4,7 @@
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import Sidebar from "./lib/Sidebar.svelte";
   import Terminal from "./lib/Terminal.svelte";
+  import AgentPanel from "./lib/AgentPanel.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
   import FileExplorer from "./lib/FileExplorer.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -190,6 +191,7 @@
   // Title shown on a tab: the foreground process of any of its panes, else the
   // project/shell name.
   function tabTitle(t) {
+    if (t.kind !== "term") return t.title;
     for (const l of allLeaves(t.root)) {
       if (titles[l.termId]) return titles[l.termId];
     }
@@ -198,7 +200,10 @@
 
   async function pollTitles() {
     const ids = [];
-    for (const t of tabs) for (const l of allLeaves(t.root)) ids.push(l.termId);
+    for (const t of tabs) {
+      if (t.kind !== "term") continue;
+      for (const l of allLeaves(t.root)) ids.push(l.termId);
+    }
     if (ids.length === 0) return;
     const results = await Promise.all(
       ids.map(async (id) => [id, await invoke("pty_title", { id }).catch(() => null)])
@@ -212,7 +217,7 @@
   const nextId = (p) => `${p}-${++idSeq}`;
 
   let activeTab = $derived(tabs.find((t) => t.id === activeTabId) ?? null);
-  let geo = $derived(activeTab ? geometry(activeTab.root) : { leaves: [], dividers: [] });
+  let geo = $derived(activeTab?.kind === "term" ? geometry(activeTab.root) : { leaves: [], dividers: [] });
 
   // ---------- data ----------
   async function loadProjects() {
@@ -278,23 +283,31 @@
     return { kind: "leaf", id: nextId("n"), termId: nextId("term"), cwd, title: title ?? "shell", runOnce };
   }
 
-  // ---------- Elyra agent ----------
-  function newElyraAgent(cwd, name) {
-    newTab(cwd, name ?? "elyra", "elyra");
+  // ---------- Elyra agent (RPC host) ----------
+  function newElyraAgent(cwd, name, initialPrompt = null) {
+    const tab = { id: nextId("tab"), kind: "agent", title: name ?? "elyra", projectPath: cwd, cwd, initialPrompt };
+    tabs = [...tabs, tab];
+    activeTabId = tab.id;
+    activeTermId = null;
   }
   function askElyra(entry) {
     const dir = dirOf(entry.path);
     const base = baseOf(entry.path);
-    newTab(dir, base, `elyra @${base} "Explain what this file does"`);
+    newElyraAgent(dir, base, `Explain what \`${base}\` does.`);
   }
 
   // ---------- tabs ----------
   function newTab(cwd, title, runOnce = null) {
     const leaf = makeLeaf(cwd, title, runOnce);
-    const tab = { id: nextId("tab"), title: title ?? "shell", projectPath: cwd, root: leaf };
+    const tab = { id: nextId("tab"), kind: "term", title: title ?? "shell", projectPath: cwd, root: leaf };
     tabs = [...tabs, tab];
     activeTabId = tab.id;
     activeTermId = leaf.termId;
+  }
+
+  function focusTab(t) {
+    activeTabId = t.id;
+    activeTermId = t.kind === "agent" ? null : firstLeaf(t.root).termId;
   }
 
   let dragFrom = null;
@@ -323,8 +336,11 @@
     tabs = tabs.filter((t) => t.id !== id);
     if (activeTabId === id) {
       const next = tabs.at(-1) ?? null;
-      activeTabId = next?.id ?? null;
-      activeTermId = next ? firstLeaf(next.root).termId : null;
+      if (next) focusTab(next);
+      else {
+        activeTabId = null;
+        activeTermId = null;
+      }
     }
   }
 
@@ -332,8 +348,7 @@
     activeProject = p;
     const existing = tabs.find((t) => t.projectPath === p.path);
     if (existing) {
-      activeTabId = existing.id;
-      activeTermId = firstLeaf(existing.root).termId;
+      focusTab(existing);
     } else {
       newTab(p.path, p.name);
     }
@@ -346,7 +361,7 @@
 
   function splitPane(termId, dir) {
     const tab = activeTab;
-    if (!tab) return;
+    if (!tab || tab.kind !== "term") return;
     const leaf = makeLeaf(cwdOf(termId));
     tab.root = splitLeaf(tab.root, termId, dir, leaf, nextId("s"));
     activeTermId = leaf.termId;
@@ -354,7 +369,7 @@
 
   function closePane(termId) {
     const tab = activeTab;
-    if (!tab) return;
+    if (!tab || tab.kind !== "term") return;
     const newRoot = removeLeaf(tab.root, termId);
     if (!newRoot) {
       closeTab(tab.id);
@@ -425,7 +440,7 @@
     for (const p of projects)
       list.push({ id: `proj:${p.path}`, title: p.name, hint: p.path, group: "project", icon: "\u{1F4C1}", action: () => selectProject(p) });
     for (const t of tabs)
-      list.push({ id: `tab:${t.id}`, title: t.title, hint: t.projectPath, group: "tab", icon: "\u{1F5C2}", action: () => { activeTabId = t.id; activeTermId = firstLeaf(t.root).termId; } });
+      list.push({ id: `tab:${t.id}`, title: t.title, hint: t.projectPath, group: "tab", icon: "\u{1F5C2}", action: () => focusTab(t) });
     list.push({ id: "act:new-tab", title: "New terminal tab", hint: "", group: "action", icon: "\u002B", action: () => newTab(activeProject?.path ?? root, activeProject?.name) });
     if (elyraVersion)
       list.push({ id: "act:new-elyra", title: "New Elyra agent here", group: "action", icon: "\u{1F916}", action: () => newElyraAgent(activeProject?.path ?? root, activeProject?.name) });
@@ -509,7 +524,11 @@
       showEditor,
       editorPath,
       activeTabIndex: tabs.findIndex((t) => t.id === activeTabId),
-      tabs: tabs.map((t) => ({ title: t.title, projectPath: t.projectPath, root: stripTree(t.root) })),
+      tabs: tabs.map((t) =>
+        t.kind === "agent"
+          ? { kind: "agent", title: t.title, projectPath: t.projectPath, cwd: t.cwd }
+          : { kind: "term", title: t.title, projectPath: t.projectPath, root: stripTree(t.root) }
+      ),
     };
   }
 
@@ -545,15 +564,13 @@
     editorPath = saved.editorPath ?? null;
 
     if (Array.isArray(saved.tabs) && saved.tabs.length) {
-      tabs = saved.tabs.map((t) => ({
-        id: nextId("tab"),
-        title: t.title,
-        projectPath: t.projectPath,
-        root: reviveTree(t.root),
-      }));
+      tabs = saved.tabs.map((t) =>
+        t.kind === "agent"
+          ? { id: nextId("tab"), kind: "agent", title: t.title, projectPath: t.projectPath, cwd: t.cwd, initialPrompt: null }
+          : { id: nextId("tab"), kind: "term", title: t.title, projectPath: t.projectPath, root: reviveTree(t.root) }
+      );
       const at = tabs[saved.activeTabIndex] ?? tabs[0];
-      activeTabId = at.id;
-      activeTermId = firstLeaf(at.root).termId;
+      focusTab(at);
     }
     return true;
   }
@@ -646,7 +663,7 @@
             ondragend={() => (dragOver = null)}
           >
             {#if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
-            <button class="tab-label" onclick={() => { activeTabId = t.id; activeTermId = firstLeaf(t.root).termId; }}>{tabTitle(t)}</button>
+            <button class="tab-label" onclick={() => focusTab(t)}>{tabTitle(t)}</button>
             <button class="tab-x" onclick={() => closeTab(t.id)}>×</button>
           </div>
         {/each}
@@ -672,6 +689,11 @@
         {/if}
 
         {#each tabs as tab (tab.id)}
+          {#if tab.kind === "agent"}
+            <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
+              <AgentPanel id={tab.id} cwd={tab.cwd} initialPrompt={tab.initialPrompt ?? null} onactivity={() => markActivity(tab.id)} ontitle={(t) => (tab.title = t)} />
+            </div>
+          {:else}
           {@const g = geometry(tab.root)}
           <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
             {#each g.leaves as leaf (leaf.termId)}
@@ -705,6 +727,7 @@
               {/if}
             {/each}
           </div>
+          {/if}
         {/each}
       </div>
 
