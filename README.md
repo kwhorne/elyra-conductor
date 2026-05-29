@@ -197,7 +197,7 @@ elyra-conductor/
 ## Roadmap
 
 - [x] Git status (dirty / ahead / behind) in the sidebar
-- [ ] Persist tabs + split layout across restarts
+- [x] Persist tabs + split layout across restarts (fresh shells, same structure)
 - [ ] Notification rings — flash a tab when a process is waiting for input
 - [ ] Hide `node_modules` / `.git` in the file tree (toggle)
 - [ ] Tab/pane titles derived from the running process (e.g. `bun dev`)

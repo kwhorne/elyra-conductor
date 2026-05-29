@@ -24,6 +24,9 @@
   let editorPath = $state(null);
   let paletteOpen = $state(false);
   let showFiles = $state(true);
+  let loaded = $state(false);
+
+  const STORAGE_KEY = "conductor:state";
 
   let fileRoot = $derived(activeProject?.path ?? root);
 
@@ -248,6 +251,7 @@
     list.push({ id: "act:toggle-files", title: showFiles ? "Hide file sidebar" : "Show file sidebar", hint: "\u2318B", group: "action", icon: "\u{1F5C2}", action: () => (showFiles = !showFiles) });
     list.push({ id: "act:quick-edit", title: "Quick edit file\u2026", group: "action", icon: "\u270E", action: quickEdit });
     list.push({ id: "act:change-root", title: "Change projects folder\u2026", group: "action", icon: "\u{1F4C2}", action: changeRoot });
+    list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
     if (activeProject)
       for (const ed of editors)
         list.push({ id: `act:open-${ed}`, title: `Open ${activeProject.name} in ${ed}`, group: "action", icon: "\u{1F680}", action: () => openInEditor(ed, activeProject) });
@@ -290,17 +294,95 @@
     }
   }
 
+  // ---------- persistence ----------
+  function stripTree(n) {
+    if (n.kind === "leaf") return { kind: "leaf", cwd: n.cwd, title: n.title };
+    return { kind: "split", dir: n.dir, ratio: n.ratio, a: stripTree(n.a), b: stripTree(n.b) };
+  }
+  function reviveTree(n) {
+    if (n.kind === "leaf") return makeLeaf(n.cwd, n.title);
+    return { kind: "split", id: nextId("s"), dir: n.dir, ratio: n.ratio ?? 0.5, a: reviveTree(n.a), b: reviveTree(n.b) };
+  }
+
+  function serialize() {
+    return {
+      root,
+      activeProjectPath: activeProject?.path ?? null,
+      showFiles,
+      showEditor,
+      editorPath,
+      activeTabIndex: tabs.findIndex((t) => t.id === activeTabId),
+      tabs: tabs.map((t) => ({ title: t.title, projectPath: t.projectPath, root: stripTree(t.root) })),
+    };
+  }
+
+  let saveTimer = null;
+  $effect(() => {
+    const isLoaded = loaded;
+    const snapshot = JSON.stringify(serialize()); // touch reactive deps
+    if (!isLoaded) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, snapshot);
+      } catch {}
+    }, 250);
+  });
+
+  function restore() {
+    let saved;
+    try {
+      saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+    } catch {
+      saved = null;
+    }
+    if (!saved) return false;
+
+    if (saved.activeProjectPath)
+      activeProject = projects.find((p) => p.path === saved.activeProjectPath) ?? null;
+    showFiles = saved.showFiles ?? true;
+    showEditor = saved.showEditor ?? false;
+    editorPath = saved.editorPath ?? null;
+
+    if (Array.isArray(saved.tabs) && saved.tabs.length) {
+      tabs = saved.tabs.map((t) => ({
+        id: nextId("tab"),
+        title: t.title,
+        projectPath: t.projectPath,
+        root: reviveTree(t.root),
+      }));
+      const at = tabs[saved.activeTabIndex] ?? tabs[0];
+      activeTabId = at.id;
+      activeTermId = firstLeaf(at.root).termId;
+    }
+    return true;
+  }
+
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
     editors = await invoke("detect_editors");
     terminalName = await invoke("detect_terminal");
+
+    let saved;
     try {
-      const home = await invoke("home_dir");
-      root = `${home}/Code`;
+      saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
     } catch {
-      root = "";
+      saved = null;
     }
+    if (saved?.root) {
+      root = saved.root;
+    } else {
+      try {
+        const home = await invoke("home_dir");
+        root = `${home}/Code`;
+      } catch {
+        root = "";
+      }
+    }
+
     await loadProjects();
+    restore();
+    loaded = true;
   });
 
   onDestroy(() => window.removeEventListener("keydown", onGlobalKey));
