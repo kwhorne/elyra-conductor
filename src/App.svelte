@@ -190,6 +190,28 @@
     activeTermId = leaf.termId;
   }
 
+  let dragFrom = null;
+  let dragOver = $state(null);
+  function onTabDragStart(e, i) {
+    dragFrom = i;
+    e.dataTransfer.effectAllowed = "move";
+  }
+  function onTabDragOver(e, i) {
+    e.preventDefault();
+    dragOver = i;
+  }
+  function onTabDrop(e, i) {
+    e.preventDefault();
+    if (dragFrom != null && dragFrom !== i) {
+      const arr = [...tabs];
+      const [moved] = arr.splice(dragFrom, 1);
+      arr.splice(i, 0, moved);
+      tabs = arr;
+    }
+    dragFrom = null;
+    dragOver = null;
+  }
+
   function closeTab(id) {
     tabs = tabs.filter((t) => t.id !== id);
     if (activeTabId === id) {
@@ -475,8 +497,18 @@
   <div class="main">
     <div class="topbar">
       <div class="tabs">
-        {#each tabs as t (t.id)}
-          <div class="tab" class:active={t.id === activeTabId} class:ring={activity[t.id]}>
+        {#each tabs as t, i (t.id)}
+          <div
+            class="tab"
+            class:active={t.id === activeTabId}
+            class:ring={activity[t.id]}
+            class:dragover={dragOver === i}
+            draggable="true"
+            ondragstart={(e) => onTabDragStart(e, i)}
+            ondragover={(e) => onTabDragOver(e, i)}
+            ondrop={(e) => onTabDrop(e, i)}
+            ondragend={() => (dragOver = null)}
+          >
             {#if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
             <button class="tab-label" onclick={() => { activeTabId = t.id; activeTermId = firstLeaf(t.root).termId; }}>{tabTitle(t)}</button>
             <button class="tab-x" onclick={() => closeTab(t.id)}>×</button>
@@ -584,6 +616,8 @@
   .tab { display: flex; align-items: center; background: var(--bg-3); border: 1px solid transparent; border-radius: 6px; padding: 0 2px 0 4px; }
   .tab.active { border-color: var(--accent); }
   .tab.ring { border-color: var(--green); }
+  .tab.dragover { border-color: var(--accent); background: var(--accent-2); }
+  .tab[draggable="true"] { cursor: grab; }
   .ring-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-left: 6px; flex: none; animation: ring-pulse 1.2s ease-in-out infinite; }
   @keyframes ring-pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(158, 206, 106, 0.6); } 50% { opacity: 0.5; box-shadow: 0 0 0 4px rgba(158, 206, 106, 0); } }
   .tab-label { background: transparent; border: none; color: var(--text); padding: 4px 6px; font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
