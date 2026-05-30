@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] — 2026-05-30
+
+### Changed
+
+- **Run a file (right-click → Run …)** is now a proper runner instead of a fixed
+  `./file` that failed without the execute bit:
+  - **Smart command** picked from the file extension (`.py` → `python3`, `.js` →
+    `node`, `.sh` → `bash`, `.ts` → `npx tsx`, …), falling back to `./file`.
+  - **Editable command** field — tweak it and **Run** / **Re-run** (`⌘↵`).
+  - **Stops on error:** a non-zero exit keeps the modal open with the output
+    visible so you can read it, instead of auto-closing. Successful runs still
+    close on their own.
+
+### Performance
+
+- **Scrollback is only re-serialized when a pane actually produced output**,
+  instead of every 4 s regardless — removes continuous CPU/IO for idle panes.
+- **Tab-title polling pauses while the window is in the background** (`document.hidden`).
+- **State and scrollback are flushed on window close** (`pagehide`/`beforeunload`),
+  since Svelte's `onDestroy` is not guaranteed to run when the Tauri window quits.
+
 ## [0.1.7] — 2026-05-30
 
 ### Added
@@ -148,7 +169,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.4...v0.1.5

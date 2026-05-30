@@ -176,11 +176,28 @@
     ctx = { open: true, x, y, entry };
   }
 
+  // Pick a sensible run command for a file based on its extension, so running a
+  // script doesn't fail with "permission denied" just because it lacks +x. The
+  // command is editable in the modal, so this is only a starting point.
+  const RUN_BY_EXT = {
+    sh: "bash", bash: "bash", zsh: "zsh", fish: "fish",
+    py: "python3", rb: "ruby", pl: "perl", lua: "lua", php: "php",
+    js: "node", cjs: "node", mjs: "node", ts: "npx tsx", tsx: "npx tsx",
+    go: "go run",
+  };
+  function detectRunCommand(name) {
+    const ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
+    const runner = RUN_BY_EXT[ext];
+    // Shell-quote the filename so spaces/specials are safe.
+    const q = `'${name.replace(/'/g, "'\\''")}'`;
+    return runner ? `${runner} ${q}` : `./${q}`;
+  }
+
   function runInModal(entry) {
     runModal = {
       open: true,
       cwd: dirOf(entry.path),
-      command: `./${baseOf(entry.path)}`,
+      command: detectRunCommand(baseOf(entry.path)),
       title: baseOf(entry.path),
     };
   }
@@ -211,7 +228,7 @@
       items.push({ label: "Ask Elyra about this file", icon: "\u{1F916}", action: () => askElyra(e) });
     items.push(
       { separator: true },
-      { label: `Run ./${baseOf(e.path)} (modal)`, icon: "\u25B6", action: () => runInModal(e) },
+      { label: `Run ${baseOf(e.path)}\u2026`, icon: "\u25B6", action: () => runInModal(e) },
       { label: `Run in ${terminalName}`, icon: "\u{1F680}", action: () => runExternal(e) }
     );
     return items;
@@ -232,6 +249,7 @@
   }
 
   async function pollTitles() {
+    if (document.hidden) return; // don't poll IPC while the window is in the background
     const ids = [];
     for (const t of tabs) {
       if (t.kind !== "term") continue;
@@ -653,6 +671,16 @@
     }, 250);
   });
 
+  // Synchronously persist the latest state. Svelte's onDestroy is not guaranteed
+  // to run when the Tauri window closes, so we also flush on pagehide/beforeunload.
+  function flushState() {
+    if (!loaded) return;
+    clearTimeout(saveTimer);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize()));
+    } catch {}
+  }
+
   // Apply a serialized snapshot (from auto-save or a named workspace) to the
   // live state. Does not touch `root` — callers load projects for the right
   // root first when switching workspaces.
@@ -748,6 +776,8 @@
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
     window.addEventListener("focus", onWindowFocus);
+    window.addEventListener("pagehide", flushState);
+    window.addEventListener("beforeunload", flushState);
     titleTimer = setInterval(pollTitles, 1800);
     editors = await invoke("detect_editors");
     terminalName = await invoke("detect_terminal");
@@ -792,6 +822,9 @@
   onDestroy(() => {
     window.removeEventListener("keydown", onGlobalKey);
     window.removeEventListener("focus", onWindowFocus);
+    window.removeEventListener("pagehide", flushState);
+    window.removeEventListener("beforeunload", flushState);
+    flushState();
     clearInterval(titleTimer);
   });
 </script>

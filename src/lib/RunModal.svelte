@@ -3,63 +3,101 @@
 
   let { open = false, cwd = "", command = "", title = "", onclose } = $props();
 
+  let cmd = $state(""); // editable command
+  let running = $state(false);
   let finished = $state(false);
   let exitCode = $state(null);
   let runId = $state(null);
-  let closeTimer = null;
+  let autoCloseTimer = null;
   let seq = 0;
 
-  // The shell exits as soon as the command completes, so the modal can
-  // auto-close once the whole flow has been shown.
-  let runCommand = $derived(`${command}; exit`);
+  // The shell exits as soon as the command completes so the run terminates
+  // cleanly. `; exit` ensures the pane closes even for builtins.
+  let runCommand = $derived(cmd.trim() ? `${cmd}; exit` : "exit");
 
-  function handleExit(code) {
-    finished = true;
-    exitCode = code;
-    clearTimeout(closeTimer);
-    // Linger a bit longer on failure so the error stays readable.
-    const delay = code === 0 ? 1600 : 3500;
-    closeTimer = setTimeout(() => onclose?.(), delay);
+  function start() {
+    if (!cmd.trim()) return;
+    clearTimeout(autoCloseTimer);
+    finished = false;
+    exitCode = null;
+    running = true;
+    runId = `run-${++seq}`; // remount Terminal -> fresh shell runs the command
   }
 
-  // Reset state each time the modal (re)opens. The id must be free of dots and
-  // other characters Tauri forbids in event names, so use a plain counter.
+  function handleExit(code) {
+    running = false;
+    finished = true;
+    exitCode = code;
+    clearTimeout(autoCloseTimer);
+    // On success, close shortly. On failure, STOP: keep the modal open so the
+    // error output stays readable until the user dismisses or re-runs it.
+    if (code === 0) autoCloseTimer = setTimeout(() => onclose?.(), 1400);
+  }
+
+  // (Re)initialise each time the modal opens, and auto-run the detected command
+  // once. Editing the command + Run re-runs it.
   $effect(() => {
     if (open) {
+      cmd = command;
       finished = false;
       exitCode = null;
-      runId = `run-${++seq}`;
+      running = false;
+      start();
     } else {
-      clearTimeout(closeTimer);
+      clearTimeout(autoCloseTimer);
+      running = false;
+      runId = null;
     }
   });
+
+  function onKeydown(e) {
+    if (!open) return;
+    if (e.key === "Escape") onclose?.();
+    // ⌘↵ / Ctrl+↵ runs (re-runs) the current command.
+    else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") start();
+  }
 </script>
 
-<svelte:window onkeydown={(e) => open && e.key === "Escape" && onclose?.()} />
+<svelte:window onkeydown={onKeydown} />
 
 {#if open}
   <div class="overlay" role="presentation" onclick={onclose}>
     <div class="modal" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()}>
       <div class="bar">
         <span class="ttl">▶ {title}</span>
-        <span class="cmd">{command}</span>
+        <input
+          class="cmd"
+          bind:value={cmd}
+          spellcheck="false"
+          autocapitalize="off"
+          autocomplete="off"
+          placeholder="command to run…"
+          onkeydown={(e) => e.key === "Enter" && (e.preventDefault(), start())}
+        />
+        <button class="run" onclick={start} disabled={!cmd.trim()} title="Run (⌘↵)">
+          {running ? "Running…" : finished ? "Re-run" : "Run"}
+        </button>
         <span class="cwd" title={cwd}>{cwd}</span>
         <button class="x" title="Close (Esc)" onclick={onclose}>✕</button>
       </div>
       <div class="term-host">
         {#key runId}
-          <Terminal id={runId} {cwd} {runCommand} onexit={handleExit} />
+          {#if runId}
+            <Terminal id={runId} {cwd} {runCommand} onexit={handleExit} />
+          {/if}
         {/key}
       </div>
       <div class="foot" class:done={finished && exitCode === 0} class:fail={finished && exitCode !== 0}>
-        {#if finished}
+        {#if running}
+          ● Running…
+        {:else if finished}
           {#if exitCode === 0}
             ✓ Finished (exit 0) — closing…
           {:else}
-            ✗ Failed (exit {exitCode}) — closing…
+            ✗ Failed (exit {exitCode}) — stopped. Fix the command and press Re-run, or Esc to close.
           {/if}
         {:else}
-          ● Running…
+          ○ Idle
         {/if}
       </div>
     </div>
@@ -101,16 +139,42 @@
   .ttl {
     font-weight: 600;
     color: var(--green);
+    white-space: nowrap;
   }
   .cmd {
+    flex: 1;
+    min-width: 0;
     font-family: var(--font-mono);
     color: var(--text);
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 5px;
-    padding: 1px 7px;
+    padding: 4px 8px;
+    font-size: 12px;
+    outline: none;
+  }
+  .cmd:focus {
+    border-color: var(--accent);
+  }
+  .run {
+    white-space: nowrap;
+    background: var(--accent-2);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .run:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .run:hover:not(:disabled) {
+    background: var(--accent);
   }
   .cwd {
+    max-width: 220px;
     color: var(--text-dim);
     font-family: var(--font-mono);
     overflow: hidden;
@@ -118,7 +182,6 @@
     white-space: nowrap;
   }
   .x {
-    margin-left: auto;
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-dim);

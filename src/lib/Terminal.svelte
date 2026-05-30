@@ -16,12 +16,14 @@
   const SB_MAX = 60000; // cap stored bytes per pane to stay well under quota
   let serializeAddon;
   let sbTimer;
+  let sbDirty = false; // true when new output arrived since the last save
   function saveScrollback() {
-    if (!SB_KEY || !serializeAddon) return;
+    if (!SB_KEY || !serializeAddon || !sbDirty) return; // skip when unchanged
     try {
       let data = serializeAddon.serialize({ scrollback: 1000 });
       if (data.length > SB_MAX) data = data.slice(data.length - SB_MAX);
       if (data.trim()) localStorage.setItem(SB_KEY, data);
+      sbDirty = false;
     } catch {}
   }
 
@@ -126,6 +128,7 @@
 
     const unData = await listen(`pty://data/${id}`, (e) => {
       term.write(new Uint8Array(e.payload));
+      sbDirty = true; // mark scrollback for the next periodic save
       const now = Date.now();
       if (onactivity && now - lastActivity > 350) {
         lastActivity = now;
@@ -165,7 +168,12 @@
     });
 
     // Periodically snapshot the buffer so a hard window close still persists it.
-    if (SB_KEY) sbTimer = setInterval(saveScrollback, 4000);
+    if (SB_KEY) {
+      sbTimer = setInterval(saveScrollback, 4000);
+      // onDestroy may not run on app quit; flush on pagehide/beforeunload too.
+      window.addEventListener("pagehide", saveScrollback);
+      window.addEventListener("beforeunload", saveScrollback);
+    }
 
     // Optionally auto-run a command (e.g. ./deploy.sh) once the shell is up.
     if (runCommand) {
@@ -191,6 +199,8 @@
 
   onDestroy(() => {
     clearInterval(sbTimer);
+    window.removeEventListener("pagehide", saveScrollback);
+    window.removeEventListener("beforeunload", saveScrollback);
     saveScrollback();
     cleanup.forEach((fn) => fn?.());
     invoke("pty_kill", { id }).catch(() => {});

@@ -28,8 +28,11 @@ Right-clicking an entry opens a context menu:
 - **Open in editor** — open it in Monaco.
 - **Ask Elyra about this file** — _(when detected)_ open an agent tab pre-seeded with a
   prompt about that file. See [Elyra agent](elyra-agent.md).
-- **Run ./`<file>` (modal)** — run the file in an in-app modal terminal that shows full
-  output and the exit code (green/red), then auto-closes on completion.
+- **Run `<file>`…** — run the file in an in-app modal terminal. Conductor picks a
+  sensible command from the extension (`.py` → `python3`, `.js` → `node`, `.sh` →
+  `bash`, `.ts` → `npx tsx`, …, otherwise `./file`); the command is **editable** and
+  you can **Run / Re-run** with `⌘↵`. A successful run auto-closes, but a **non-zero
+  exit keeps the modal open** with the output visible so you can read the error.
 - **Run in `<terminal>`** — run it in your external terminal (iTerm2 / Terminal.app),
   via `detect_terminal` / `run_in_external_terminal`.
 
