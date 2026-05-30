@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] — 2026-05-30
+
+### Added
+
+- **Switch tabs with `⌘1`–`⌘9`** — jump straight to a tab by its position in the
+  bar (`Ctrl`+number on Linux/Windows).
+
+### Fixed
+
+- **Reorder tabs by dragging** — tab drag now uses pointer events instead of HTML5
+  drag-and-drop, which frequently never started inside the Tauri/WebKit webview.
+  A blue insertion marker shows exactly where the tab will land, and `⌘1`–`⌘9`
+  follow the order you choose.
+- **`⇧↵` inserts a newline in terminal tabs** — Conductor now emits the Kitty
+  `CSI u` sequence for modified Enter (`⇧↵`, `⌥↵`, `⌃↵`) so TUIs like the Elyra CLI
+  receive it as a real "new line" instead of submitting. xterm.js otherwise
+  collapses modified Enter to a bare carriage return, indistinguishable from `↵`.
+
 ## [0.1.6] — 2026-05-29
 
 ### Added
@@ -130,7 +148,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.3...v0.1.4

@@ -8,6 +8,7 @@ Conductor is keyboard-first. The shortcuts below use `⌘` on macOS; on Linux/Wi
 | Shortcut | Action |
 |----------|--------|
 | `⌘K` | Open / close the command palette |
+| `⌘1`–`⌘9` | Switch to tab 1–9 by its position in the tab bar |
 | `⌘D` | Split the active pane right |
 | `⇧⌘D` | Split the active pane down |
 | `⌘W` | Close the active pane (or close the editor when it is focused) |
@@ -27,6 +28,19 @@ Conductor's pane shortcuts step aside. The only app shortcut kept while editing 
 which closes the editor.
 
 Move focus back to a terminal pane (click it) to restore the pane shortcuts.
+
+## Switching & reordering tabs
+
+Jump straight to a tab with `⌘1`–`⌘9` (the number is the tab's position in the bar,
+left to right). **Drag** a tab sideways to reorder it — a blue insertion marker shows
+where it will land, and the `⌘`-number shortcuts follow whatever order you choose.
+
+## Modified Enter in terminals
+
+Inside a terminal, `⇧↵` inserts a **newline** instead of submitting — Conductor sends
+the Kitty `CSI u` sequence so TUIs (such as the Elyra CLI) can tell `⇧↵` apart from a
+plain `↵`. `⌥↵` and `⌃↵` are forwarded the same way. (Plain xterm.js collapses all of
+these to a bare carriage return, which is why this needs Conductor's help.)
 
 ## Terminal find bar
 

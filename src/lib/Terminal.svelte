@@ -91,6 +91,30 @@
         openSearch();
         return false;
       }
+      // xterm.js doesn't speak the Kitty keyboard protocol, so modified Enter
+      // (shift/alt/ctrl) collapses to a bare CR and TUIs can't tell it apart
+      // from a plain Enter. Emit the Kitty CSI-u sequence ourselves so apps
+      // like the Elyra CLI receive shift+enter as a real "new line".
+      //
+      // We must handle BOTH keydown and keypress: returning false from the
+      // keydown handler makes xterm bail without calling preventDefault(), so
+      // the browser still fires a keypress for Enter (charCode 13) which xterm
+      // would otherwise turn into a plain CR. Send the sequence once on
+      // keydown, and suppress every related event so no stray \r leaks through.
+      if (e.key === "Enter") {
+        // Kitty modifier value is a 1-based bitmask: shift=1, alt=2, ctrl=4.
+        let mod = 1;
+        if (e.shiftKey) mod += 1;
+        if (e.altKey) mod += 2;
+        if (e.ctrlKey) mod += 4;
+        if (mod > 1) {
+          if (e.type === "keydown") {
+            e.preventDefault();
+            invoke("pty_write", { id, data: `\x1b[13;${mod}u` });
+          }
+          return false;
+        }
+      }
       return true;
     });
     // Wait for the bundled font so xterm measures glyphs with correct metrics.

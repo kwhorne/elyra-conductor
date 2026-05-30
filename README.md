@@ -59,7 +59,10 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   background, so nothing is lost when you switch.
 - 🔎 **Terminal search** — `⌘F` opens an in-terminal find bar (↵ / ⇧↵ to step).
 - 🌓 **Light / dark theme** — toggle in the toolbar or palette; persisted.
-- ↔️ **Drag-to-reorder tabs**.
+- ↔️ **Drag-to-reorder tabs** — drag a tab sideways to rearrange; jump straight to any
+  tab with `⌘1`–`⌘9`.
+- ⏎ **Modified Enter in terminals** — `⇧↵` inserts a newline (via the Kitty `CSI u`
+  sequence) instead of submitting, so TUIs like the Elyra CLI behave as expected.
 - ⎇ **Git commit dialog** — review changes, write a message, commit (and push)
   without leaving the app (`⌘↵` to commit).
 - 🗄️ **Workspaces** — save the whole layout (projects, tabs, split panes, open

@@ -11,7 +11,11 @@ Each tab is an open session — either a **terminal** (with its own split layout
 **Elyra agent** panel. Open a new terminal tab with the **＋** button, `⌘K` → **New
 terminal tab**, or by selecting a project.
 
-- **Drag to reorder** tabs.
+- **Drag to reorder** tabs — grab a tab and drag it sideways; a blue insertion marker
+  shows where it will land. (Reordering uses pointer events, so it works reliably
+  inside the webview.)
+- **Jump to a tab** with `⌘1`–`⌘9` (its position in the bar, left to right). The
+  shortcuts follow whatever order you've dragged the tabs into.
 - **Close** a tab with its **✕**, or close the focused pane with `⌘W` (closing the last
   pane closes the tab).
 - A tab's title reflects the foreground process of its panes (e.g. `vim`, `bun`),
@@ -50,6 +54,14 @@ nothing is lost when you switch away from a long-running process.
 
 Press `⌘F` while a terminal is focused to open a find bar. Use `↵` / `⇧↵` to step
 through matches and `Esc` to close. Powered by the xterm search addon.
+
+## Newline vs. submit (`⇧↵`)
+
+Many TUIs use `⇧↵` to insert a newline while `↵` submits. Plain xterm.js can't send a
+distinct sequence for modified Enter — it collapses `⇧↵`, `⌥↵`, and `⌃↵` to a bare
+carriage return. Conductor fixes this by emitting the Kitty keyboard-protocol `CSI u`
+sequence for modified Enter, so apps like the Elyra CLI receive `⇧↵` as a real newline
+instead of submitting. No configuration is needed.
 
 ## Broadcast input (synchronize panes)
 

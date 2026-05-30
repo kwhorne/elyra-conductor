@@ -345,26 +345,59 @@
     activeTermId = t.kind === "agent" ? null : firstLeaf(t.root).termId;
   }
 
-  let dragFrom = null;
-  let dragOver = $state(null);
-  function onTabDragStart(e, i) {
-    dragFrom = i;
-    e.dataTransfer.effectAllowed = "move";
+  // Pointer-based tab reordering. HTML5 drag-and-drop is unreliable inside the
+  // Tauri/WebKit webview (drags often never start), so we track the pointer
+  // ourselves. `drag` is null when idle, otherwise the in-flight gesture.
+  let tabDrag = $state(null); // { fromIndex, startX, moved, insertAt }
+  let dragOver = $derived(tabDrag && tabDrag.moved ? tabDrag.insertAt : null);
+  let justDragged = false; // suppress the click WebKit fires right after a drag
+
+  function tabPointerDown(e, i) {
+    if (e.button !== 0) return; // left button only
+    tabDrag = { fromIndex: i, startX: e.clientX, moved: false, insertAt: i };
+    window.addEventListener("pointermove", tabPointerMove);
+    window.addEventListener("pointerup", tabPointerUp);
   }
-  function onTabDragOver(e, i) {
-    e.preventDefault();
-    dragOver = i;
+
+  function tabPointerMove(e) {
+    if (!tabDrag) return;
+    if (!tabDrag.moved && Math.abs(e.clientX - tabDrag.startX) < 4) return;
+    tabDrag = { ...tabDrag, moved: true, insertAt: insertIndexAt(e.clientX) };
   }
-  function onTabDrop(e, i) {
-    e.preventDefault();
-    if (dragFrom != null && dragFrom !== i) {
-      const arr = [...tabs];
-      const [moved] = arr.splice(dragFrom, 1);
-      arr.splice(i, 0, moved);
-      tabs = arr;
+
+  // Map a screen X to an insertion slot (0..tabs.length) by inspecting the
+  // rendered tab rects.
+  function insertIndexAt(x) {
+    const els = document.querySelectorAll(".tabs .tab");
+    for (let j = 0; j < els.length; j++) {
+      const r = els[j].getBoundingClientRect();
+      if (x < r.left + r.width / 2) return j;
     }
-    dragFrom = null;
-    dragOver = null;
+    return els.length;
+  }
+
+  function tabPointerUp() {
+    window.removeEventListener("pointermove", tabPointerMove);
+    window.removeEventListener("pointerup", tabPointerUp);
+    const d = tabDrag;
+    tabDrag = null;
+    if (!d || !d.moved) return; // a plain click; focus is handled separately
+    justDragged = true;
+    setTimeout(() => (justDragged = false), 0); // clear after the click fires
+    let to = d.insertAt;
+    const arr = [...tabs];
+    const [moved] = arr.splice(d.fromIndex, 1);
+    if (d.fromIndex < to) to -= 1; // removal shifts later indices left
+    to = Math.max(0, Math.min(arr.length, to));
+    arr.splice(to, 0, moved);
+    tabs = arr;
+  }
+
+  // Was the last pointer gesture an actual drag? Used to swallow the click that
+  // WebKit fires after a drag so we don't also "focus" the tab.
+  function tabClick(t) {
+    if (justDragged) return;
+    focusTab(t);
   }
 
   function closeTab(id) {
@@ -543,6 +576,18 @@
     } else if (k === "/") {
       e.preventDefault();
       helpOpen = !helpOpen;
+    } else {
+      // ⌘1–⌘9 (Ctrl on non-mac) jump straight to a tab by its position in the
+      // bar. Fall back to e.code (Digit1..9) for layouts where the number row
+      // requires Shift to produce a digit.
+      let n = null;
+      if (k >= "1" && k <= "9") n = Number(k);
+      else if (/^Digit[1-9]$/.test(e.code ?? "")) n = Number(e.code.slice(5));
+      if (n != null) {
+        e.preventDefault();
+        const target = tabs[n - 1];
+        if (target) focusTab(target);
+      }
     }
   }
 
@@ -775,16 +820,28 @@
             class="tab"
             class:active={t.id === activeTabId}
             class:ring={activity[t.id]}
-            class:dragover={dragOver === i}
-            draggable="true"
-            ondragstart={(e) => onTabDragStart(e, i)}
-            ondragover={(e) => onTabDragOver(e, i)}
-            ondrop={(e) => onTabDrop(e, i)}
-            ondragend={() => (dragOver = null)}
+            class:drop-left={dragOver === i}
+            class:drop-right={dragOver === tabs.length && i === tabs.length - 1}
+            class:dragging={tabDrag && tabDrag.moved && tabDrag.fromIndex === i}
+            onpointerdown={(e) => tabPointerDown(e, i)}
           >
             {#if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
-            <button class="tab-label" onclick={() => focusTab(t)}>{tabTitle(t)}</button>
-            <button class="tab-x" onclick={() => closeTab(t.id)}>×</button>
+            <span
+              class="tab-label"
+              role="button"
+              tabindex="0"
+              onclick={() => tabClick(t)}
+              onkeydown={(e) => (e.key === "Enter" || e.key === " ") && focusTab(t)}
+            >{tabTitle(t)}</span>
+            <span
+              class="tab-x"
+              role="button"
+              tabindex="0"
+              title="Close tab"
+              onpointerdown={(e) => e.stopPropagation()}
+              onclick={(e) => { e.stopPropagation(); closeTab(t.id); }}
+              onkeydown={(e) => (e.key === "Enter" || e.key === " ") && closeTab(t.id)}
+            >×</span>
           </div>
         {/each}
         <button class="new-tab" title="New tab" onclick={() => newTab(activeProject?.path ?? root, activeProject?.name)}>＋</button>
@@ -933,12 +990,17 @@
   .tab { display: flex; align-items: center; background: var(--bg-3); border: 1px solid transparent; border-radius: 6px; padding: 0 2px 0 4px; }
   .tab.active { border-color: var(--accent); }
   .tab.ring { border-color: var(--green); }
-  .tab.dragover { border-color: var(--accent); background: var(--accent-2); }
-  .tab[draggable="true"] { cursor: grab; }
+  .tab.drop-left { box-shadow: inset 2px 0 0 0 var(--accent); }
+  .tab.drop-right { box-shadow: inset -2px 0 0 0 var(--accent); }
+  .tab { cursor: grab; }
+  .tab:active { cursor: grabbing; }
+  .tab.dragging { opacity: 0.5; }
   .ring-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-left: 6px; flex: none; animation: ring-pulse 1.2s ease-in-out infinite; }
   @keyframes ring-pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(158, 206, 106, 0.6); } 50% { opacity: 0.5; box-shadow: 0 0 0 4px rgba(158, 206, 106, 0); } }
-  .tab-label { background: transparent; border: none; color: var(--text); padding: 4px 6px; font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tab-x { background: transparent; border: none; color: var(--text-dim); padding: 0 4px; font-size: 14px; }
+  .tab-label { display: inline-block; background: transparent; border: none; color: var(--text); padding: 4px 6px; font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; -webkit-user-drag: none; user-select: none; }
+  .tab-x { display: inline-block; background: transparent; border: none; color: var(--text-dim); padding: 0 4px; font-size: 14px; cursor: pointer; -webkit-user-drag: none; user-select: none; }
+  .tab-x:hover { color: var(--text); }
+  .tab { -webkit-user-select: none; user-select: none; }
   .tab-x:hover { color: var(--text); }
   .new-tab { background: transparent; border: none; color: var(--text-dim); font-size: 16px; padding: 0 6px; }
   .top-actions { display: flex; gap: 6px; }
