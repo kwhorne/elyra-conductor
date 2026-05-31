@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] — 2026-05-30
+
+### Fixed
+
+- **No more multi-second freeze (beachball) when refocusing the app.** Returning
+  to Conductor refreshed git status for every scanned repo at once, and each
+  refresh spawned three `git` subprocesses — dozens of repos meant a burst of
+  hundreds of processes on every focus. Now:
+  - `git_status` uses a **single** `git status --porcelain=v2 --branch` call
+    (branch + ahead/behind + dirty) instead of three separate git invocations.
+  - The frontend refresh runs through a **concurrency-capped worker pool**
+    (max 6 at a time) instead of firing every repo in parallel.
+
 ## [0.1.8] — 2026-05-30
 
 ### Changed
@@ -169,7 +182,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.5...v0.1.6

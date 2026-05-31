@@ -324,10 +324,22 @@
         p.behind = s.behind;
       } catch {}
     };
-    await Promise.all([
-      ...projects.map((p) => enrich(p, false)),
-      ...pinned.map((p) => enrich(p, true)),
-    ]);
+    // Cap concurrency: firing git_status for every repo at once (dozens of them)
+    // spawned a process storm on each window focus and froze the UI for seconds.
+    // A small worker pool keeps the machine responsive.
+    const jobs = [
+      ...projects.map((p) => () => enrich(p, false)),
+      ...pinned.map((p) => () => enrich(p, true)),
+    ];
+    const CONCURRENCY = 6;
+    let i = 0;
+    const worker = async () => {
+      while (i < jobs.length) {
+        const job = jobs[i++];
+        await job();
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker));
   }
 
   function makeLeaf(cwd, title, runOnce = null, key = null) {

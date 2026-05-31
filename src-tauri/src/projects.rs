@@ -75,20 +75,36 @@ fn git(path: &str, args: &[&str]) -> Option<String> {
 
 #[tauri::command]
 pub fn git_status(path: String) -> GitStatus {
-    let branch = git(&path, &["rev-parse", "--abbrev-ref", "HEAD"]).filter(|b| !b.is_empty());
-    let dirty = git(&path, &["status", "--porcelain"])
-        .map(|s| !s.is_empty())
-        .unwrap_or(false);
+    // A single `git status` call yields branch, ahead/behind, and dirty state in
+    // one process. Doing three separate git invocations per project caused a
+    // process storm (3 × N repos) on every window focus. Porcelain v2 with
+    // --branch prints `# branch.head <name>`, `# branch.ab +A -B`, and one line
+    // per changed path.
+    let out = git(&path, &["status", "--porcelain=v2", "--branch"]);
+    let Some(out) = out else {
+        return GitStatus { branch: None, dirty: false, ahead: 0, behind: 0 };
+    };
 
-    // "<behind>\t<ahead>" relative to the upstream branch (empty if no upstream).
-    let (ahead, behind) = git(&path, &["rev-list", "--left-right", "--count", "@{u}...HEAD"])
-        .and_then(|s| {
-            let mut parts = s.split_whitespace();
-            let behind = parts.next()?.parse().ok()?;
-            let ahead = parts.next()?.parse().ok()?;
-            Some((ahead, behind))
-        })
-        .unwrap_or((0, 0));
+    let mut branch: Option<String> = None;
+    let mut ahead = 0u32;
+    let mut behind = 0u32;
+    let mut dirty = false;
+    for line in out.lines() {
+        if let Some(rest) = line.strip_prefix("# branch.head ") {
+            branch = Some(rest.trim().to_string()).filter(|b| !b.is_empty() && b != "(detached)");
+        } else if let Some(rest) = line.strip_prefix("# branch.ab ") {
+            // Format: "+<ahead> -<behind>"
+            for tok in rest.split_whitespace() {
+                if let Some(a) = tok.strip_prefix('+') {
+                    ahead = a.parse().unwrap_or(0);
+                } else if let Some(b) = tok.strip_prefix('-') {
+                    behind = b.parse().unwrap_or(0);
+                }
+            }
+        } else if !line.starts_with('#') && !line.is_empty() {
+            dirty = true;
+        }
+    }
 
     GitStatus {
         branch,

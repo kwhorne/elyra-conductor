@@ -10,9 +10,13 @@ Each project that is a git repo shows its **branch**, a **dirty** marker for unc
 changes, and **ahead / behind** counts versus upstream. Status is computed by the
 `git_status` command and refreshed:
 
-- in parallel right after the initial project listing,
+- right after the initial project listing,
 - automatically when the window regains focus (throttled),
 - on demand via the sidebar refresh button.
+
+Each `git_status` is a single `git status --porcelain=v2 --branch` call, and refreshes
+run through a concurrency-capped worker pool (max 6 repos at a time) so a folder with
+many repositories doesn't spawn a burst of git processes and freeze the UI on focus.
 
 Pinned projects resolve their status independently, so they stay accurate even outside
 the current root folder.
