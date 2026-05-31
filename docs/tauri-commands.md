@@ -30,6 +30,7 @@ registered in `src-tauri/src/lib.rs`.
 | `read_file` | `fs.rs` | Read a file (backs the Monaco editor). |
 | `write_file` | `fs.rs` | Write a file (backs `⌘S`). |
 | `list_tasks` | `fs.rs` | Scan a project for runnable tasks. See below. |
+| `list_runbooks` | `fs.rs` | List `.conductor/notes/*.md` for a project (creates the folder if missing). Backs [Runbooks](runbooks.md). |
 
 ## Events
 

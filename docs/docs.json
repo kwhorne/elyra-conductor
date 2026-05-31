@@ -37,6 +37,10 @@
           "path": "tasks.md"
         },
         {
+          "title": "Runbooks",
+          "path": "runbooks.md"
+        },
+        {
           "title": "Files & editor",
           "path": "files-and-editor.md"
         },

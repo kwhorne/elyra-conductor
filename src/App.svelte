@@ -5,6 +5,7 @@
   import Sidebar from "./lib/Sidebar.svelte";
   import Terminal from "./lib/Terminal.svelte";
   import AgentPanel from "./lib/AgentPanel.svelte";
+  import RunbookPanel from "./lib/RunbookPanel.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
   import FileExplorer from "./lib/FileExplorer.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -216,6 +217,7 @@
     if (e.is_dir) {
       const items = [
         { label: "Open new terminal here", icon: "\u{1F5A5}", action: () => newTab(e.path, baseOf(e.path)) },
+        { label: "Open runbook here", icon: "\u{1F4D3}", action: () => openRunbook(e.path, baseOf(e.path)) },
       ];
       if (elyraVersion)
         items.push({ label: "New Elyra agent here", icon: "\u{1F916}", action: () => newElyraAgent(e.path, baseOf(e.path)) });
@@ -372,7 +374,51 @@
 
   function focusTab(t) {
     activeTabId = t.id;
-    activeTermId = t.kind === "agent" ? null : firstLeaf(t.root).termId;
+    activeTermId = t.kind === "term" ? firstLeaf(t.root).termId : null;
+  }
+
+  // ---------- runbooks ----------
+  function openRunbook(cwd, name, file = null) {
+    // Reuse an existing runbook tab for this project if present.
+    const existing = tabs.find((t) => t.kind === "runbook" && t.projectPath === cwd);
+    if (existing) {
+      focusTab(existing);
+      return;
+    }
+    const tab = { id: nextId("tab"), kind: "runbook", title: name ?? "runbook", projectPath: cwd, file };
+    tabs = [...tabs, tab];
+    activeTabId = tab.id;
+    activeTermId = null;
+  }
+
+  // Run a shell command (from a runbook) in the project's terminal: reuse a
+  // matching terminal tab/pane if one exists, otherwise open a fresh one.
+  function runInProjectTerminal(cwd, cmd) {
+    let tab =
+      activeTab && activeTab.kind === "term" && activeTab.projectPath === cwd
+        ? activeTab
+        : tabs.find((t) => t.kind === "term" && t.projectPath === cwd);
+    if (tab) {
+      const leaf = firstLeaf(tab.root);
+      focusTab(tab);
+      const data = cmd.endsWith("\n") ? cmd : cmd + "\n";
+      invoke("pty_write", { id: leaf.termId, data });
+    } else {
+      newTab(cwd, baseOf(cwd), cmd);
+    }
+  }
+
+  // Run a [[task:<label>]] from a runbook: resolve the label against the
+  // project's discovered tasks and run its command; fall back to the literal
+  // text so ad-hoc `task:npm test` still works.
+  async function runRunbookTask(cwd, label) {
+    let command = label;
+    try {
+      const list = await invoke("list_tasks", { path: cwd });
+      const t = list.find((x) => x.label.toLowerCase() === label.toLowerCase());
+      if (t) command = t.command;
+    } catch {}
+    runInProjectTerminal(cwd, command);
   }
 
   // Pointer-based tab reordering. HTML5 drag-and-drop is unreliable inside the
@@ -540,6 +586,7 @@
     for (const t of tabs)
       list.push({ id: `tab:${t.id}`, title: t.title, hint: t.projectPath, group: "tab", icon: "\u{1F5C2}", action: () => focusTab(t) });
     list.push({ id: "act:new-tab", title: "New terminal tab", hint: "", group: "action", icon: "\u002B", action: () => newTab(activeProject?.path ?? root, activeProject?.name) });
+    list.push({ id: "act:open-runbook", title: "Open project runbook", hint: "", group: "action", icon: "\u{1F4D3}", action: () => openRunbook(activeProject?.path ?? root, activeProject?.name) });
     if (elyraVersion)
       list.push({ id: "act:new-elyra", title: "New Elyra agent here", group: "action", icon: "\u{1F916}", action: () => newElyraAgent(activeProject?.path ?? root, activeProject?.name) });
     list.push({ id: "act:split-right", title: "Split right", hint: "\u2318D", group: "action", icon: "\u25A5", action: () => activeTermId && splitPane(activeTermId, "row") });
@@ -645,7 +692,9 @@
       tabs: tabs.map((t) =>
         t.kind === "agent"
           ? { kind: "agent", title: t.title, projectPath: t.projectPath, cwd: t.cwd }
-          : { kind: "term", title: t.title, projectPath: t.projectPath, root: stripTree(t.root) }
+          : t.kind === "runbook"
+            ? { kind: "runbook", title: t.title, projectPath: t.projectPath, file: t.file ?? null }
+            : { kind: "term", title: t.title, projectPath: t.projectPath, root: stripTree(t.root) }
       ),
     };
   }
@@ -713,7 +762,9 @@
       tabs = saved.tabs.map((t) =>
         t.kind === "agent"
           ? { id: nextId("tab"), kind: "agent", title: t.title, projectPath: t.projectPath, cwd: t.cwd, initialPrompt: null }
-          : { id: nextId("tab"), kind: "term", title: t.title, projectPath: t.projectPath, root: reviveTree(t.root) }
+          : t.kind === "runbook"
+            ? { id: nextId("tab"), kind: "runbook", title: t.title, projectPath: t.projectPath, file: t.file ?? null }
+            : { id: nextId("tab"), kind: "term", title: t.title, projectPath: t.projectPath, root: reviveTree(t.root) }
       );
       const at = tabs[saved.activeTabIndex] ?? tabs[0];
       focusTab(at);
@@ -915,6 +966,19 @@
           {#if tab.kind === "agent"}
             <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
               <AgentPanel id={tab.id} cwd={tab.cwd} initialPrompt={tab.initialPrompt ?? null} onactivity={() => markActivity(tab.id)} ontitle={(t) => (tab.title = t)} />
+            </div>
+          {:else if tab.kind === "runbook"}
+            <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
+              <RunbookPanel
+                projectPath={tab.projectPath}
+                initialFile={tab.file ?? null}
+                {theme}
+                ontitle={(t) => (tab.title = t)}
+                onfile={(f) => (tab.file = f)}
+                onrun={(cmd) => runInProjectTerminal(tab.projectPath, cmd)}
+                onopenfile={(p) => openFile(p)}
+                ontask={(label) => runRunbookTask(tab.projectPath, label)}
+              />
             </div>
           {:else}
           {@const g = geometry(tab.root)}

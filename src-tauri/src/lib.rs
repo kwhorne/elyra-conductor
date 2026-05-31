@@ -36,6 +36,7 @@ pub fn run() {
             fs::list_dir,
             fs::read_file,
             fs::write_file,
+            fs::list_runbooks,
             fs::list_tasks,
         ])
         .run(tauri::generate_context!())

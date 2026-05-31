@@ -1,0 +1,103 @@
+# Runbooks
+
+Runbooks are **local, project-scoped markdown notes that are runnable** — a living
+checklist where shell commands, file links, and tasks are one click away. Think
+"project journal + lightweight runbook" rather than a Notion/Obsidian replacement:
+everything is a plain `.md` file on disk, versionable with git, with no server and no
+secrets.
+
+> Conductor stays a **host**: runbooks only *run and display*. There is no LLM, no API
+> key, and no prompt logic here — see [Architecture & boundaries](architecture.md).
+
+## Where they live
+
+Each runbook is a markdown file under:
+
+```
+<project>/.conductor/notes/*.md
+```
+
+The folder is created on first use. Commit it to share runbooks with your team, or add
+`.conductor/` to `.gitignore` to keep them local.
+
+## Opening a runbook
+
+- **Command palette** (`⌘K`) → **Open project runbook**, or
+- **Right-click a folder** in the file tree → **Open runbook here**.
+
+A runbook opens as its own tab (so `⌘1`–`⌘9` and drag-reordering work). Use the picker
+in the toolbar to switch between runbooks, or **＋ New** to create one from a starter
+template.
+
+## Editing
+
+Toggle **✎ Edit** to edit the markdown, then **Save** (`⌘S`) writes it back to
+`.conductor/notes/`. Toggle back to **Preview** to use the interactive elements below.
+
+## Interactive elements
+
+### ▶ Run — shell code fences
+
+Any fenced code block tagged as a shell language gets a **▶ Run** button (and a **⧉ Copy**
+button):
+
+````markdown
+```bash
+pnpm install && pnpm dev
+```
+````
+
+Recognised languages: `bash`, `sh`, `shell`, `zsh`, `console`, `terminal`, or no language.
+**Run** sends the command to the project's terminal — it reuses an existing terminal pane
+for that project if there is one, otherwise it opens a new terminal tab. Other languages
+(e.g. `js`, `python`) render normally with a Copy button but no Run.
+
+### `[[file]]` — open a file in the editor
+
+Obsidian-style links open a file in the inline Monaco editor:
+
+```markdown
+- [[src/App.svelte]]                  → opens that file
+- [[src/App.svelte|App.svelte]]       → custom link label
+- [[/Users/me/notes.txt]]             → absolute path
+```
+
+Relative paths resolve against the **project root**. Links are shown with a 📄 marker.
+
+### `[[task:name]]` — run a discovered task
+
+Run a project task (from `package.json`, `composer.json`, `Makefile`, or `justfile`) as a
+clickable chip:
+
+```markdown
+[[task:dev]]  ·  [[task:build|Build it]]
+```
+
+The name is matched against [discovered tasks](tasks.md); the task's command runs in the
+project's terminal. If no task matches, the text after `task:` is run literally, so
+`[[task:npm test]]` also works as an ad-hoc command.
+
+## Example
+
+````markdown
+# Onboarding
+
+## Setup
+```bash
+pnpm install
+```
+
+## Run the app
+[[task:dev]]
+
+## Key files
+- [[src/App.svelte|Main UI]]
+- [[README.md]]
+````
+
+## Related
+
+- [Terminals & panes](terminals.md) — where Run sends its commands.
+- [Tasks](tasks.md) — what `[[task:name]]` resolves against.
+- [Files & editor](files-and-editor.md) — where `[[file]]` links open.
+- [Architecture & boundaries](architecture.md) — why runbooks never call a model.

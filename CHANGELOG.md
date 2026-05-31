@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-31
+
+### Added
+
+- **Runbooks** — local, project-scoped markdown notes that are *runnable*. Open one
+  from the command palette (**Open project runbook**) or a folder's right-click
+  menu (**Open runbook here**). Runbooks live in `<project>/.conductor/notes/*.md`,
+  so they're versionable with git.
+  - **▶ Run** on shell code fences (` ```bash `, `sh`, `zsh`, …) sends the command
+    to the project's terminal (reusing an existing pane, or opening a new tab), with
+    a **⧉ Copy** button on every block.
+  - **`[[file]]` links** open a file in the editor (`[[path|label]]` for a custom
+    label; relative paths resolve against the project root).
+  - **`[[task:name]]` chips** run a discovered project task (npm/composer/make/just),
+    falling back to running the literal text.
+  - **Edit/Preview** with save (`⌘S`) to `.conductor/notes/`, a runbook picker, and
+    **＋ New** from a starter template. Runbook tabs persist across restarts.
+
+  Conductor stays a host: runbooks only *run and display* — no LLM, keys, or prompts.
+
 ## [0.1.9] — 2026-05-30
 
 ### Fixed
@@ -182,7 +202,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.9...v0.2.0
 [0.1.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.6...v0.1.7

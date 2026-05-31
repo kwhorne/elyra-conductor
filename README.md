@@ -81,6 +81,9 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   installs signed updates with one click. See [RELEASING.md](RELEASING.md).
 - ✏️ **Inline quick-edit** — a Monaco editor panel for fast edits (⌘S to save),
   without leaving the app.
+- 📓 **Runbooks** — runnable, project-scoped markdown notes in `.conductor/notes/`:
+  **▶ Run** shell blocks in the project terminal, `[[file]]` links open in the editor,
+  and `[[task:name]]` chips run discovered tasks. Local files, versionable with git.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
   project in Zed, VS Code, or Cursor.
 - 🤖 **Elyra agent** — if the [Elyra](https://elyracode.com) coding agent CLI is

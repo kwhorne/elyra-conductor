@@ -42,6 +42,7 @@ or defines prompts/tools/models. See [Architecture & boundaries](architecture.md
 - [Terminals & panes](terminals.md) — PTY terminals, splitting, search, titles, rings.
 - [Workspaces](workspaces.md) — save and restore named layouts.
 - [Tasks](tasks.md) — run `package.json` / `Makefile` / `justfile` / `composer.json` tasks.
+- [Runbooks](runbooks.md) — runnable, project-scoped markdown notes (▶ run, `[[file]]`, `[[task:name]]`).
 - [Files & editor](files-and-editor.md) — the file tree and inline Monaco quick-edit.
 - [Git](git.md) — status in the sidebar and the in-app commit dialog.
 - [Command palette](command-palette.md) — the `⌘K` fuzzy launcher.

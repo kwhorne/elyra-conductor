@@ -35,7 +35,38 @@ pub fn read_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 pub fn write_file(path: String, content: String) -> Result<(), String> {
+    // Create parent directories so saving e.g. a new .conductor/notes/foo.md
+    // (or any file in a not-yet-existing folder) just works.
+    if let Some(parent) = Path::new(&path).parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+    }
     std::fs::write(&path, content).map_err(|e| format!("{path}: {e}"))
+}
+
+/// List markdown runbooks for a project, stored under `<project>/.conductor/notes`.
+/// Creates the directory if it does not exist so the first save always works.
+#[tauri::command]
+pub fn list_runbooks(project: String) -> Result<Vec<DirEntry>, String> {
+    let dir = Path::new(&project).join(".conductor").join("notes");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?.flatten() {
+        let p = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if p.is_file() && name.to_lowercase().ends_with(".md") {
+            out.push(DirEntry {
+                name,
+                path: p.to_string_lossy().to_string(),
+                is_dir: false,
+            });
+        }
+    }
+    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(out)
 }
 
 /// A runnable task discovered in a project (npm script, make target, etc).
