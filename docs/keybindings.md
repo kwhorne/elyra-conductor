@@ -9,6 +9,7 @@ Conductor is keyboard-first. The shortcuts below use `⌘` on macOS; on Linux/Wi
 |----------|--------|
 | `⌘K` | Open / close the command palette |
 | `⌘1`–`⌘9` | Switch to tab 1–9 by its position in the tab bar |
+| `⌘R` | Start the active project's dev command |
 | `⌘D` | Split the active pane right |
 | `⇧⌘D` | Split the active pane down |
 | `⌘W` | Close the active pane (or close the editor when it is focused) |

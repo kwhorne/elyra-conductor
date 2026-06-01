@@ -72,6 +72,9 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   `Makefile`, and `justfile` for the active project and lists them in the palette
   (**Run: …**); pick one to launch it in a fresh terminal tab. Just a launcher —
   the command runs in your shell, no interpretation.
+- ▶️ **Start project (⌘R)** — one action to run any project's dev command, whatever the
+  stack (`npm run dev`, `pnpm dev`, `composer run dev`, `make dev`…). Picks the best
+  detected task, asks when several tie (and remembers), with a per-project override.
 - ⎁ **Broadcast input** — toggle **⌁ Sync** (toolbar or palette) to mirror your
   keystrokes to every pane in the active tab, tmux `synchronize-panes`-style.
 - 💾 **Scrollback restore** — each pane's recent output is persisted and replayed

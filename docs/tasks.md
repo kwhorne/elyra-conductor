@@ -46,6 +46,22 @@ For `package.json` scripts, the package manager is chosen by lockfile:
 Because each task runs in an ordinary terminal tab, you get full output, scrollback, and
 the ability to re-run or Ctrl-C it like any other shell command.
 
+## Start project (`⌘R`)
+
+You rarely need to remember whether a project uses `npm run dev`, `pnpm dev`,
+`composer run dev`, or `make dev`. **Start project** picks the right one for you:
+
+- Press `⌘R`, click the **▶** button on a project in the sidebar, or run **Start project**
+  from the command palette.
+- Conductor ranks the detected tasks (`dev` > `start` > `serve` > `watch`) across all
+  sources and runs the best match in the project's terminal (reusing a pane if one is
+  open).
+- When two are equally likely — e.g. a Laravel app exposing both `composer run dev` and
+  `npm run dev` — it shows a quick picker and **remembers your choice** for next time.
+- For commands that aren't a standard task (e.g. `php artisan serve` or `pnpm tauri dev`),
+  use **Set start command…** (command palette or a folder's right-click menu) to pin a
+  per-project override that always wins.
+
 ## Related
 
 - [Terminals & panes](terminals.md) — where tasks run.

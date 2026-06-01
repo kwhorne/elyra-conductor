@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-31
+
+### Added
+
+- **Start project (`⌘R`)** — one action to run any project's dev command, whatever
+  the stack. Conductor already resolves the right command per task source; now it
+  picks the best one automatically:
+  - Ranks detected `dev` / `start` / `serve` / `watch` tasks across `package.json`
+    (with package-manager detection), `composer.json`, `Makefile`, and `justfile`.
+  - When several are equally likely (e.g. a Laravel app with both `composer run dev`
+    and `npm run dev`), it shows a quick picker and **remembers your choice**.
+  - **▶ button on every project** in the sidebar, a command-palette **Start project**
+    action, and a per-project override via **Set start command…** (also on a folder's
+    right-click menu) for cases the heuristic can't know (e.g. `php artisan serve`,
+    `pnpm tauri dev`).
+
+  Runs in the project's terminal (reusing a pane when possible). Pure detection and
+  launch — no AI.
+
 ## [0.2.0] — 2026-05-31
 
 ### Added
@@ -202,7 +221,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.9...v0.2.0
 [0.1.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.7...v0.1.8

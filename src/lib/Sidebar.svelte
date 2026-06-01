@@ -10,6 +10,7 @@
     onrefresh,
     onpin,
     onagent,
+    onstart,
     elyra = false,
     root = "",
   } = $props();
@@ -62,6 +63,14 @@
         {#if p.is_git}
           <span class="branch">⎇ {p.branch ?? "detached"}</span>
         {/if}
+        <button
+          class="play"
+          title="Start this project's dev command (⌘R)"
+          onclick={(e) => {
+            e.stopPropagation();
+            onstart?.(p);
+          }}>▶</button
+        >
         <button
           class="pin"
           class:pinned={pinnedPaths.has(p.path)}
@@ -261,6 +270,16 @@
   .actions button:hover {
     border-color: var(--accent);
   }
+  .play {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0 4px;
+    opacity: 0.55;
+  }
+  .play:hover { color: var(--accent); opacity: 1; }
   .actions button.agent {
     border-color: #f9731680;
     color: #fb923c;

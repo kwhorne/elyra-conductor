@@ -216,6 +216,9 @@
     if (!e) return [];
     if (e.is_dir) {
       const items = [
+        { label: "Start (dev)", icon: "\u25B6", action: () => startProject(e.path) },
+        { label: "Set start command\u2026", icon: "\u2699", action: () => setStartCommand(e.path) },
+        { separator: true },
         { label: "Open new terminal here", icon: "\u{1F5A5}", action: () => newTab(e.path, baseOf(e.path)) },
         { label: "Open runbook here", icon: "\u{1F4D3}", action: () => openRunbook(e.path, baseOf(e.path)) },
       ];
@@ -421,6 +424,116 @@
     runInProjectTerminal(cwd, command);
   }
 
+  // ---------- universal "Start" (dev) runner ----------
+  // Every project starts differently (npm run dev, pnpm dev, composer run dev,
+  // make dev, php artisan serve…). Conductor already resolves the *command* per
+  // task source; this picks the right one automatically so "start this project"
+  // is one action regardless of stack. Pure detection + launch — no AI.
+  const DEV_CMDS_KEY = "conductor:devcmds";
+  let devCmds = $state({}); // { [projectPath]: command } — user overrides win
+  function loadDevCmds() {
+    try {
+      devCmds = JSON.parse(localStorage.getItem(DEV_CMDS_KEY) ?? "{}") ?? {};
+    } catch {
+      devCmds = {};
+    }
+  }
+  function setDevCmd(path, cmd) {
+    devCmds = { ...devCmds, [path]: cmd };
+    try {
+      localStorage.setItem(DEV_CMDS_KEY, JSON.stringify(devCmds));
+    } catch {}
+  }
+
+  // Score a task by how likely it is the project's "start/dev" command.
+  const DEV_EXACT = { dev: 100, start: 90, serve: 80, develop: 75, "start:dev": 95, "dev:server": 85, watch: 60 };
+  function scoreDevTask(t) {
+    const l = t.label.toLowerCase();
+    if (DEV_EXACT[l]) return DEV_EXACT[l];
+    if (l.includes("dev")) return 50;
+    if (l.includes("serve")) return 45;
+    if (l.includes("start")) return 40;
+    if (l.includes("watch")) return 30;
+    return 0;
+  }
+  function rankDevTasks(tasks) {
+    return tasks
+      .map((t) => ({ t, s: scoreDevTask(t) }))
+      .filter((x) => x.s > 0)
+      .sort((a, b) => b.s - a.s)
+      .map((x) => x.t);
+  }
+
+  // Quick-pick shown when several equally-likely dev commands exist (e.g. a
+  // Laravel app with both `composer run dev` and `npm run dev`). The choice is
+  // remembered as the project's start command so the next ⌘R is instant.
+  let startPick = $state({ open: false, x: 0, y: 0, items: [] });
+  function openStartPicker(p, tasks) {
+    const items = tasks.map((t) => ({
+      label: `${t.command}`,
+      icon: "\u25B6",
+      action: () => {
+        setDevCmd(p.path, t.command);
+        runInProjectTerminal(p.path, t.command);
+      },
+    }));
+    startPick = { open: true, x: Math.round(window.innerWidth / 2 - 150), y: 120, items };
+  }
+
+  function resolveProject(p) {
+    if (p && p.path) return p;
+    const path = typeof p === "string" ? p : activeTab?.projectPath;
+    if (!path) return null;
+    return projects.find((x) => x.path === path) ?? { path, name: baseOf(path) };
+  }
+
+  // Start a project's dev command: pinned override > best detected task > ask once.
+  async function startProject(arg) {
+    const p = resolveProject(arg ?? activeProject);
+    if (!p) return;
+    if (devCmds[p.path]) {
+      runInProjectTerminal(p.path, devCmds[p.path]);
+      return;
+    }
+    let tasks = [];
+    try {
+      tasks = await invoke("list_tasks", { path: p.path });
+    } catch {}
+    const scored = tasks
+      .map((t) => ({ t, s: scoreDevTask(t) }))
+      .filter((x) => x.s > 0)
+      .sort((a, b) => b.s - a.s);
+    if (scored.length > 0) {
+      const top = scored[0].s;
+      const ties = scored.filter((x) => x.s === top).map((x) => x.t);
+      // Distinct top-scoring candidates (e.g. composer `dev` vs npm `dev`) -> ask.
+      if (ties.length >= 2) openStartPicker(p, ties);
+      else runInProjectTerminal(p.path, scored[0].t.command);
+      return;
+    }
+    const cmd = (window.prompt(`No dev task found for ${p.name}. Command to start it:`, "npm run dev") || "").trim();
+    if (cmd) {
+      setDevCmd(p.path, cmd);
+      runInProjectTerminal(p.path, cmd);
+    }
+  }
+
+  // Pin/override the start command for a project.
+  async function setStartCommand(arg) {
+    const p = resolveProject(arg ?? activeProject);
+    if (!p) return;
+    let suggestion = devCmds[p.path] ?? "";
+    if (!suggestion) {
+      try {
+        suggestion = rankDevTasks(await invoke("list_tasks", { path: p.path }))[0]?.command ?? "npm run dev";
+      } catch {
+        suggestion = "npm run dev";
+      }
+    }
+    const cmd = (window.prompt(`Start command for ${p.name}:`, suggestion) || "").trim();
+    if (cmd) setDevCmd(p.path, cmd);
+  }
+
   // Pointer-based tab reordering. HTML5 drag-and-drop is unreliable inside the
   // Tauri/WebKit webview (drags often never start), so we track the pointer
   // ourselves. `drag` is null when idle, otherwise the in-flight gesture.
@@ -587,6 +700,10 @@
       list.push({ id: `tab:${t.id}`, title: t.title, hint: t.projectPath, group: "tab", icon: "\u{1F5C2}", action: () => focusTab(t) });
     list.push({ id: "act:new-tab", title: "New terminal tab", hint: "", group: "action", icon: "\u002B", action: () => newTab(activeProject?.path ?? root, activeProject?.name) });
     list.push({ id: "act:open-runbook", title: "Open project runbook", hint: "", group: "action", icon: "\u{1F4D3}", action: () => openRunbook(activeProject?.path ?? root, activeProject?.name) });
+    if (activeProject || activeTab?.projectPath) {
+      list.push({ id: "act:start-project", title: `Start project (dev)${activeProject ? ": " + activeProject.name : ""}`, hint: "\u2318R", group: "action", icon: "\u25B6", action: () => startProject(activeProject) });
+      list.push({ id: "act:set-start", title: "Set start command\u2026", group: "action", icon: "\u2699", action: () => setStartCommand(activeProject) });
+    }
     if (elyraVersion)
       list.push({ id: "act:new-elyra", title: "New Elyra agent here", group: "action", icon: "\u{1F916}", action: () => newElyraAgent(activeProject?.path ?? root, activeProject?.name) });
     list.push({ id: "act:split-right", title: "Split right", hint: "\u2318D", group: "action", icon: "\u25A5", action: () => activeTermId && splitPane(activeTermId, "row") });
@@ -647,6 +764,9 @@
     } else if (k === "w") {
       e.preventDefault();
       if (activeTermId) closePane(activeTermId);
+    } else if (k === "r") {
+      e.preventDefault();
+      startProject(activeProject);
     } else if (k === "b") {
       e.preventDefault();
       showFiles = !showFiles;
@@ -865,6 +985,7 @@
     }
 
     await loadProjects();
+    loadDevCmds();
     restore();
     loadGitStatus(); // enrich pinned items resolved during restore
     loaded = true;
@@ -904,6 +1025,7 @@
     onroot={changeRoot}
     onrefresh={loadProjects}
     onpin={togglePin}
+    onstart={(p) => startProject(p)}
     elyra={!!elyraVersion}
     onagent={(p) => newElyraAgent(p.path, p.name)}
   />
@@ -1049,6 +1171,14 @@
     y={ctx.y}
     items={ctxItems}
     onclose={() => (ctx = { ...ctx, open: false })}
+  />
+
+  <ContextMenu
+    open={startPick.open}
+    x={startPick.x}
+    y={startPick.y}
+    items={startPick.items}
+    onclose={() => (startPick = { ...startPick, open: false })}
   />
 
   <RunModal
