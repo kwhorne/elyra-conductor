@@ -29,6 +29,12 @@
   let sortDir = $state("asc");
   let where = $state("");
   let page = $state(0);
+  let subview = $state("data"); // "data" | "structure"
+  let colFilters = $state({}); // column name -> filter text
+  let meta = $state([]); // column info { name, data_type, nullable, key }
+  let pkCols = $derived(meta.filter((c) => c.key === "PRI").map((c) => c.name));
+  let editing = $state(null); // { ri, ci }
+  let editValue = $state("");
 
   // query-mode
   let sql = $state("");
@@ -108,15 +114,68 @@
   function q(name) {
     return engine === "mysql" ? `\`${name.replace(/`/g, "``")}\`` : `"${name.replace(/"/g, '""')}"`;
   }
+  function esc(v) {
+    return String(v).replace(/'/g, "''");
+  }
+  function castText(col) {
+    return engine === "mysql" ? `CAST(${q(col)} AS CHAR)` : `CAST(${q(col)} AS TEXT)`;
+  }
 
   function buildTableSql() {
+    const conds = [];
+    const global = where.trim().replace(/^where\s+/i, "");
+    if (global) conds.push(`(${global})`);
+    for (const [col, val] of Object.entries(colFilters)) {
+      if (val && val.trim()) conds.push(`${castText(col)} LIKE '%${esc(val.trim())}%'`);
+    }
     let s = `SELECT * FROM ${q(table)}`;
-    // Be forgiving if the user types a leading "WHERE" themselves.
-    const cond = where.trim().replace(/^where\s+/i, "");
-    if (cond) s += ` WHERE ${cond}`;
+    if (conds.length) s += ` WHERE ${conds.join(" AND ")}`;
     if (sortCol) s += ` ORDER BY ${q(sortCol)} ${sortDir === "desc" ? "DESC" : "ASC"}`;
     s += ` LIMIT ${PAGE} OFFSET ${page * PAGE}`;
     return s;
+  }
+
+  async function loadMeta() {
+    if (!connId || !table) return;
+    try {
+      meta = await invoke("db_columns", { id: connId, table });
+    } catch {
+      meta = [];
+    }
+  }
+
+  // ----- editable cells (table mode, requires a primary key) -----
+  function canEdit() {
+    return mode === "table" && subview === "data" && pkCols.length > 0;
+  }
+  function startEdit(ri, ci) {
+    if (!canEdit()) return;
+    editing = { ri, ci };
+    editValue = rows[ri][ci] ?? "";
+  }
+  function cancelEdit() {
+    editing = null;
+  }
+  async function commitEdit() {
+    if (!editing) return;
+    const { ri, ci } = editing;
+    const col = columns[ci];
+    // Build WHERE from this row's primary-key values.
+    const cond = pkCols
+      .map((pk) => {
+        const idx = columns.indexOf(pk);
+        return `${q(pk)} = '${esc(rows[ri][idx])}'`;
+      })
+      .join(" AND ");
+    const sqlUpd = `UPDATE ${q(table)} SET ${q(col)} = '${esc(editValue)}' WHERE ${cond}`;
+    try {
+      await invoke("db_query", { id: connId, sql: sqlUpd });
+      rows[ri][ci] = editValue;
+      rows = [...rows];
+      editing = null;
+    } catch (e) {
+      error = String(e);
+    }
   }
 
   async function run(rawSql) {
@@ -157,6 +216,16 @@
     page = 0;
     loadTable();
   }
+  function setColFilter(col, val) {
+    colFilters = { ...colFilters, [col]: val };
+  }
+  function clearColFilters() {
+    colFilters = {};
+    where = "";
+    page = 0;
+    loadTable();
+  }
+  let hasColFilters = $derived(Object.values(colFilters).some((v) => v && v.trim()));
 
   function nextPage() {
     if (rows.length < PAGE) return;
@@ -184,6 +253,11 @@
     if (v != null) navigator.clipboard?.writeText(v).catch(() => {});
   }
 
+  function focusSelect(node) {
+    node.focus();
+    node.select?.();
+  }
+
   // Load (and reset controls) only when the table/connection/mode changes — not
   // when the filter, sort, or page change. Those are read inside loadTable(), so
   // we run the body untracked to avoid re-triggering on every keystroke (which
@@ -198,6 +272,10 @@
         sortCol = null;
         where = "";
         page = 0;
+        subview = "data";
+        colFilters = {};
+        editing = null;
+        loadMeta();
         loadTable();
       } else if (m === "query") {
         ontitle?.("query");
@@ -211,23 +289,32 @@
   <div class="bar">
     {#if mode === "table"}
       <span class="tname">▦ {table}</span>
-      <span class="wlabel">WHERE</span>
-      <input
-        class="filter"
-        placeholder="condition…  e.g.  city = 'Oslo'"
-        bind:value={where}
-        onkeydown={(e) => e.key === "Enter" && applyFilter()}
-      />
-      <button class="btn" onclick={applyFilter} title="Apply filter">Filter</button>
-      {#if where.trim()}<button class="btn" onclick={() => { where = ''; applyFilter(); }} title="Clear filter">✕</button>{/if}
-      <button class="btn" onclick={loadTable} title="Refresh">⟳</button>
-      <button class="btn" onclick={exportExcel} disabled={!columns.length || exporting} title="Export to Excel (.xlsx)">⤓ Excel</button>
-      <div class="spacer"></div>
-      <div class="pager">
-        <button class="btn" onclick={prevPage} disabled={page === 0}>‹</button>
-        <span class="pageinfo">rows {page * PAGE + 1}–{page * PAGE + rows.length}</span>
-        <button class="btn" onclick={nextPage} disabled={rows.length < PAGE}>›</button>
+      <div class="seg">
+        <button class="btn" class:on={subview === "data"} onclick={() => (subview = "data")}>Data</button>
+        <button class="btn" class:on={subview === "structure"} onclick={() => (subview = "structure")}>Structure</button>
       </div>
+      {#if subview === "data"}
+        <span class="wlabel">WHERE</span>
+        <input
+          class="filter"
+          placeholder="condition…  e.g.  city = 'Oslo'"
+          bind:value={where}
+          onkeydown={(e) => e.key === "Enter" && applyFilter()}
+        />
+        <button class="btn" onclick={applyFilter} title="Apply filter">Filter</button>
+        {#if where.trim() || hasColFilters}<button class="btn" onclick={clearColFilters} title="Clear all filters">✕</button>{/if}
+        <button class="btn" onclick={loadTable} title="Refresh">⟳</button>
+        <button class="btn" onclick={exportExcel} disabled={!columns.length || exporting} title="Export to Excel (.xlsx)">⤓ Excel</button>
+        <div class="spacer"></div>
+        <div class="pager">
+          <button class="btn" onclick={prevPage} disabled={page === 0}>‹</button>
+          <span class="pageinfo">rows {page * PAGE + 1}–{page * PAGE + rows.length}</span>
+          <button class="btn" onclick={nextPage} disabled={rows.length < PAGE}>›</button>
+        </div>
+      {:else}
+        <div class="spacer"></div>
+        <span class="pageinfo">{meta.length} column{meta.length === 1 ? "" : "s"}</span>
+      {/if}
     {:else}
       <span class="tname">⌗ Query</span>
       {#if projectPath}
@@ -267,7 +354,22 @@
   </div>
 
   <div class="grid-wrap">
-    {#if isSelect && columns.length > 0}
+    {#if mode === "table" && subview === "structure"}
+      <table class="grid">
+        <thead><tr><th>Column</th><th>Type</th><th>Nullable</th><th>Key</th></tr></thead>
+        <tbody>
+          {#each meta as c (c.name)}
+            <tr>
+              <td>{c.name}</td>
+              <td>{c.data_type}</td>
+              <td class:null={c.nullable}>{c.nullable ? "YES" : "NO"}</td>
+              <td>{c.key === "PRI" ? "🔑 PRI" : c.key}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      {#if meta.length === 0}<div class="empty">No column info.</div>{/if}
+    {:else if isSelect && columns.length > 0}
       <table class="grid">
         <thead>
           <tr>
@@ -279,19 +381,54 @@
                 title={mode === "table" ? "Click to sort" : ""}
               >
                 {c}
+                {#if mode === "table" && pkCols.includes(c)}<span class="pk" title="Primary key">🔑</span>{/if}
                 {#if mode === "table" && sortCol === c}<span class="arrow">{sortDir === "asc" ? "▲" : "▼"}</span>{/if}
               </th>
             {/each}
           </tr>
+          {#if mode === "table" && subview === "data"}
+            <tr class="filterrow">
+              <th class="rownum"></th>
+              {#each columns as c (c)}
+                <th>
+                  <input
+                    class="colfilter"
+                    placeholder="filter"
+                    value={colFilters[c] ?? ""}
+                    oninput={(e) => setColFilter(c, e.currentTarget.value)}
+                    onkeydown={(e) => e.key === "Enter" && applyFilter()}
+                  />
+                </th>
+              {/each}
+            </tr>
+          {/if}
         </thead>
         <tbody>
           {#each rows as row, ri (ri)}
             <tr>
               <td class="rownum">{page * PAGE + ri + 1}</td>
               {#each row as cell, ci (ci)}
-                <td class:null={cell === null} onclick={() => copyCell(cell)} title={cell ?? "NULL"}>
-                  {cell === null ? "NULL" : cell}
-                </td>
+                {#if editing && editing.ri === ri && editing.ci === ci}
+                  <td class="editcell">
+                    <input
+                      class="celledit"
+                      bind:value={editValue}
+                      use:focusSelect
+                      onkeydown={(e) => { if (e.key === "Enter") commitEdit(); else if (e.key === "Escape") cancelEdit(); }}
+                      onblur={commitEdit}
+                    />
+                  </td>
+                {:else}
+                  <td
+                    class:null={cell === null}
+                    class:editable={canEdit()}
+                    onclick={() => copyCell(cell)}
+                    ondblclick={() => startEdit(ri, ci)}
+                    title={canEdit() ? "Double-click to edit" : (cell ?? "NULL")}
+                  >
+                    {cell === null ? "NULL" : cell}
+                  </td>
+                {/if}
               {/each}
             </tr>
           {/each}
@@ -328,6 +465,11 @@
   .btn.primary { background: var(--accent-2); border-color: var(--accent); font-weight: 600; }
   .btn kbd { font-size: 10px; opacity: 0.7; }
   .pager { display: flex; align-items: center; gap: 6px; }
+  .seg { display: flex; gap: 0; }
+  .seg .btn { border-radius: 0; border-right-width: 0; }
+  .seg .btn:first-child { border-radius: 6px 0 0 6px; }
+  .seg .btn:last-child { border-radius: 0 6px 6px 0; border-right-width: 1px; }
+  .seg .btn.on { background: var(--accent-2); border-color: var(--accent); color: var(--text); }
   .saved { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-size: 12px; max-width: 160px; outline: none; }
   .saved:focus { border-color: var(--accent); }
   .pageinfo { color: var(--text-dim); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
@@ -349,6 +491,14 @@
   .grid th.sortable { cursor: pointer; user-select: none; }
   .grid th.sortable:hover { background: var(--accent-2); }
   .grid .arrow { color: var(--accent); margin-left: 4px; }
+  .grid .pk { margin-left: 4px; font-size: 10px; }
+  .grid .filterrow th { position: sticky; top: 22px; background: var(--bg-3); padding: 2px 4px; z-index: 1; }
+  .grid .colfilter { width: 100%; min-width: 60px; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: var(--font-mono); font-size: 11px; outline: none; }
+  .grid .colfilter:focus { border-color: var(--accent); }
+  .grid td.editable { cursor: text; }
+  .grid td.editable:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+  .grid td.editcell { padding: 0; }
+  .grid .celledit { width: 100%; box-sizing: border-box; background: var(--bg-2); color: var(--text); border: 1px solid var(--accent); border-radius: 0; padding: 2px 7px; font-family: var(--font-mono); font-size: 12px; outline: none; }
   .grid tbody tr:nth-child(even) { background: color-mix(in srgb, var(--bg) 40%, transparent); }
   .grid tbody td { color: var(--text); cursor: default; }
   .grid td.null { color: var(--text-dim); font-style: italic; }

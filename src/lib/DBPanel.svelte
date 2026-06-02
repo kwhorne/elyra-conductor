@@ -47,12 +47,13 @@
       {#if showManual}
         <div class="form">
           <label>Engine
-            <select bind:value={form.engine}>
+            <select bind:value={form.engine} onchange={() => { if (form.engine === "postgres" && (form.port === 3306 || !form.port)) form.port = 5432; if (form.engine === "mysql" && (form.port === 5432 || !form.port)) form.port = 3306; }}>
               <option value="mysql">MySQL / MariaDB</option>
+              <option value="postgres">PostgreSQL</option>
               <option value="sqlite">SQLite</option>
             </select>
           </label>
-          {#if form.engine === "mysql"}
+          {#if form.engine !== "sqlite"}
             <label>Host <input bind:value={form.host} /></label>
             <label>Port <input type="number" bind:value={form.port} /></label>
             <label>Database <input bind:value={form.database} /></label>

@@ -35,6 +35,42 @@ pub struct DbConfig {
 enum Conn {
     Mysql(mysql::Pool),
     Sqlite(String), // file path; opened per query (cheap, avoids !Sync issues)
+    Postgres(Mutex<postgres::Client>),
+}
+
+// Run a query via Postgres' simple protocol, which returns every value as text
+// (Option<&str>) — ideal for a generic browser (no per-type decoding needed).
+fn pg_query(
+    client: &mut postgres::Client,
+    sql: &str,
+) -> Result<(Vec<String>, Vec<Vec<Option<String>>>, Option<u64>, bool), String> {
+    use postgres::SimpleQueryMessage::*;
+    let msgs = client.simple_query(sql).map_err(|e| e.to_string())?;
+    let mut columns: Vec<String> = Vec::new();
+    let mut rows: Vec<Vec<Option<String>>> = Vec::new();
+    let mut affected = None;
+    let mut truncated = false;
+    for m in msgs {
+        match m {
+            RowDescription(cols) => {
+                columns = cols.iter().map(|c| c.name().to_string()).collect();
+            }
+            Row(row) => {
+                if columns.is_empty() {
+                    columns = row.columns().iter().map(|c| c.name().to_string()).collect();
+                }
+                if rows.len() >= MAX_ROWS {
+                    truncated = true;
+                    continue;
+                }
+                let vals = (0..row.len()).map(|i| row.get(i).map(|s| s.to_string())).collect();
+                rows.push(vals);
+            }
+            CommandComplete(n) => affected = Some(n),
+            _ => {}
+        }
+    }
+    Ok((columns, rows, affected, truncated))
 }
 
 #[derive(Default)]
@@ -106,6 +142,16 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             path: String::new(),
             label,
         }),
+        "pgsql" | "postgres" | "postgresql" => Some(DbConfig {
+            engine: "postgres".into(),
+            host: env.get("DB_HOST").cloned().unwrap_or_else(|| "127.0.0.1".into()),
+            port: env.get("DB_PORT").and_then(|p| p.parse().ok()).unwrap_or(5432),
+            database: env.get("DB_DATABASE").cloned().unwrap_or_default(),
+            username: env.get("DB_USERNAME").cloned().unwrap_or_default(),
+            password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
+            path: String::new(),
+            label,
+        }),
         "sqlite" => {
             let raw = env.get("DB_DATABASE").cloned().unwrap_or_default();
             let path = if raw.is_empty() {
@@ -158,6 +204,21 @@ pub fn db_connect(state: State<DbManager>, config: DbConfig) -> Result<String, S
             rusqlite::Connection::open(&config.path).map_err(|e| e.to_string())?;
             Conn::Sqlite(config.path.clone())
         }
+        "postgres" | "postgresql" | "pgsql" => {
+            let mut pg = postgres::Config::new();
+            pg.host(if config.host.is_empty() { "127.0.0.1" } else { &config.host })
+                .port(if config.port == 0 { 5432 } else { config.port })
+                .user(&config.username);
+            if !config.password.is_empty() {
+                pg.password(&config.password);
+            }
+            if !config.database.is_empty() {
+                pg.dbname(&config.database);
+            }
+            // Phase 1: no TLS (local/dev). Remote TLS can be added later.
+            let client = pg.connect(postgres::NoTls).map_err(|e| e.to_string())?;
+            Conn::Postgres(Mutex::new(client))
+        }
         other => return Err(format!("Unsupported engine: {other}")),
     };
 
@@ -196,6 +257,14 @@ pub fn db_tables(state: State<DbManager>, id: String) -> Result<Vec<String>, Str
                 .query_map([], |r| r.get::<_, String>(0))
                 .map_err(|e| e.to_string())?;
             Ok(rows.filter_map(|r| r.ok()).collect())
+        }
+        Conn::Postgres(m) => {
+            let mut client = m.lock().unwrap();
+            let (_c, rows, _a, _t) = pg_query(
+                &mut client,
+                "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema') ORDER BY tablename",
+            )?;
+            Ok(rows.into_iter().filter_map(|r| r.into_iter().next().flatten()).collect())
         }
     }
 }
@@ -253,6 +322,41 @@ pub fn db_columns(
                 })
                 .map_err(|e| e.to_string())?;
             Ok(rows.filter_map(|r| r.ok()).collect())
+        }
+        Conn::Postgres(m) => {
+            let mut client = m.lock().unwrap();
+            let t = table.replace('\'', "''");
+            // Primary-key columns for this table.
+            let (_pc, pk_rows, _a, _tr) = pg_query(
+                &mut client,
+                &format!(
+                    "SELECT kcu.column_name FROM information_schema.table_constraints tc \
+                     JOIN information_schema.key_column_usage kcu \
+                       ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema \
+                     WHERE tc.table_name = '{t}' AND tc.constraint_type = 'PRIMARY KEY'"
+                ),
+            )?;
+            let pks: std::collections::HashSet<String> = pk_rows
+                .into_iter()
+                .filter_map(|r| r.into_iter().next().flatten())
+                .collect();
+            let (_cc, rows, _a2, _t2) = pg_query(
+                &mut client,
+                &format!(
+                    "SELECT column_name, data_type, is_nullable FROM information_schema.columns \
+                     WHERE table_name = '{t}' ORDER BY ordinal_position"
+                ),
+            )?;
+            Ok(rows
+                .into_iter()
+                .map(|r| {
+                    let name = r.first().cloned().flatten().unwrap_or_default();
+                    let data_type = r.get(1).cloned().flatten().unwrap_or_default();
+                    let nullable = r.get(2).cloned().flatten().unwrap_or_default().eq_ignore_ascii_case("YES");
+                    let key = if pks.contains(&name) { "PRI".to_string() } else { String::new() };
+                    ColumnInfo { name, data_type, nullable, key }
+                })
+                .collect())
         }
     }
 }
@@ -381,6 +485,16 @@ pub fn db_query(state: State<DbManager>, id: String, sql: String) -> Result<Quer
                     is_select: false,
                     truncated: false,
                 })
+            }
+        }
+        Conn::Postgres(m) => {
+            let mut client = m.lock().unwrap();
+            let (columns, rows, affected, truncated) = pg_query(&mut client, &sql)?;
+            let elapsed_ms = start.elapsed().as_millis() as u64;
+            if select {
+                Ok(QueryResult { columns, rows, rows_affected: None, elapsed_ms, is_select: true, truncated })
+            } else {
+                Ok(QueryResult { columns: vec![], rows: vec![], rows_affected: affected, elapsed_ms, is_select: false, truncated: false })
             }
         }
     }

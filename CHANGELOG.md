@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-06-02
+
+### Added
+
+- **PostgreSQL** support in the database browser (alongside MySQL and SQLite).
+  Connect from `.env` (`DB_CONNECTION=pgsql`, port 5432) or manually. Uses Postgres'
+  simple query protocol so values come back as text — arbitrary queries just work.
+  (Phase 1 is non-TLS / local; remote TLS can be added later.)
+- **Per-column filters** — a filter row under the table headers; type in any column to
+  narrow results (`CAST(col AS TEXT) LIKE '%…%'`, combined with the `WHERE` box).
+- **Editable cells** — double-click a cell to edit it in place; Enter saves via an
+  `UPDATE … WHERE <primary key>`. Requires the table to have a primary key (detected
+  automatically); Esc cancels.
+- **Structure view** — a **Data / Structure** toggle on a table tab; Structure lists the
+  columns with type, nullability, and key. Primary-key columns are marked with 🔑.
+
 ## [0.4.0] — 2026-06-02
 
 ### Added
@@ -290,7 +306,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.1...v0.3.2
