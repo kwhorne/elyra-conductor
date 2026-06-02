@@ -50,6 +50,21 @@ Background tabs **pulse green** when their terminal produces new output, and the
 indicator clears when you switch to the tab. All tabs stay alive in the background, so
 nothing is lost when you switch away from a long-running process.
 
+## Finished-command notifications
+
+When a long-running command in a **background** tab returns to the shell — a build,
+test run, or deploy completing while you're in another app — Conductor fires a native
+notification (e.g. *“✓ cargo finished · my-project · ran 54s”*). It watches the
+foreground-process titles it already polls, so there's nothing to configure per command:
+
+- Only fires for commands that ran at least ~8 seconds (no noise from quick commands).
+- Never fires for the tab you're actively watching (focused window + active tab).
+- Toggle it from the command palette — **Notify when a background command finishes** /
+  **Disable finished-command notifications**. The choice persists across restarts.
+
+First use asks for macOS notification permission; you can also manage it later under
+System Settings → Notifications → Elyra Conductor.
+
 ## In-terminal search
 
 Press `⌘F` while a terminal is focused to open a find bar. Use `↵` / `⇧↵` to step

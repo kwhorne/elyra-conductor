@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-05-31
+
+### Added
+
+- **Finished-command notifications** — get a native notification when a long-running
+  command in a **background** tab returns to the shell (e.g. a build or test run
+  completes while you're in another app). Uses the foreground-process titles
+  Conductor already polls; only fires for commands that ran ≥ 8s and never for the
+  tab you're actively watching. Toggle it from the command palette
+  (**Notify when a background command finishes**); the setting persists.
+
 ## [0.3.0] — 2026-05-31
 
 ### Added
@@ -221,7 +232,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.9...v0.2.0
 [0.1.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.8...v0.1.9

@@ -14,6 +14,7 @@
   import ShortcutsModal from "./lib/ShortcutsModal.svelte";
   import { check as checkUpdate } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
+  import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
   import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf, allLeaves } from "./lib/layout.js";
 
   let root = $state("");
@@ -243,6 +244,43 @@
   let activity = $state({}); // tabId -> true when a background tab produced output
   let titles = $state({}); // termId -> foreground process name (or null)
 
+  // ---------- finished-command notifications ----------
+  // Detect when a long-running foreground command in a *background* tab returns
+  // to the shell, and fire a native notification. Uses the titles we already
+  // poll — pure observation, no AI.
+  let notifyOnFinish = $state(true);
+  let notifyPermission = false;
+  let appFocused = true;
+  let procRuns = {}; // termId -> { proc, since } for the current foreground command
+  const NOTIFY_MIN_MS = 8000; // ignore commands shorter than this
+  const SHELLS = new Set(["zsh", "-zsh", "bash", "-bash", "sh", "-sh", "fish", "-fish", "nu", "pwsh", "login", "tmux"]);
+  function isIdleProc(name) {
+    return !name || SHELLS.has(name.toLowerCase());
+  }
+  function tabForTerm(termId) {
+    return tabs.find((t) => t.kind === "term" && allLeaves(t.root).some((l) => l.termId === termId));
+  }
+  async function ensureNotifyPermission() {
+    try {
+      notifyPermission = await isPermissionGranted();
+      if (!notifyPermission) notifyPermission = (await requestPermission()) === "granted";
+    } catch {
+      notifyPermission = false;
+    }
+  }
+  function notifyFinished(termId, proc, ms) {
+    if (!notifyOnFinish || !notifyPermission) return;
+    const tab = tabForTerm(termId);
+    if (!tab) return;
+    if (appFocused && tab.id === activeTabId) return; // you're already watching it
+    const secs = Math.round(ms / 1000);
+    const dur = secs < 60 ? `${secs}s` : `${Math.round(secs / 60)}m`;
+    const where = tab.title || baseOf(tab.projectPath || "");
+    try {
+      sendNotification({ title: `\u2713 ${proc} finished`, body: `${where} \u00b7 ran ${dur}` });
+    } catch {}
+  }
+
   // Title shown on a tab: the foreground process of any of its panes, else the
   // project/shell name.
   function tabTitle(t) {
@@ -254,7 +292,6 @@
   }
 
   async function pollTitles() {
-    if (document.hidden) return; // don't poll IPC while the window is in the background
     const ids = [];
     for (const t of tabs) {
       if (t.kind !== "term") continue;
@@ -264,8 +301,21 @@
     const results = await Promise.all(
       ids.map(async (id) => [id, await invoke("pty_title", { id }).catch(() => null)])
     );
+    const prev = titles;
     const next = {};
-    for (const [id, name] of results) next[id] = name;
+    const now = Date.now();
+    for (const [id, name] of results) {
+      next[id] = name;
+      const wasIdle = isIdleProc(prev[id]);
+      const nowIdle = isIdleProc(name);
+      if (!nowIdle && wasIdle) {
+        procRuns[id] = { proc: name, since: now }; // a foreground command started
+      } else if (nowIdle && !wasIdle) {
+        const run = procRuns[id];
+        delete procRuns[id];
+        if (run && now - run.since >= NOTIFY_MIN_MS) notifyFinished(id, run.proc, now - run.since);
+      }
+    }
     titles = next;
   }
 
@@ -713,6 +763,7 @@
     list.push({ id: "act:toggle-files", title: showFiles ? "Hide file sidebar" : "Show file sidebar", hint: "\u2318B", group: "action", icon: "\u{1F5C2}", action: () => (showFiles = !showFiles) });
     list.push({ id: "act:toggle-hidden", title: showHidden ? "Hide node_modules/.git in tree" : "Show all files in tree", group: "action", icon: "\u{1F441}", action: () => (showHidden = !showHidden) });
     list.push({ id: "act:toggle-theme", title: theme === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "action", icon: theme === "dark" ? "\u2600" : "\u263D", action: () => (theme = theme === "dark" ? "light" : "dark") });
+    list.push({ id: "act:toggle-notify", title: notifyOnFinish ? "Disable finished-command notifications" : "Notify when a background command finishes", group: "action", icon: "\u{1F514}", action: () => { notifyOnFinish = !notifyOnFinish; if (notifyOnFinish) ensureNotifyPermission(); } });
     list.push({ id: "act:toggle-broadcast", title: broadcast ? "Stop broadcasting input" : "Broadcast input to all panes", group: "action", icon: "\u2301", action: () => (broadcast = !broadcast) });
     list.push({ id: "act:quick-edit", title: "Quick edit file\u2026", group: "action", icon: "\u270E", action: quickEdit });
     list.push({ id: "act:change-root", title: "Change projects folder\u2026", group: "action", icon: "\u{1F4C2}", action: changeRoot });
@@ -808,6 +859,7 @@
       theme,
       showEditor,
       editorPath,
+      notifyOnFinish,
       activeTabIndex: tabs.findIndex((t) => t.id === activeTabId),
       tabs: tabs.map((t) =>
         t.kind === "agent"
@@ -877,6 +929,7 @@
     theme = saved.theme ?? "dark";
     showEditor = saved.showEditor ?? false;
     editorPath = saved.editorPath ?? null;
+    notifyOnFinish = saved.notifyOnFinish ?? true;
 
     if (Array.isArray(saved.tabs) && saved.tabs.length) {
       tabs = saved.tabs.map((t) =>
@@ -951,7 +1004,11 @@
   }
 
   function onWindowFocus() {
+    appFocused = true;
     refreshGitStatusThrottled();
+  }
+  function onWindowBlur() {
+    appFocused = false;
   }
 
   let titleTimer = null;
@@ -959,9 +1016,11 @@
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
     window.addEventListener("focus", onWindowFocus);
+    window.addEventListener("blur", onWindowBlur);
     window.addEventListener("pagehide", flushState);
     window.addEventListener("beforeunload", flushState);
     titleTimer = setInterval(pollTitles, 1800);
+    ensureNotifyPermission();
     editors = await invoke("detect_editors");
     terminalName = await invoke("detect_terminal");
     elyraVersion = await invoke("detect_elyra");
@@ -1006,6 +1065,7 @@
   onDestroy(() => {
     window.removeEventListener("keydown", onGlobalKey);
     window.removeEventListener("focus", onWindowFocus);
+    window.removeEventListener("blur", onWindowBlur);
     window.removeEventListener("pagehide", flushState);
     window.removeEventListener("beforeunload", flushState);
     flushState();
