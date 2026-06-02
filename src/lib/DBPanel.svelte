@@ -47,9 +47,10 @@
       {#if showManual}
         <div class="form">
           <label>Engine
-            <select bind:value={form.engine} onchange={() => { if (form.engine === "postgres" && (form.port === 3306 || !form.port)) form.port = 5432; if (form.engine === "mysql" && (form.port === 5432 || !form.port)) form.port = 3306; }}>
+            <select bind:value={form.engine} onchange={() => { const def = { mysql: 3306, postgres: 5432, clickhouse: 9000 }; const known = [3306, 5432, 9000, 0]; if (def[form.engine] && known.includes(Number(form.port))) form.port = def[form.engine]; }}>
               <option value="mysql">MySQL / MariaDB</option>
               <option value="postgres">PostgreSQL</option>
+              <option value="clickhouse">ClickHouse</option>
               <option value="sqlite">SQLite</option>
             </select>
           </label>

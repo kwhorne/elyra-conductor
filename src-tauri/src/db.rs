@@ -36,6 +36,40 @@ enum Conn {
     Mysql(mysql::Pool),
     Sqlite(String), // file path; opened per query (cheap, avoids !Sync issues)
     Postgres(Mutex<postgres::Client>),
+    Clickhouse(klickhouse::Client), // native TCP protocol (port 9000)
+}
+
+// A dynamic ClickHouse row: column name + value, no compile-time struct needed.
+// klickhouse's Row trait hands us (name, type, value) per cell.
+struct ChRow {
+    cells: Vec<(String, klickhouse::Value)>,
+}
+impl klickhouse::Row for ChRow {
+    const COLUMN_COUNT: Option<usize> = None;
+    fn column_names() -> Option<Vec<std::borrow::Cow<'static, str>>> {
+        None
+    }
+    fn deserialize_row(
+        map: Vec<(&str, &klickhouse::Type, klickhouse::Value)>,
+    ) -> klickhouse::Result<Self> {
+        Ok(ChRow {
+            cells: map.into_iter().map(|(n, _t, v)| (n.to_string(), v)).collect(),
+        })
+    }
+    fn serialize_row(
+        self,
+        _hints: &klickhouse::IndexMap<String, klickhouse::Type>,
+    ) -> klickhouse::Result<Vec<(std::borrow::Cow<'static, str>, klickhouse::Value)>> {
+        Ok(vec![])
+    }
+}
+// klickhouse's Value implements Display with ClickHouse-style formatting, so any
+// value (incl. Decimal/Date/Array/Tuple/UUID) renders to text trivially.
+fn ch_value_to_string(v: &klickhouse::Value) -> Option<String> {
+    match v {
+        klickhouse::Value::Null => None,
+        other => Some(other.to_string()),
+    }
 }
 
 // Run a query via Postgres' simple protocol, which returns every value as text
@@ -152,6 +186,16 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             path: String::new(),
             label,
         }),
+        "clickhouse" => Some(DbConfig {
+            engine: "clickhouse".into(),
+            host: env.get("DB_HOST").cloned().unwrap_or_else(|| "127.0.0.1".into()),
+            port: env.get("DB_PORT").and_then(|p| p.parse().ok()).unwrap_or(9000),
+            database: env.get("DB_DATABASE").cloned().unwrap_or_default(),
+            username: env.get("DB_USERNAME").cloned().unwrap_or_else(|| "default".into()),
+            password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
+            path: String::new(),
+            label,
+        }),
         "sqlite" => {
             let raw = env.get("DB_DATABASE").cloned().unwrap_or_default();
             let path = if raw.is_empty() {
@@ -219,6 +263,24 @@ pub fn db_connect(state: State<DbManager>, config: DbConfig) -> Result<String, S
             let client = pg.connect(postgres::NoTls).map_err(|e| e.to_string())?;
             Conn::Postgres(Mutex::new(client))
         }
+        "clickhouse" | "ch" => {
+            let host = if config.host.is_empty() { "127.0.0.1".to_string() } else { config.host.clone() };
+            let port = if config.port == 0 { 9000 } else { config.port };
+            let opts = klickhouse::ClientOptions {
+                username: if config.username.is_empty() { "default".into() } else { config.username.clone() },
+                password: config.password.clone(),
+                default_database: config.database.clone(),
+                ..Default::default()
+            };
+            let client = tauri::async_runtime::block_on(klickhouse::Client::connect(
+                format!("{host}:{port}"),
+                opts,
+            ))
+            .map_err(|e| e.to_string())?;
+            // Validate eagerly.
+            tauri::async_runtime::block_on(client.execute("SELECT 1")).map_err(|e| e.to_string())?;
+            Conn::Clickhouse(client)
+        }
         other => return Err(format!("Unsupported engine: {other}")),
     };
 
@@ -265,6 +327,14 @@ pub fn db_tables(state: State<DbManager>, id: String) -> Result<Vec<String>, Str
                 "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema') ORDER BY tablename",
             )?;
             Ok(rows.into_iter().filter_map(|r| r.into_iter().next().flatten()).collect())
+        }
+        Conn::Clickhouse(client) => {
+            let rows: Vec<ChRow> = tauri::async_runtime::block_on(client.query_collect::<ChRow>("SHOW TABLES"))
+                .map_err(|e| e.to_string())?;
+            Ok(rows
+                .into_iter()
+                .filter_map(|r| r.cells.into_iter().next().and_then(|(_, v)| ch_value_to_string(&v)))
+                .collect())
         }
     }
 }
@@ -355,6 +425,22 @@ pub fn db_columns(
                     let nullable = r.get(2).cloned().flatten().unwrap_or_default().eq_ignore_ascii_case("YES");
                     let key = if pks.contains(&name) { "PRI".to_string() } else { String::new() };
                     ColumnInfo { name, data_type, nullable, key }
+                })
+                .collect())
+        }
+        Conn::Clickhouse(client) => {
+            let q = format!("DESCRIBE TABLE `{}`", table.replace('`', "``"));
+            let rows: Vec<ChRow> = tauri::async_runtime::block_on(client.query_collect::<ChRow>(q))
+                .map_err(|e| e.to_string())?;
+            // DESCRIBE columns: name, type, default_type, default_expression, ...
+            Ok(rows
+                .into_iter()
+                .map(|r| {
+                    let v: Vec<Option<String>> = r.cells.iter().map(|(_, x)| ch_value_to_string(x)).collect();
+                    let name = v.first().cloned().flatten().unwrap_or_default();
+                    let data_type = v.get(1).cloned().flatten().unwrap_or_default();
+                    let nullable = data_type.starts_with("Nullable(");
+                    ColumnInfo { name, data_type, nullable, key: String::new() }
                 })
                 .collect())
         }
@@ -495,6 +581,44 @@ pub fn db_query(state: State<DbManager>, id: String, sql: String) -> Result<Quer
                 Ok(QueryResult { columns, rows, rows_affected: None, elapsed_ms, is_select: true, truncated })
             } else {
                 Ok(QueryResult { columns: vec![], rows: vec![], rows_affected: affected, elapsed_ms, is_select: false, truncated: false })
+            }
+        }
+        Conn::Clickhouse(client) => {
+            if select {
+                let chrows: Vec<ChRow> =
+                    tauri::async_runtime::block_on(client.query_collect::<ChRow>(sql.clone()))
+                        .map_err(|e| e.to_string())?;
+                let columns: Vec<String> = chrows
+                    .first()
+                    .map(|r| r.cells.iter().map(|(n, _)| n.clone()).collect())
+                    .unwrap_or_default();
+                let mut rows = Vec::new();
+                let mut truncated = false;
+                for r in chrows {
+                    if rows.len() >= MAX_ROWS {
+                        truncated = true;
+                        break;
+                    }
+                    rows.push(r.cells.iter().map(|(_, v)| ch_value_to_string(v)).collect());
+                }
+                Ok(QueryResult {
+                    columns,
+                    rows,
+                    rows_affected: None,
+                    elapsed_ms: start.elapsed().as_millis() as u64,
+                    is_select: true,
+                    truncated,
+                })
+            } else {
+                tauri::async_runtime::block_on(client.execute(sql.clone())).map_err(|e| e.to_string())?;
+                Ok(QueryResult {
+                    columns: vec![],
+                    rows: vec![],
+                    rows_affected: None,
+                    elapsed_ms: start.elapsed().as_millis() as u64,
+                    is_select: false,
+                    truncated: false,
+                })
             }
         }
     }

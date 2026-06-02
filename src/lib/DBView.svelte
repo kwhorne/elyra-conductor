@@ -118,7 +118,9 @@
     return String(v).replace(/'/g, "''");
   }
   function castText(col) {
-    return engine === "mysql" ? `CAST(${q(col)} AS CHAR)` : `CAST(${q(col)} AS TEXT)`;
+    if (engine === "mysql") return `CAST(${q(col)} AS CHAR)`;
+    if (engine === "clickhouse") return `toString(${q(col)})`; // ClickHouse has no TEXT type
+    return `CAST(${q(col)} AS TEXT)`;
   }
 
   function buildTableSql() {

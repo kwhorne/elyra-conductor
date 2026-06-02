@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-06-02
+
+### Added
+
+- **ClickHouse** support in the database browser, over the **native TCP protocol**
+  (port 9000) — the same protocol `clickhouse-client` uses, not HTTP. Connect manually
+  (or via `DB_CONNECTION=clickhouse` in `.env`), browse tables, sort, filter
+  (incl. per-column), page, run queries, view structure, and export to Excel.
+  - Uses a dynamic row reader so arbitrary queries work without compile-time schemas;
+    all ClickHouse types (Decimal, Date/DateTime64, UUID, Enum, Array, Tuple, …) render
+    correctly.
+  - ClickHouse tabs are **read-only** (no inline cell editing) — ClickHouse isn't an
+    OLTP row-update store; browsing, querying, and export are fully supported.
+
 ## [0.4.1] — 2026-06-02
 
 ### Added
@@ -306,7 +320,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.2...v0.3.3

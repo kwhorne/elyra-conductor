@@ -1,6 +1,6 @@
 [package]
 name = "elyra-conductor"
-version = "0.4.1"
+version = "0.4.2"
 description = "Local project conductor: switcher, terminals, quick-edit"
 authors = ["kwhorne <kh@gets.no>"]
 license = "MIT"
@@ -25,6 +25,7 @@ portable-pty = "0.8"
 mysql = "25"
 rusqlite = { version = "0.32", features = ["bundled"] }
 postgres = "0.19.13"
+klickhouse = "0.15.3"
 
 [profile.release]
 codegen-units = 1
