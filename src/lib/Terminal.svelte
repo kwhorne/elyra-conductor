@@ -160,11 +160,14 @@
       } catch {}
     }
 
+    // The command (if any) is run by the shell itself at startup (see pty.rs),
+    // which avoids the race of typing into a not-yet-ready interactive shell.
     await invoke("pty_spawn", {
       id,
       cwd,
       cols: term.cols,
       rows: term.rows,
+      runCommand: runCommand ?? null,
     });
 
     // Periodically snapshot the buffer so a hard window close still persists it.
@@ -175,12 +178,6 @@
       window.addEventListener("beforeunload", saveScrollback);
     }
 
-    // Optionally auto-run a command (e.g. ./deploy.sh) once the shell is up.
-    if (runCommand) {
-      try {
-        await invoke("pty_write", { id, data: runCommand + "\r" });
-      } catch {}
-    }
 
     const ro = new ResizeObserver(() => {
       fit.fit();

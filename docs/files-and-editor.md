@@ -28,7 +28,11 @@ Right-clicking an entry opens a context menu:
 - **Open in editor** — open it in Monaco.
 - **Ask Elyra about this file** — _(when detected)_ open an agent tab pre-seeded with a
   prompt about that file. See [Elyra agent](elyra-agent.md).
-- **Run `<file>`…** — run the file in an in-app modal terminal. Conductor picks a
+- **Run `<file>` in a terminal tab** — run the file in a real, persistent, interactive
+  terminal tab (full output and scrollback; ideal for deploy scripts you want to watch
+  or answer prompts in). The command is executed by the shell at startup with your full
+  login environment, then drops to an interactive prompt in the same folder.
+- **Run `<file>`… (modal)** — run the file in an in-app modal terminal. Conductor picks a
   sensible command from the extension (`.py` → `python3`, `.js` → `node`, `.sh` →
   `bash`, `.ts` → `npx tsx`, …, otherwise `./file`); the command is **editable** and
   you can **Run / Re-run** with `⌘↵`. A successful run auto-closes, but a **non-zero

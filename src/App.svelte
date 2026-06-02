@@ -204,6 +204,13 @@
     };
   }
 
+  // Run a file in a real, persistent terminal tab (rooted at its folder). Unlike
+  // the modal, this stays open, is fully interactive, and keeps all output — the
+  // right way to run a deploy script or anything you want to watch/interact with.
+  function runFileInTab(entry) {
+    newTab(dirOf(entry.path), baseOf(entry.path), detectRunCommand(baseOf(entry.path)));
+  }
+
   async function runExternal(entry) {
     try {
       await invoke("run_in_external_terminal", { path: entry.path });
@@ -234,7 +241,8 @@
       items.push({ label: "Ask Elyra about this file", icon: "\u{1F916}", action: () => askElyra(e) });
     items.push(
       { separator: true },
-      { label: `Run ${baseOf(e.path)}\u2026`, icon: "\u25B6", action: () => runInModal(e) },
+      { label: `Run ${baseOf(e.path)} in a terminal tab`, icon: "\u25B6", action: () => runFileInTab(e) },
+      { label: `Run ${baseOf(e.path)}\u2026 (modal)`, icon: "\u25B7", action: () => runInModal(e) },
       { label: `Run in ${terminalName}`, icon: "\u{1F680}", action: () => runExternal(e) }
     );
     return items;

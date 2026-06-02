@@ -23,6 +23,7 @@ pub fn pty_spawn(
     cwd: String,
     cols: u16,
     rows: u16,
+    run_command: Option<String>,
 ) -> Result<(), String> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -35,8 +36,22 @@ pub fn pty_spawn(
         .map_err(|e| e.to_string())?;
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-    let mut cmd = CommandBuilder::new(shell);
-    cmd.arg("-l");
+    let mut cmd = CommandBuilder::new(&shell);
+    match run_command.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        // Run a command deterministically at startup, then drop into a normal
+        // interactive login shell. Using `-i -c` (instead of typing into the
+        // PTY) avoids the race where keystrokes are sent before an interactive
+        // shell with a slow rc / instant-prompt is ready to read them.
+        Some(run) => {
+            cmd.arg("-l");
+            cmd.arg("-i");
+            cmd.arg("-c");
+            cmd.arg(format!("{run}; exec {shell} -l -i"));
+        }
+        None => {
+            cmd.arg("-l");
+        }
+    }
     if std::path::Path::new(&cwd).is_dir() {
         cmd.cwd(cwd);
     }

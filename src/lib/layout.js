@@ -1,7 +1,7 @@
 // Pure helpers for the split-pane layout tree.
 //
 // A node is either:
-//   leaf:  { kind: 'leaf', id, termId, cwd, title }
+//   leaf:  { kind: 'leaf', id, termId, cwd, title, key, runOnce }
 //   split: { kind: 'split', id, dir: 'row' | 'col', ratio, a, b }
 //
 // 'row' splits side-by-side (vertical divider), 'col' stacks (horizontal divider).
@@ -20,6 +20,8 @@ export function geometry(root) {
         termId: node.termId,
         cwd: node.cwd,
         title: node.title,
+        key: node.key,
+        runOnce: node.runOnce,
         rect: { x, y, w, h },
       });
       return;

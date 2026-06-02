@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-06-01
+
+### Fixed
+
+- **Commands launched into a terminal tab now actually run.** Running a file, a
+  task (**Run: …** / `[[task:…]]`), or **Start project** (when it opens a new tab)
+  silently did nothing: the pane-layout helper dropped the leaf's `runOnce` command
+  (and its `key`), so the terminal spawned but never received the command.
+  - The command is now executed by the shell itself at startup
+    (`$SHELL -lic '<cmd>; exec $SHELL -li'`) rather than typed into the PTY, which
+    also fixes shells whose startup (oh-my-zsh, instant prompt) swallowed the
+    keystrokes. Full login + interactive environment, so `ssh`, `PATH`, agents, etc.
+    are all present — a deploy script behaves exactly as in your own terminal.
+  - The same layout fix restores **per-pane scrollback persistence** (the pane `key`
+    was being dropped too).
+
+### Added
+
+- File right-click: **Run `<file>` in a terminal tab** — runs a script in a real,
+  persistent, interactive terminal tab (ideal for deploy scripts you want to watch and
+  interact with), alongside the existing modal and external-terminal options.
+
 ## [0.3.1] — 2026-05-31
 
 ### Added
@@ -232,7 +254,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.1.9...v0.2.0
