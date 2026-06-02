@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-06-02
+
+### Added
+
+- **Database browser** (phase 1: **MySQL** + **SQLite**) — connect to a project's
+  database and explore it without leaving Conductor. Toggle the **DB** panel from the
+  toolbar or command palette.
+  - **Connect from `.env`** — reads `DB_CONNECTION` / `DB_HOST` / `DB_PORT` /
+    `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` (Laravel conventions), or set up a
+    manual connection. Nothing new is stored — Conductor just reads the `.env` that's
+    already there; manual credentials stay in memory for the session.
+  - **Table list** in the side panel; opening a table fills the main window as its own
+    tab with a **data grid** — click a column to **sort**, type a `WHERE` condition to
+    **filter**, page through results, refresh, copy cells, and see row count + timing.
+  - **Query tab** — a SQL editor (run with `⌘↵`); non-`SELECT` statements report rows
+    affected.
+  - **Export to Excel** (`.xlsx`) of any table or query result (values kept as text so
+    IDs and zip codes with leading zeros survive).
+  - **Saved queries** — save a query for reuse. Stored **per project and private**
+    (`<project>/.conductor/queries/`, auto-`.gitignore`d so they're never committed).
+
+  Like everything in Conductor, this is a tool — it connects, lists, and queries; it
+  never calls a model.
+
 ## [0.3.3] — 2026-06-01
 
 ### Changed
@@ -266,7 +290,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.0...v0.3.1

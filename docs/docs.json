@@ -49,6 +49,10 @@
           "path": "git.md"
         },
         {
+          "title": "Database browser",
+          "path": "database.md"
+        },
+        {
           "title": "Command palette",
           "path": "command-palette.md"
         },

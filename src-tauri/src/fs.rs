@@ -45,6 +45,56 @@ pub fn write_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| format!("{path}: {e}"))
 }
 
+#[derive(Serialize, serde::Deserialize, Clone)]
+pub struct SavedQuery {
+    pub name: String,
+    pub sql: String,
+}
+
+/// Per-project saved queries live in `<project>/.conductor/queries/`, which is
+/// kept **private** (never committed) via a `.gitignore` that ignores the whole
+/// folder. Runbooks (`.conductor/notes`) stay versionable; queries do not.
+fn ensure_queries_dir(project: &str) -> Result<std::path::PathBuf, String> {
+    let dir = Path::new(project).join(".conductor").join("queries");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let gi = dir.join(".gitignore");
+    if !gi.exists() {
+        let _ = std::fs::write(&gi, "# Private to this machine - never committed.\n*\n");
+    }
+    Ok(dir)
+}
+
+#[tauri::command]
+pub fn list_queries(project: String) -> Result<Vec<SavedQuery>, String> {
+    let dir = ensure_queries_dir(&project)?;
+    let file = dir.join("queries.json");
+    if !file.exists() {
+        return Ok(Vec::new());
+    }
+    let txt = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+    Ok(serde_json::from_str(&txt).unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn save_queries(project: String, queries: Vec<SavedQuery>) -> Result<(), String> {
+    let dir = ensure_queries_dir(&project)?;
+    let file = dir.join("queries.json");
+    let json = serde_json::to_string_pretty(&queries).map_err(|e| e.to_string())?;
+    std::fs::write(&file, json).map_err(|e| format!("{}: {e}", file.display()))
+}
+
+/// Write raw bytes to a path (used for binary exports like .xlsx). Creates
+/// parent directories as needed.
+#[tauri::command]
+pub fn write_bytes(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    if let Some(parent) = Path::new(&path).parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+    }
+    std::fs::write(&path, bytes).map_err(|e| format!("{path}: {e}"))
+}
+
 /// List markdown runbooks for a project, stored under `<project>/.conductor/notes`.
 /// Creates the directory if it does not exist so the first save always works.
 #[tauri::command]

@@ -1,9 +1,11 @@
 mod agent;
+mod db;
 mod fs;
 mod projects;
 mod pty;
 
 use agent::AgentManager;
+use db::DbManager;
 use pty::PtyManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -15,6 +17,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(PtyManager::default())
         .manage(AgentManager::default())
+        .manage(DbManager::default())
         .invoke_handler(tauri::generate_handler![
             pty::pty_spawn,
             pty::pty_write,
@@ -37,8 +40,17 @@ pub fn run() {
             fs::list_dir,
             fs::read_file,
             fs::write_file,
+            fs::write_bytes,
+            fs::list_queries,
+            fs::save_queries,
             fs::list_runbooks,
             fs::list_tasks,
+            db::db_from_env,
+            db::db_connect,
+            db::db_disconnect,
+            db::db_tables,
+            db::db_columns,
+            db::db_query,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

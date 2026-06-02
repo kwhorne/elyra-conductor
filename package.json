@@ -1,7 +1,7 @@
 {
   "name": "elyra-conductor",
   "private": true,
-  "version": "0.3.3",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,7 +21,8 @@
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/xterm": "^5.5.0",
     "marked": "^18.0.4",
-    "monaco-editor": "^0.52.2"
+    "monaco-editor": "^0.52.2",
+    "xlsx": "^0.18.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -6,6 +6,8 @@
   import Terminal from "./lib/Terminal.svelte";
   import AgentPanel from "./lib/AgentPanel.svelte";
   import RunbookPanel from "./lib/RunbookPanel.svelte";
+  import DBPanel from "./lib/DBPanel.svelte";
+  import DBView from "./lib/DBView.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
   import FileExplorer from "./lib/FileExplorer.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -292,7 +294,7 @@
   // A tab's main label is the project/identifier name — stable regardless of what
   // is currently running, so you can always tell which project a tab belongs to.
   function tabTitle(t) {
-    if (t.kind === "runbook") return t.title;
+    if (t.kind === "runbook" || t.kind === "db") return t.title;
     return t.title || (t.projectPath ? baseOf(t.projectPath) : "shell");
   }
 
@@ -445,6 +447,80 @@
   function focusTab(t) {
     activeTabId = t.id;
     activeTermId = t.kind === "term" ? firstLeaf(t.root).termId : null;
+  }
+
+  // ---------- database browser ----------
+  let showDb = $state(false);
+  let dbConn = $state(null); // { id, config, tables }
+  let dbConnecting = $state(false);
+  let dbError = $state(null);
+
+  async function dbConnectEnv() {
+    const path = activeProject?.path ?? activeTab?.projectPath ?? root;
+    if (!path) return;
+    dbError = null;
+    try {
+      const cfg = await invoke("db_from_env", { project: path });
+      if (!cfg) {
+        dbError = "No supported DB_CONNECTION (mysql/sqlite) found in .env";
+        return;
+      }
+      await dbConnect(cfg);
+    } catch (e) {
+      dbError = String(e);
+    }
+  }
+
+  async function dbConnect(cfg) {
+    dbConnecting = true;
+    dbError = null;
+    try {
+      if (dbConn) await invoke("db_disconnect", { id: dbConn.id }).catch(() => {});
+      const id = await invoke("db_connect", { config: cfg });
+      const tables = await invoke("db_tables", { id }).catch(() => []);
+      const projectPath = activeProject?.path ?? activeTab?.projectPath ?? null;
+      dbConn = { id, config: cfg, tables, projectPath };
+    } catch (e) {
+      dbError = String(e);
+      dbConn = null;
+    }
+    dbConnecting = false;
+  }
+
+  async function dbDisconnect() {
+    if (dbConn) await invoke("db_disconnect", { id: dbConn.id }).catch(() => {});
+    dbConn = null;
+    // Close any open db tabs (their connection is gone).
+    tabs = tabs.filter((t) => t.kind !== "db");
+    if (!tabs.find((t) => t.id === activeTabId)) {
+      const n = tabs.at(-1) ?? null;
+      activeTabId = n?.id ?? null;
+    }
+  }
+
+  async function dbRefreshTables() {
+    if (!dbConn) return;
+    try {
+      dbConn = { ...dbConn, tables: await invoke("db_tables", { id: dbConn.id }) };
+    } catch (e) {
+      dbError = String(e);
+    }
+  }
+
+  function openDbTable(table) {
+    if (!dbConn) return;
+    const tab = { id: nextId("tab"), kind: "db", title: table, view: "table", table, connId: dbConn.id, engine: dbConn.config.engine, projectPath: dbConn.projectPath };
+    tabs = [...tabs, tab];
+    activeTabId = tab.id;
+    activeTermId = null;
+  }
+
+  function openDbQuery() {
+    if (!dbConn) return;
+    const tab = { id: nextId("tab"), kind: "db", title: "query", view: "query", table: null, connId: dbConn.id, engine: dbConn.config.engine, projectPath: dbConn.projectPath };
+    tabs = [...tabs, tab];
+    activeTabId = tab.id;
+    activeTermId = null;
   }
 
   // ---------- runbooks ----------
@@ -778,6 +854,7 @@
     list.push({ id: "act:close-pane", title: "Close pane", hint: "\u2318W", group: "action", icon: "\u00D7", action: () => activeTermId && closePane(activeTermId) });
     list.push({ id: "act:toggle-editor", title: showEditor ? "Hide editor" : "Show editor", group: "action", icon: "\u270E", action: () => (showEditor = !showEditor) });
     list.push({ id: "act:toggle-files", title: showFiles ? "Hide file sidebar" : "Show file sidebar", hint: "\u2318B", group: "action", icon: "\u{1F5C2}", action: () => (showFiles = !showFiles) });
+    list.push({ id: "act:toggle-db", title: showDb ? "Hide database panel" : "Show database panel", group: "action", icon: "\u{1F5C4}", action: () => (showDb = !showDb) });
     list.push({ id: "act:toggle-hidden", title: showHidden ? "Hide node_modules/.git in tree" : "Show all files in tree", group: "action", icon: "\u{1F441}", action: () => (showHidden = !showHidden) });
     list.push({ id: "act:toggle-theme", title: theme === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "action", icon: theme === "dark" ? "\u2600" : "\u263D", action: () => (theme = theme === "dark" ? "light" : "dark") });
     list.push({ id: "act:toggle-notify", title: notifyOnFinish ? "Disable finished-command notifications" : "Notify when a background command finishes", group: "action", icon: "\u{1F514}", action: () => { notifyOnFinish = !notifyOnFinish; if (notifyOnFinish) ensureNotifyPermission(); } });
@@ -878,7 +955,7 @@
       editorPath,
       notifyOnFinish,
       activeTabIndex: tabs.findIndex((t) => t.id === activeTabId),
-      tabs: tabs.map((t) =>
+      tabs: tabs.filter((t) => t.kind !== "db").map((t) =>
         t.kind === "agent"
           ? { kind: "agent", title: t.title, projectPath: t.projectPath, cwd: t.cwd }
           : t.kind === "runbook"
@@ -1149,6 +1226,7 @@
         <button onclick={quickEdit}>Quick edit</button>
         <button class:on={showEditor} onclick={() => (showEditor = !showEditor)}>{showEditor ? "Hide editor" : "Show editor"}</button>
         <button class:on={showFiles} title="Toggle file sidebar (⌘B)" onclick={() => (showFiles = !showFiles)}>Files</button>
+        <button class:on={showDb} title="Toggle database panel" onclick={() => (showDb = !showDb)}>DB</button>
         <button class:on={broadcast} title="Broadcast input to all panes in this tab" onclick={() => (broadcast = !broadcast)}>⌁ Sync</button>
         <button title="Toggle theme" onclick={() => (theme = theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀" : "☽"}</button>
         <button title="Keyboard shortcuts (⌘/)" onclick={() => (helpOpen = true)}>?</button>
@@ -1168,6 +1246,18 @@
           {#if tab.kind === "agent"}
             <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
               <AgentPanel id={tab.id} cwd={tab.cwd} initialPrompt={tab.initialPrompt ?? null} onactivity={() => markActivity(tab.id)} ontitle={(t) => (tab.title = t)} />
+            </div>
+          {:else if tab.kind === "db"}
+            <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
+              <DBView
+                connId={tab.connId}
+                engine={tab.engine}
+                mode={tab.view}
+                table={tab.table}
+                projectPath={tab.projectPath}
+                {theme}
+                ontitle={(t) => (tab.title = t)}
+              />
             </div>
           {:else if tab.kind === "runbook"}
             <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
@@ -1238,6 +1328,22 @@
           activePath={editorPath}
           showAll={showHidden}
           ontoggleall={() => (showHidden = !showHidden)}
+        />
+      {/if}
+
+      {#if showDb}
+        <DBPanel
+          project={activeProject?.path ?? activeTab?.projectPath ?? null}
+          projectName={activeProject?.name ?? ""}
+          conn={dbConn}
+          connecting={dbConnecting}
+          error={dbError}
+          onconnectenv={dbConnectEnv}
+          onconnect={dbConnect}
+          ondisconnect={dbDisconnect}
+          onopentable={openDbTable}
+          onnewquery={openDbQuery}
+          onrefresh={dbRefreshTables}
         />
       {/if}
     </div>

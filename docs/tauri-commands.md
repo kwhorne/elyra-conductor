@@ -31,6 +31,12 @@ registered in `src-tauri/src/lib.rs`.
 | `write_file` | `fs.rs` | Write a file (backs `⌘S`). |
 | `list_tasks` | `fs.rs` | Scan a project for runnable tasks. See below. |
 | `list_runbooks` | `fs.rs` | List `.conductor/notes/*.md` for a project (creates the folder if missing). Backs [Runbooks](runbooks.md). |
+| `write_bytes` | `fs.rs` | Write raw bytes to a path (binary exports like `.xlsx`). |
+| `list_queries` / `save_queries` | `fs.rs` | Per-project, private saved queries in `.conductor/queries/` (auto-`.gitignore`d). |
+| `db_from_env` | `db.rs` | Build a DB connection config from a project's `.env`. |
+| `db_connect` / `db_disconnect` | `db.rs` | Open / close a MySQL or SQLite connection. |
+| `db_tables` / `db_columns` | `db.rs` | Schema: list tables / a table's columns. |
+| `db_query` | `db.rs` | Run SQL; returns columns + rows (or rows affected). Backs the [database browser](database.md). |
 
 ## Events
 

@@ -45,6 +45,7 @@ or defines prompts/tools/models. See [Architecture & boundaries](architecture.md
 - [Runbooks](runbooks.md) — runnable, project-scoped markdown notes (▶ run, `[[file]]`, `[[task:name]]`).
 - [Files & editor](files-and-editor.md) — the file tree and inline Monaco quick-edit.
 - [Git](git.md) — status in the sidebar and the in-app commit dialog.
+- [Database browser](database.md) — connect (MySQL/SQLite) from `.env`, browse tables, run queries, export to Excel.
 - [Command palette](command-palette.md) — the `⌘K` fuzzy launcher.
 - [Keyboard shortcuts](keybindings.md) — every shortcut, and how editor focus changes them.
 

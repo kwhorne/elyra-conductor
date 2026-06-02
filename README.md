@@ -90,6 +90,9 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
 - 📓 **Runbooks** — runnable, project-scoped markdown notes in `.conductor/notes/`:
   **▶ Run** shell blocks in the project terminal, `[[file]]` links open in the editor,
   and `[[task:name]]` chips run discovered tasks. Local files, versionable with git.
+- 🗄️ **Database browser** — connect to a project's DB (MySQL/SQLite) from its `.env`,
+  browse tables, sort/filter/page a data grid, run SQL, and **export to Excel**. Save
+  queries per project (private, git-ignored). Just a tool — no model calls.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
   project in Zed, VS Code, or Cursor.
 - 🤖 **Elyra agent** — if the [Elyra](https://elyracode.com) coding agent CLI is
