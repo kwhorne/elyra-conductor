@@ -289,14 +289,23 @@
     } catch {}
   }
 
-  // Title shown on a tab: the foreground process of any of its panes, else the
-  // project/shell name.
+  // A tab's main label is the project/identifier name — stable regardless of what
+  // is currently running, so you can always tell which project a tab belongs to.
   function tabTitle(t) {
-    if (t.kind !== "term") return t.title;
+    if (t.kind === "runbook") return t.title;
+    return t.title || (t.projectPath ? baseOf(t.projectPath) : "shell");
+  }
+
+  // The foreground process running in a term tab (e.g. "vite", "node", "php"),
+  // or null when it's just sitting at a shell prompt. Used for the running
+  // marker / process chip on the tab.
+  function tabProc(t) {
+    if (t.kind !== "term") return null;
     for (const l of allLeaves(t.root)) {
-      if (titles[l.termId]) return titles[l.termId];
+      const name = titles[l.termId];
+      if (name && !isIdleProc(name)) return name;
     }
-    return t.title;
+    return null;
   }
 
   async function pollTitles() {
@@ -1102,16 +1111,18 @@
     <div class="topbar">
       <div class="tabs">
         {#each tabs as t, i (t.id)}
+          {@const proc = tabProc(t)}
           <div
             class="tab"
             class:active={t.id === activeTabId}
+            class:running={!!proc}
             class:ring={activity[t.id]}
             class:drop-left={dragOver === i}
             class:drop-right={dragOver === tabs.length && i === tabs.length - 1}
             class:dragging={tabDrag && tabDrag.moved && tabDrag.fromIndex === i}
             onpointerdown={(e) => tabPointerDown(e, i)}
           >
-            {#if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
+            {#if proc}<span class="run-dot" title={`Running ${proc}`}></span>{:else if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
             <span
               class="tab-label"
               role="button"
@@ -1119,6 +1130,7 @@
               onclick={() => tabClick(t)}
               onkeydown={(e) => (e.key === "Enter" || e.key === " ") && focusTab(t)}
             >{tabTitle(t)}</span>
+            {#if proc}<span class="tab-proc" title={`Running ${proc}`}>{proc}</span>{/if}
             <span
               class="tab-x"
               role="button"
@@ -1304,6 +1316,11 @@
   .tab.dragging { opacity: 0.5; }
   .ring-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-left: 6px; flex: none; animation: ring-pulse 1.2s ease-in-out infinite; }
   @keyframes ring-pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(158, 206, 106, 0.6); } 50% { opacity: 0.5; box-shadow: 0 0 0 4px rgba(158, 206, 106, 0); } }
+  /* Running marker: a tab actively running a foreground command (npm run dev, etc). */
+  .run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 6px; flex: none; animation: run-spin 1s ease-in-out infinite; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+  @keyframes run-spin { 0% { transform: scale(0.7); opacity: 0.6; } 50% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.7); opacity: 0.6; } }
+  .tab-proc { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-left: 4px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+  .tab.running { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
   .tab-label { display: inline-block; background: transparent; border: none; color: var(--text); padding: 4px 6px; font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; -webkit-user-drag: none; user-select: none; }
   .tab-x { display: inline-block; background: transparent; border: none; color: var(--text-dim); padding: 0 4px; font-size: 14px; cursor: pointer; -webkit-user-drag: none; user-select: none; }
   .tab-x:hover { color: var(--text); }

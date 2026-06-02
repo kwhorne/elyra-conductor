@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] — 2026-06-01
+
+### Changed
+
+- **Tabs show the project name instead of the running process.** A tab's label is
+  now its project/identifier name, so you can always tell which project it belongs to
+  (previously the label was replaced by the foreground process, e.g. `php` or `node`,
+  making several tabs indistinguishable).
+- **Running marker** — when a tab is running a foreground command (e.g. `⌘R` /
+  `npm run dev`), it shows a pulsing dot and a small process chip (`vite`, `php`, …)
+  next to the project name, so you can see at a glance which projects are live.
+
 ## [0.3.2] — 2026-06-01
 
 ### Fixed
@@ -254,7 +266,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.2.0...v0.3.0

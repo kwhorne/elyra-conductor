@@ -18,8 +18,9 @@ terminal tab**, or by selecting a project.
   shortcuts follow whatever order you've dragged the tabs into.
 - **Close** a tab with its **✕**, or close the focused pane with `⌘W` (closing the last
   pane closes the tab).
-- A tab's title reflects the foreground process of its panes (e.g. `vim`, `bun`),
-  falling back to the project/shell name.
+- A tab is labelled by its **project name**, so you can always tell which project it
+  belongs to. When a foreground command is running (e.g. `⌘R` / `npm run dev`), a
+  pulsing marker and a small process chip (`vite`, `php`, …) appear next to the name.
 
 ## Split panes
 
