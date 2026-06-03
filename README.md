@@ -4,6 +4,8 @@
 
 **A local project conductor — switch projects, run terminals, split panes, browse files, and quick-edit, all in one window.**
 
+<img src="assets/screenshot.png" alt="Elyra Conductor — project sidebar, a deploy running in a terminal, and the file explorer" width="100%" />
+
 </div>
 
 ---
