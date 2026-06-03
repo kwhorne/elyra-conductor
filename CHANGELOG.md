@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-06-03
+
+### Added
+
+- **Multiple database connections per project.** The DB panel is now a tree of
+  connections — keep e.g. MySQL (app data) and ClickHouse (BI/reports) open at the
+  same time. Add connections with **＋** (from `.env` or manually); each expands to its
+  own table list and has per-connection actions (new query, refresh, disconnect,
+  remove).
+- **Secure, persistent connections.** Saved connections (including passwords) are
+  stored in the **OS keychain** (macOS Keychain), keyed per project — nothing is
+  written into the project folder, so nothing can be committed. They reappear when you
+  reopen the project.
+- **`ORDER BY` field** in the table view, next to `WHERE` — type a full clause
+  (e.g. `created_at DESC, id`). Column-header sorting still works and an explicit
+  `ORDER BY` takes precedence.
+
 ## [0.4.2] — 2026-06-02
 
 ### Added
@@ -320,7 +337,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.3.3...v0.4.0

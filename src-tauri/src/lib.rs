@@ -46,6 +46,8 @@ pub fn run() {
             fs::list_runbooks,
             fs::list_tasks,
             db::db_from_env,
+            db::list_connections,
+            db::save_connections,
             db::db_connect,
             db::db_disconnect,
             db::db_tables,

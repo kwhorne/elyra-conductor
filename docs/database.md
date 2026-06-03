@@ -18,6 +18,19 @@ database, look around the schema, and run queries without leaving the cockpit.
 Toggle the **DB** panel from the toolbar (top right) or the command palette (`⌘K` →
 **Show database panel**). It appears on the right, like the file sidebar.
 
+## Multiple connections per project
+
+The panel is a **tree of connections**, so a project can have several databases open at
+once — for example MySQL for app data and **ClickHouse for BI/reports**. Click **＋** to
+add a connection (from `.env` or manually); each one expands to its own table list and
+has per-connection actions on hover: new query (`⌗`), refresh (`⟳`), disconnect (`⏏`),
+and remove (`✕`).
+
+Saved connections — including passwords — are stored in the **OS keychain** (macOS
+Keychain), keyed per project. **Nothing is written into the project folder**, so nothing
+can be committed; the connections simply reappear (collapsed) when you reopen the
+project, ready to connect with a click.
+
 ## Connecting
 
 - **Connect from `.env`** — with a project selected, Conductor reads the Laravel-style
@@ -48,7 +61,10 @@ the **main window** as its own tab — a data grid with a toolbar:
   marked with 🔑.
 - **Filter** — type a `WHERE` condition (e.g. `city = 'Oslo'`) in the box, *and/or* use
   the **per-column filter row** under the headers (each box matches that column,
-  combined with `AND`). The leading `WHERE` is optional; ✕ clears all filters.
+  combined with `AND`). The leading `WHERE` is optional.
+- **Order** — type a full `ORDER BY` clause (e.g. `created_at DESC, id`) in the
+  **ORDER BY** box. Clicking a column header also sorts; an explicit `ORDER BY` wins.
+  `✕` clears filters and order.
 - **Page** — results load 100 rows at a time; use `‹` / `›`.
 - **Edit a cell** — double-click it, type a new value, and press Enter to save (via an
   `UPDATE … WHERE <primary key>`). Requires the table to have a primary key; Esc

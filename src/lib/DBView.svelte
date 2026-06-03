@@ -28,6 +28,7 @@
   let sortCol = $state(null);
   let sortDir = $state("asc");
   let where = $state("");
+  let orderBy = $state(""); // explicit ORDER BY clause (overrides header sort)
   let page = $state(0);
   let subview = $state("data"); // "data" | "structure"
   let colFilters = $state({}); // column name -> filter text
@@ -132,7 +133,9 @@
     }
     let s = `SELECT * FROM ${q(table)}`;
     if (conds.length) s += ` WHERE ${conds.join(" AND ")}`;
-    if (sortCol) s += ` ORDER BY ${q(sortCol)} ${sortDir === "desc" ? "DESC" : "ASC"}`;
+    const ob = orderBy.trim().replace(/^order\s+by\s+/i, "");
+    if (ob) s += ` ORDER BY ${ob}`;
+    else if (sortCol) s += ` ORDER BY ${q(sortCol)} ${sortDir === "desc" ? "DESC" : "ASC"}`;
     s += ` LIMIT ${PAGE} OFFSET ${page * PAGE}`;
     return s;
   }
@@ -205,6 +208,7 @@
   }
 
   function sortBy(col) {
+    orderBy = ""; // a header click takes over from an explicit ORDER BY
     if (sortCol === col) sortDir = sortDir === "asc" ? "desc" : "asc";
     else {
       sortCol = col;
@@ -224,6 +228,7 @@
   function clearColFilters() {
     colFilters = {};
     where = "";
+    orderBy = "";
     page = 0;
     loadTable();
   }
@@ -273,6 +278,7 @@
         ontitle?.(t);
         sortCol = null;
         where = "";
+        orderBy = "";
         page = 0;
         subview = "data";
         colFilters = {};
@@ -303,8 +309,15 @@
           bind:value={where}
           onkeydown={(e) => e.key === "Enter" && applyFilter()}
         />
-        <button class="btn" onclick={applyFilter} title="Apply filter">Filter</button>
-        {#if where.trim() || hasColFilters}<button class="btn" onclick={clearColFilters} title="Clear all filters">✕</button>{/if}
+        <span class="wlabel">ORDER BY</span>
+        <input
+          class="filter order"
+          placeholder="e.g.  created_at DESC, id"
+          bind:value={orderBy}
+          onkeydown={(e) => e.key === "Enter" && applyFilter()}
+        />
+        <button class="btn" onclick={applyFilter} title="Apply filter & order">Apply</button>
+        {#if where.trim() || orderBy.trim() || hasColFilters}<button class="btn" onclick={clearColFilters} title="Clear filters & order">✕</button>{/if}
         <button class="btn" onclick={loadTable} title="Refresh">⟳</button>
         <button class="btn" onclick={exportExcel} disabled={!columns.length || exporting} title="Export to Excel (.xlsx)">⤓ Excel</button>
         <div class="spacer"></div>
@@ -461,6 +474,7 @@
     border-radius: 6px; padding: 4px 8px; font-family: var(--font-mono); font-size: 12px; outline: none;
   }
   .filter:focus { border-color: var(--accent); }
+  .filter.order { max-width: 280px; }
   .btn { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 10px; font-size: 12px; }
   .btn:hover:not(:disabled) { border-color: var(--accent); }
   .btn:disabled { opacity: 0.45; }

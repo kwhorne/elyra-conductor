@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import Sidebar from "./lib/Sidebar.svelte";
@@ -449,79 +449,146 @@
     activeTermId = t.kind === "term" ? firstLeaf(t.root).termId : null;
   }
 
-  // ---------- database browser ----------
+  // ---------- database browser (multiple connections per project) ----------
   let showDb = $state(false);
-  let dbConn = $state(null); // { id, config, tables }
-  let dbConnecting = $state(false);
+  let dbConns = $state([]); // [{ key, config, id, tables, expanded, connecting, error }]
+  let dbProject = $state(null); // project path the list belongs to
   let dbError = $state(null);
+  let dbSeq = 0;
 
-  async function dbConnectEnv() {
-    const path = activeProject?.path ?? activeTab?.projectPath ?? root;
-    if (!path) return;
+  function dbProjectPath() {
+    return activeProject?.path ?? activeTab?.projectPath ?? null;
+  }
+
+  // Stored connections live in the OS keychain, keyed by project (incl. passwords) —
+  // never written into the project, never committed.
+  async function loadDbConnections(projectPath) {
+    for (const c of dbConns) if (c.id) invoke("db_disconnect", { id: c.id }).catch(() => {});
+    dbProject = projectPath;
+    dbError = null;
+    let configs = [];
+    if (projectPath) {
+      try {
+        configs = await invoke("list_connections", { project: projectPath });
+      } catch {}
+    }
+    dbConns = configs.map((cfg) => ({ key: `dbc-${++dbSeq}`, config: cfg, id: null, tables: [], expanded: false, connecting: false, error: null }));
+  }
+
+  async function persistDbConnections() {
+    if (!dbProject) return;
+    try {
+      await invoke("save_connections", { project: dbProject, connections: dbConns.map((c) => c.config) });
+    } catch (e) {
+      dbError = String(e);
+    }
+  }
+
+  async function dbConnectEntry(entry) {
+    entry.connecting = true;
+    entry.error = null;
+    dbConns = [...dbConns];
+    try {
+      const id = await invoke("db_connect", { config: entry.config });
+      entry.id = id;
+      entry.tables = await invoke("db_tables", { id }).catch(() => []);
+      entry.expanded = true;
+    } catch (e) {
+      entry.error = String(e);
+    }
+    entry.connecting = false;
+    dbConns = [...dbConns];
+  }
+
+  function dbToggleEntry(entry) {
+    if (!entry.id) {
+      dbConnectEntry(entry);
+      return;
+    }
+    entry.expanded = !entry.expanded;
+    dbConns = [...dbConns];
+  }
+
+  async function dbAddFromEnv() {
+    const path = dbProjectPath();
+    if (!path) {
+      dbError = "Select a project first.";
+      return;
+    }
     dbError = null;
     try {
       const cfg = await invoke("db_from_env", { project: path });
       if (!cfg) {
-        dbError = "No supported DB_CONNECTION (mysql/sqlite) found in .env";
+        dbError = "No supported DB_CONNECTION (mysql/pgsql/clickhouse/sqlite) in .env";
         return;
       }
-      await dbConnect(cfg);
+      await dbAddConnection(cfg);
     } catch (e) {
       dbError = String(e);
     }
   }
 
-  async function dbConnect(cfg) {
-    dbConnecting = true;
-    dbError = null;
+  async function dbAddConnection(cfg) {
+    if (!dbProject) dbProject = dbProjectPath();
+    const entry = { key: `dbc-${++dbSeq}`, config: cfg, id: null, tables: [], expanded: false, connecting: false, error: null };
+    dbConns = [...dbConns, entry];
+    await dbConnectEntry(entry);
+    if (!entry.error) persistDbConnections();
+  }
+
+  function closeDbTabsFor(connId) {
+    tabs = tabs.filter((t) => !(t.kind === "db" && t.connId === connId));
+    if (!tabs.find((t) => t.id === activeTabId)) activeTabId = tabs.at(-1)?.id ?? null;
+  }
+
+  async function dbDisconnectEntry(entry) {
+    if (entry.id) {
+      await invoke("db_disconnect", { id: entry.id }).catch(() => {});
+      closeDbTabsFor(entry.id);
+    }
+    entry.id = null;
+    entry.tables = [];
+    entry.expanded = false;
+    dbConns = [...dbConns];
+  }
+
+  async function dbRemoveEntry(entry) {
+    await dbDisconnectEntry(entry);
+    dbConns = dbConns.filter((c) => c !== entry);
+    persistDbConnections();
+  }
+
+  async function dbRefreshEntry(entry) {
+    if (!entry.id) return;
     try {
-      if (dbConn) await invoke("db_disconnect", { id: dbConn.id }).catch(() => {});
-      const id = await invoke("db_connect", { config: cfg });
-      const tables = await invoke("db_tables", { id }).catch(() => []);
-      const projectPath = activeProject?.path ?? activeTab?.projectPath ?? null;
-      dbConn = { id, config: cfg, tables, projectPath };
+      entry.tables = await invoke("db_tables", { id: entry.id });
     } catch (e) {
-      dbError = String(e);
-      dbConn = null;
+      entry.error = String(e);
     }
-    dbConnecting = false;
+    dbConns = [...dbConns];
   }
 
-  async function dbDisconnect() {
-    if (dbConn) await invoke("db_disconnect", { id: dbConn.id }).catch(() => {});
-    dbConn = null;
-    // Close any open db tabs (their connection is gone).
-    tabs = tabs.filter((t) => t.kind !== "db");
-    if (!tabs.find((t) => t.id === activeTabId)) {
-      const n = tabs.at(-1) ?? null;
-      activeTabId = n?.id ?? null;
-    }
-  }
-
-  async function dbRefreshTables() {
-    if (!dbConn) return;
-    try {
-      dbConn = { ...dbConn, tables: await invoke("db_tables", { id: dbConn.id }) };
-    } catch (e) {
-      dbError = String(e);
-    }
-  }
-
-  function openDbTable(table) {
-    if (!dbConn) return;
-    const tab = { id: nextId("tab"), kind: "db", title: table, view: "table", table, connId: dbConn.id, engine: dbConn.config.engine, projectPath: dbConn.projectPath };
+  function openDbTable(entry, table) {
+    if (!entry.id) return;
+    const tab = { id: nextId("tab"), kind: "db", title: table, view: "table", table, connId: entry.id, engine: entry.config.engine, projectPath: dbProject };
     tabs = [...tabs, tab];
     activeTabId = tab.id;
     activeTermId = null;
   }
 
-  function openDbQuery() {
-    if (!dbConn) return;
-    const tab = { id: nextId("tab"), kind: "db", title: "query", view: "query", table: null, connId: dbConn.id, engine: dbConn.config.engine, projectPath: dbConn.projectPath };
+  function openDbQuery(entry) {
+    if (!entry.id) return;
+    const tab = { id: nextId("tab"), kind: "db", title: "query", view: "query", table: null, connId: entry.id, engine: entry.config.engine, projectPath: dbProject };
     tabs = [...tabs, tab];
     activeTabId = tab.id;
     activeTermId = null;
   }
+
+  // Reload the connection list when the active project changes.
+  $effect(() => {
+    const p = activeProject?.path ?? null;
+    if (p !== dbProject) untrack(() => loadDbConnections(p));
+  });
 
   // ---------- runbooks ----------
   function openRunbook(cwd, name, file = null) {
@@ -1333,17 +1400,18 @@
 
       {#if showDb}
         <DBPanel
-          project={activeProject?.path ?? activeTab?.projectPath ?? null}
           projectName={activeProject?.name ?? ""}
-          conn={dbConn}
-          connecting={dbConnecting}
+          conns={dbConns}
           error={dbError}
-          onconnectenv={dbConnectEnv}
-          onconnect={dbConnect}
-          ondisconnect={dbDisconnect}
+          ontoggle={dbToggleEntry}
+          onconnect={dbConnectEntry}
+          ondisconnect={dbDisconnectEntry}
+          onremove={dbRemoveEntry}
+          onrefresh={dbRefreshEntry}
           onopentable={openDbTable}
-          onnewquery={openDbQuery}
-          onrefresh={dbRefreshTables}
+          onquery={openDbQuery}
+          onaddenv={dbAddFromEnv}
+          onaddmanual={dbAddConnection}
         />
       {/if}
     </div>

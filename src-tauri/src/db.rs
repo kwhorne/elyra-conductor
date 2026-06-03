@@ -219,6 +219,34 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
     }
 }
 
+// ── saved connections (per project, in the OS keychain) ──
+// A project can have several databases (e.g. MySQL for app data + ClickHouse for
+// BI). The whole connection list (including passwords) is stored in the OS
+// keychain (macOS Keychain), keyed by project path — nothing is written into the
+// project folder, so nothing can be committed, and secrets live in secure storage.
+const KEYCHAIN_SERVICE: &str = "com.elyra.conductor.db-connections";
+
+#[tauri::command]
+pub fn list_connections(project: String) -> Result<Vec<DbConfig>, String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, &project).map_err(|e| e.to_string())?;
+    match entry.get_password() {
+        Ok(s) => Ok(serde_json::from_str(&s).unwrap_or_default()),
+        Err(keyring::Error::NoEntry) => Ok(Vec::new()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn save_connections(project: String, connections: Vec<DbConfig>) -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, &project).map_err(|e| e.to_string())?;
+    if connections.is_empty() {
+        let _ = entry.delete_credential();
+        return Ok(());
+    }
+    let json = serde_json::to_string(&connections).map_err(|e| e.to_string())?;
+    entry.set_password(&json).map_err(|e| e.to_string())
+}
+
 // ── connect / disconnect ───────────────────────────────────────
 
 #[tauri::command]
