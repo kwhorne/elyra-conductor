@@ -30,6 +30,12 @@ pub struct DbConfig {
     /// Friendly label (e.g. project name).
     #[serde(default)]
     pub label: String,
+    /// Connect over TLS (Postgres / ClickHouse).
+    #[serde(default)]
+    pub tls: bool,
+    /// Skip certificate verification (self-signed / internal hosts).
+    #[serde(default)]
+    pub tls_insecure: bool,
 }
 
 enum Conn {
@@ -170,6 +176,8 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
                 .get("DB_PORT")
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(3306),
+            tls: false,
+            tls_insecure: false,
             database: env.get("DB_DATABASE").cloned().unwrap_or_default(),
             username: env.get("DB_USERNAME").cloned().unwrap_or_default(),
             password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
@@ -180,6 +188,8 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             engine: "postgres".into(),
             host: env.get("DB_HOST").cloned().unwrap_or_else(|| "127.0.0.1".into()),
             port: env.get("DB_PORT").and_then(|p| p.parse().ok()).unwrap_or(5432),
+            tls: false,
+            tls_insecure: false,
             database: env.get("DB_DATABASE").cloned().unwrap_or_default(),
             username: env.get("DB_USERNAME").cloned().unwrap_or_default(),
             password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
@@ -190,6 +200,8 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             engine: "clickhouse".into(),
             host: env.get("DB_HOST").cloned().unwrap_or_else(|| "127.0.0.1".into()),
             port: env.get("DB_PORT").and_then(|p| p.parse().ok()).unwrap_or(9000),
+            tls: false,
+            tls_insecure: false,
             database: env.get("DB_DATABASE").cloned().unwrap_or_default(),
             username: env.get("DB_USERNAME").cloned().unwrap_or_else(|| "default".into()),
             password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
@@ -287,9 +299,19 @@ pub fn db_connect(state: State<DbManager>, config: DbConfig) -> Result<String, S
             if !config.database.is_empty() {
                 pg.dbname(&config.database);
             }
-            // Phase 1: no TLS (local/dev). Remote TLS can be added later.
-            let client = pg.connect(postgres::NoTls).map_err(|e| e.to_string())?;
-            Conn::Postgres(Mutex::new(client))
+            if config.tls {
+                let connector = native_tls::TlsConnector::builder()
+                    .danger_accept_invalid_certs(config.tls_insecure)
+                    .danger_accept_invalid_hostnames(config.tls_insecure)
+                    .build()
+                    .map_err(|e| e.to_string())?;
+                let tls = postgres_native_tls::MakeTlsConnector::new(connector);
+                let client = pg.connect(tls).map_err(|e| e.to_string())?;
+                Conn::Postgres(Mutex::new(client))
+            } else {
+                let client = pg.connect(postgres::NoTls).map_err(|e| e.to_string())?;
+                Conn::Postgres(Mutex::new(client))
+            }
         }
         "clickhouse" | "ch" => {
             let host = if config.host.is_empty() { "127.0.0.1".to_string() } else { config.host.clone() };
@@ -300,11 +322,34 @@ pub fn db_connect(state: State<DbManager>, config: DbConfig) -> Result<String, S
                 default_database: config.database.clone(),
                 ..Default::default()
             };
-            let client = tauri::async_runtime::block_on(klickhouse::Client::connect(
-                format!("{host}:{port}"),
-                opts,
-            ))
-            .map_err(|e| e.to_string())?;
+            let addr = format!("{host}:{port}");
+            let client = if config.tls {
+                // Build the TLS stream ourselves with native-tls (macOS Secure
+                // Transport) and hand the split halves to connect_stream — avoids
+                // pulling rustls/aws-lc-rs (which needs cmake).
+                let insecure = config.tls_insecure;
+                let host_cloned = host.clone();
+                tauri::async_runtime::block_on(async move {
+                    use tokio::io::AsyncWriteExt;
+                    let connector = native_tls::TlsConnector::builder()
+                        .danger_accept_invalid_certs(insecure)
+                        .danger_accept_invalid_hostnames(insecure)
+                        .build()
+                        .map_err(|e| e.to_string())?;
+                    let connector = tokio_native_tls::TlsConnector::from(connector);
+                    let tcp = tokio::net::TcpStream::connect(&addr).await.map_err(|e| e.to_string())?;
+                    let _ = tcp.set_nodelay(true);
+                    let tls = connector.connect(&host_cloned, tcp).await.map_err(|e| e.to_string())?;
+                    let (read, mut writer) = tokio::io::split(tls);
+                    let _ = writer.flush().await;
+                    klickhouse::Client::connect_stream(read, writer, opts)
+                        .await
+                        .map_err(|e| e.to_string())
+                })?
+            } else {
+                tauri::async_runtime::block_on(klickhouse::Client::connect(addr, opts))
+                    .map_err(|e| e.to_string())?
+            };
             // Validate eagerly.
             tauri::async_runtime::block_on(client.execute("SELECT 1")).map_err(|e| e.to_string())?;
             Conn::Clickhouse(client)
@@ -471,6 +516,77 @@ pub fn db_columns(
                     ColumnInfo { name, data_type, nullable, key: String::new() }
                 })
                 .collect())
+        }
+    }
+}
+
+// ── table metadata (approx row count + size) ──
+
+#[derive(Serialize)]
+pub struct TableInfo {
+    pub rows: Option<i64>,
+    pub bytes: Option<i64>,
+    pub approximate: bool,
+}
+
+#[tauri::command]
+pub fn db_table_info(state: State<DbManager>, id: String, table: String) -> Result<TableInfo, String> {
+    let conns = state.conns.lock().unwrap();
+    let conn = conns.get(&id).ok_or("Connection not found")?;
+    match conn {
+        Conn::Mysql(pool) => {
+            let mut c = pool.get_conn().map_err(|e| e.to_string())?;
+            use mysql::prelude::Queryable;
+            let t = table.replace('\'', "''");
+            let row: Option<(Option<i64>, Option<i64>)> = c
+                .query_first(format!(
+                    "SELECT table_rows, data_length + index_length FROM information_schema.tables \
+                     WHERE table_schema = DATABASE() AND table_name = '{t}'"
+                ))
+                .map_err(|e| e.to_string())?;
+            let (rows, bytes) = row.unwrap_or((None, None));
+            Ok(TableInfo { rows, bytes, approximate: true })
+        }
+        Conn::Sqlite(path) => {
+            let c = rusqlite::Connection::open(path).map_err(|e| e.to_string())?;
+            let q = format!("SELECT COUNT(*) FROM \"{}\"", table.replace('"', "\"\""));
+            let cnt: i64 = c.query_row(&q, [], |r| r.get(0)).unwrap_or(-1);
+            Ok(TableInfo { rows: Some(cnt).filter(|n| *n >= 0), bytes: None, approximate: false })
+        }
+        Conn::Postgres(m) => {
+            let mut client = m.lock().unwrap();
+            let t = table.replace('\'', "''");
+            let (_c, rows_data, _a, _tr) = pg_query(
+                &mut client,
+                &format!(
+                    "SELECT c.reltuples::bigint, pg_total_relation_size(c.oid) FROM pg_class c \
+                     JOIN pg_namespace n ON n.oid = c.relnamespace \
+                     WHERE c.relname = '{t}' AND n.nspname NOT IN ('pg_catalog','information_schema') \
+                     ORDER BY (n.nspname = 'public') DESC LIMIT 1"
+                ),
+            )?;
+            let first = rows_data.into_iter().next().unwrap_or_default();
+            let rows = first.first().cloned().flatten().and_then(|s| s.parse::<i64>().ok()).filter(|n| *n >= 0);
+            let bytes = first.get(1).cloned().flatten().and_then(|s| s.parse::<i64>().ok());
+            Ok(TableInfo { rows, bytes, approximate: true })
+        }
+        Conn::Clickhouse(client) => {
+            let t = table.replace('\'', "''");
+            let rows_ch: Vec<ChRow> = tauri::async_runtime::block_on(client.query_collect::<ChRow>(
+                format!("SELECT total_rows, total_bytes FROM system.tables WHERE database = currentDatabase() AND name = '{t}'"),
+            ))
+            .map_err(|e| e.to_string())?;
+            let (rows, bytes) = match rows_ch.into_iter().next() {
+                Some(r) => {
+                    let v: Vec<Option<String>> = r.cells.iter().map(|(_, x)| ch_value_to_string(x)).collect();
+                    (
+                        v.first().cloned().flatten().and_then(|s| s.parse().ok()),
+                        v.get(1).cloned().flatten().and_then(|s| s.parse().ok()),
+                    )
+                }
+                None => (None, None),
+            };
+            Ok(TableInfo { rows, bytes, approximate: true })
         }
     }
 }

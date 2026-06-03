@@ -12,11 +12,14 @@
     onquery,
     onaddenv,
     onaddmanual,
+    onedit,
   } = $props();
 
   let adding = $state(false);
+  let editingEntry = $state(null); // entry being edited (null = adding new)
   let filters = $state({}); // entry.key -> table filter text
-  let form = $state({ engine: "mysql", host: "127.0.0.1", port: 3306, database: "", username: "root", password: "", path: "" });
+  const blankForm = () => ({ engine: "mysql", host: "127.0.0.1", port: 3306, database: "", username: "root", password: "", path: "", tls: false, tls_insecure: false });
+  let form = $state(blankForm());
 
   const ENGINE_ICON = { mysql: "🐬", postgres: "🐘", clickhouse: "🟡", sqlite: "📦" };
   function icon(e) { return ENGINE_ICON[e] ?? "🗄"; }
@@ -33,11 +36,18 @@
     return f ? entry.tables.filter((t) => t.toLowerCase().includes(f)) : entry.tables;
   }
 
+  function startEditConn(entry) {
+    editingEntry = entry;
+    form = { ...blankForm(), ...entry.config };
+    adding = true;
+  }
   function submitManual() {
     const cfg = { ...form, port: Number(form.port) || 0 };
-    onaddmanual?.(cfg);
+    if (editingEntry) onedit?.(editingEntry, cfg);
+    else onaddmanual?.(cfg);
     adding = false;
-    form = { ...form, password: "" };
+    editingEntry = null;
+    form = blankForm();
   }
   function onEngineChange() {
     const def = { mysql: 3306, postgres: 5432, clickhouse: 9000 };
@@ -75,8 +85,14 @@
           <label>Database <input bind:value={form.database} /></label>
           <label>User <input bind:value={form.username} /></label>
           <label>Password <input type="password" bind:value={form.password} /></label>
+          {#if form.engine === "postgres" || form.engine === "clickhouse"}
+            <label class="chk"><input type="checkbox" bind:checked={form.tls} /> Use TLS</label>
+            {#if form.tls}
+              <label class="chk"><input type="checkbox" bind:checked={form.tls_insecure} /> Skip certificate verification (self-signed)</label>
+            {/if}
+          {/if}
         {/if}
-        <button class="primary" onclick={submitManual}>Connect & save</button>
+        <button class="primary" onclick={submitManual}>{editingEntry ? "Save & reconnect" : "Connect & save"}</button>
         <div class="hint">Saved securely in your OS keychain — never written to the project or git.</div>
       </div>
     </div>
@@ -100,6 +116,7 @@
               <button title="Refresh tables" onclick={() => onrefresh?.(entry)}>⟳</button>
               <button title="Disconnect" onclick={() => ondisconnect?.(entry)}>⏏</button>
             {/if}
+            <button title="Edit connection" onclick={() => startEditConn(entry)}>✎</button>
             <button title="Remove connection" onclick={() => onremove?.(entry)}>✕</button>
           </div>
         </div>
@@ -143,6 +160,8 @@
   .form label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-dim); }
   .form input, .form select { background: var(--bg-2); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 4px 6px; font-size: 12px; outline: none; }
   .form input:focus, .form select:focus { border-color: var(--accent); }
+  .form label.chk { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
+  .form label.chk input { width: auto; }
   .hint { color: var(--text-dim); font-size: 11px; }
   .err { color: #f7768e; font-size: 11px; font-family: var(--font-mono); padding: 6px 12px; word-break: break-word; }
   .err.small { padding: 4px 8px 4px 24px; }

@@ -568,6 +568,19 @@
     dbConns = [...dbConns];
   }
 
+  async function dbEditConnection(entry, cfg) {
+    entry.config = cfg;
+    if (entry.id) {
+      await invoke("db_disconnect", { id: entry.id }).catch(() => {});
+      closeDbTabsFor(entry.id);
+      entry.id = null;
+      entry.tables = [];
+      await dbConnectEntry(entry);
+    }
+    dbConns = [...dbConns];
+    if (!entry.error) persistDbConnections();
+  }
+
   function openDbTable(entry, table) {
     if (!entry.id) return;
     const tab = { id: nextId("tab"), kind: "db", title: table, view: "table", table, connId: entry.id, engine: entry.config.engine, projectPath: dbProject };
@@ -1412,6 +1425,7 @@
           onquery={openDbQuery}
           onaddenv={dbAddFromEnv}
           onaddmanual={dbAddConnection}
+          onedit={dbEditConnection}
         />
       {/if}
     </div>

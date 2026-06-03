@@ -34,8 +34,10 @@
   let colFilters = $state({}); // column name -> filter text
   let meta = $state([]); // column info { name, data_type, nullable, key }
   let pkCols = $derived(meta.filter((c) => c.key === "PRI").map((c) => c.name));
-  let editing = $state(null); // { ri, ci }
+  let editing = $state(null); // { ri, ci, col }
   let editValue = $state("");
+  let editNull = $state(false);
+  let tableInfo = $state(null); // { rows, bytes, approximate }
 
   // query-mode
   let sql = $state("");
@@ -112,6 +114,27 @@
     }
   }
 
+  async function exportCsv() {
+    if (!columns.length || exporting) return;
+    exporting = true;
+    try {
+      const base = (table || "query").replace(/[^\w.-]+/g, "_");
+      const path = await saveDialog({ defaultPath: `${base}.csv`, filters: [{ name: "CSV", extensions: ["csv"] }] });
+      if (!path) return;
+      const cell = (s) => {
+        if (s == null) return "";
+        const v = String(s);
+        return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+      };
+      const lines = [columns.map(cell).join(","), ...rows.map((r) => r.map(cell).join(","))];
+      await invoke("write_file", { path, content: lines.join("\n") });
+    } catch (e) {
+      error = `Export failed: ${e}`;
+    } finally {
+      exporting = false;
+    }
+  }
+
   function q(name) {
     return engine === "mysql" ? `\`${name.replace(/`/g, "``")}\`` : `"${name.replace(/"/g, '""')}"`;
   }
@@ -155,32 +178,53 @@
   }
   function startEdit(ri, ci) {
     if (!canEdit()) return;
-    editing = { ri, ci };
+    editing = { ri, ci, col: columns[ci] };
     editValue = rows[ri][ci] ?? "";
+    editNull = rows[ri][ci] === null;
   }
   function cancelEdit() {
     editing = null;
   }
   async function commitEdit() {
     if (!editing) return;
-    const { ri, ci } = editing;
-    const col = columns[ci];
-    // Build WHERE from this row's primary-key values.
+    const { ri, ci, col } = editing;
     const cond = pkCols
       .map((pk) => {
         const idx = columns.indexOf(pk);
         return `${q(pk)} = '${esc(rows[ri][idx])}'`;
       })
       .join(" AND ");
-    const sqlUpd = `UPDATE ${q(table)} SET ${q(col)} = '${esc(editValue)}' WHERE ${cond}`;
+    const setExpr = editNull ? "NULL" : `'${esc(editValue)}'`;
+    const sqlUpd = `UPDATE ${q(table)} SET ${q(col)} = ${setExpr} WHERE ${cond}`;
     try {
       await invoke("db_query", { id: connId, sql: sqlUpd });
-      rows[ri][ci] = editValue;
+      rows[ri][ci] = editNull ? null : editValue;
       rows = [...rows];
       editing = null;
     } catch (e) {
       error = String(e);
     }
+  }
+
+  async function loadTableInfo() {
+    tableInfo = null;
+    if (!connId || !table) return;
+    try {
+      tableInfo = await invoke("db_table_info", { id: connId, table });
+    } catch {
+      tableInfo = null;
+    }
+  }
+  function fmtBytes(n) {
+    if (n == null) return null;
+    const u = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    let v = Number(n);
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
+  }
+  function fmtNum(n) {
+    return n == null ? null : Number(n).toLocaleString();
   }
 
   async function run(rawSql) {
@@ -284,6 +328,7 @@
         colFilters = {};
         editing = null;
         loadMeta();
+        loadTableInfo();
         loadTable();
       } else if (m === "query") {
         ontitle?.("query");
@@ -320,6 +365,7 @@
         {#if where.trim() || orderBy.trim() || hasColFilters}<button class="btn" onclick={clearColFilters} title="Clear filters & order">✕</button>{/if}
         <button class="btn" onclick={loadTable} title="Refresh">⟳</button>
         <button class="btn" onclick={exportExcel} disabled={!columns.length || exporting} title="Export to Excel (.xlsx)">⤓ Excel</button>
+        <button class="btn" onclick={exportCsv} disabled={!columns.length || exporting} title="Export to CSV">⤓ CSV</button>
         <div class="spacer"></div>
         <div class="pager">
           <button class="btn" onclick={prevPage} disabled={page === 0}>‹</button>
@@ -328,7 +374,9 @@
         </div>
       {:else}
         <div class="spacer"></div>
-        <span class="pageinfo">{meta.length} column{meta.length === 1 ? "" : "s"}</span>
+        <span class="pageinfo">
+          {meta.length} column{meta.length === 1 ? "" : "s"}{#if tableInfo} · {tableInfo.approximate ? "≈ " : ""}{fmtNum(tableInfo.rows) ?? "?"} rows{#if tableInfo.bytes != null} · {fmtBytes(tableInfo.bytes)}{/if}{/if}
+        </span>
       {/if}
     {:else}
       <span class="tname">⌗ Query</span>
@@ -342,6 +390,7 @@
       {/if}
       <div class="spacer"></div>
       <button class="btn" onclick={exportExcel} disabled={!columns.length || exporting} title="Export to Excel (.xlsx)">⤓ Excel</button>
+      <button class="btn" onclick={exportCsv} disabled={!columns.length || exporting} title="Export to CSV">⤓ CSV</button>
       <button class="btn primary" onclick={runQuery} disabled={loading || !sql.trim()}>▶ Run <kbd>⌘↵</kbd></button>
     {/if}
   </div>
@@ -423,27 +472,16 @@
             <tr>
               <td class="rownum">{page * PAGE + ri + 1}</td>
               {#each row as cell, ci (ci)}
-                {#if editing && editing.ri === ri && editing.ci === ci}
-                  <td class="editcell">
-                    <input
-                      class="celledit"
-                      bind:value={editValue}
-                      use:focusSelect
-                      onkeydown={(e) => { if (e.key === "Enter") commitEdit(); else if (e.key === "Escape") cancelEdit(); }}
-                      onblur={commitEdit}
-                    />
-                  </td>
-                {:else}
-                  <td
-                    class:null={cell === null}
-                    class:editable={canEdit()}
-                    onclick={() => copyCell(cell)}
-                    ondblclick={() => startEdit(ri, ci)}
-                    title={canEdit() ? "Double-click to edit" : (cell ?? "NULL")}
-                  >
-                    {cell === null ? "NULL" : cell}
-                  </td>
-                {/if}
+                <td
+                  class:null={cell === null}
+                  class:editable={canEdit()}
+                  class:isediting={editing && editing.ri === ri && editing.ci === ci}
+                  onclick={() => copyCell(cell)}
+                  ondblclick={() => startEdit(ri, ci)}
+                  title={canEdit() ? "Double-click to edit" : (cell ?? "NULL")}
+                >
+                  {cell === null ? "NULL" : cell}
+                </td>
               {/each}
             </tr>
           {/each}
@@ -456,10 +494,30 @@
       <div class="empty">Run a query to see results.</div>
     {/if}
   </div>
+
+  {#if editing}
+    <div class="celled-overlay" role="presentation" onclick={cancelEdit}>
+      <div class="celled" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()}>
+        <div class="celled-head">Edit <b>{editing.col}</b></div>
+        <textarea
+          class="celled-input"
+          bind:value={editValue}
+          disabled={editNull}
+          use:focusSelect
+          onkeydown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") commitEdit(); else if (e.key === "Escape") cancelEdit(); }}
+        ></textarea>
+        <label class="celled-null"><input type="checkbox" bind:checked={editNull} /> Set to NULL</label>
+        <div class="celled-actions">
+          <button class="btn" onclick={cancelEdit}>Cancel</button>
+          <button class="btn primary" onclick={commitEdit}>Save <kbd>⌘↵</kbd></button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
-  .dbview { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg-2); }
+  .dbview { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg-2); position: relative; }
   .bar {
     display: flex; align-items: center; gap: 8px;
     padding: 8px 12px; background: var(--bg-3); border-bottom: 1px solid var(--border);
@@ -513,8 +571,17 @@
   .grid .colfilter:focus { border-color: var(--accent); }
   .grid td.editable { cursor: text; }
   .grid td.editable:hover { box-shadow: inset 0 0 0 1px var(--accent); }
-  .grid td.editcell { padding: 0; }
-  .grid .celledit { width: 100%; box-sizing: border-box; background: var(--bg-2); color: var(--text); border: 1px solid var(--accent); border-radius: 0; padding: 2px 7px; font-family: var(--font-mono); font-size: 12px; outline: none; }
+  .grid td.isediting { box-shadow: inset 0 0 0 2px var(--accent); }
+  .celled-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 20; }
+  .celled { width: 460px; max-width: 90%; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 18px 50px rgba(0,0,0,0.5); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .celled-head { font-size: 12px; color: var(--text-dim); }
+  .celled-head b { color: var(--text); }
+  .celled-input { min-height: 120px; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-family: var(--font-mono); font-size: 13px; outline: none; }
+  .celled-input:focus { border-color: var(--accent); }
+  .celled-input:disabled { opacity: 0.4; }
+  .celled-null { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+  .celled-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .celled-actions kbd { font-size: 10px; opacity: 0.7; }
   .grid tbody tr:nth-child(even) { background: color-mix(in srgb, var(--bg) 40%, transparent); }
   .grid tbody td { color: var(--text); cursor: default; }
   .grid td.null { color: var(--text-dim); font-style: italic; }

@@ -1,6 +1,6 @@
 [package]
 name = "elyra-conductor"
-version = "0.4.3"
+version = "0.4.4"
 description = "Local project conductor: switcher, terminals, quick-edit"
 authors = ["kwhorne <kh@gets.no>"]
 license = "MIT"
@@ -25,6 +25,10 @@ portable-pty = "0.8"
 mysql = "25"
 rusqlite = { version = "0.32", features = ["bundled"] }
 postgres = "0.19.13"
+postgres-native-tls = "0.5"
+native-tls = "0.2"
+tokio-native-tls = "0.3"
+tokio = { version = "1", features = ["net", "io-util"] }
 klickhouse = "0.15.3"
 keyring = { version = "3", features = ["apple-native"] }
 

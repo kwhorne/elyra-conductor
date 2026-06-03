@@ -31,6 +31,16 @@ Keychain), keyed per project. **Nothing is written into the project folder**, so
 can be committed; the connections simply reappear (collapsed) when you reopen the
 project, ready to connect with a click.
 
+Hover a connection and use **✎** to edit it (host/port/credentials/TLS) — it reconnects
+and re-saves.
+
+### TLS (remote PostgreSQL / ClickHouse)
+
+When adding a PostgreSQL or ClickHouse connection, tick **Use TLS** to connect over an
+encrypted channel; tick **Skip certificate verification** for self-signed/internal
+hosts. TLS uses the system stack (macOS Secure Transport). ClickHouse keeps its native
+protocol over the encrypted stream.
+
 ## Connecting
 
 - **Connect from `.env`** — with a project selected, Conductor reads the Laravel-style
@@ -66,11 +76,13 @@ the **main window** as its own tab — a data grid with a toolbar:
   **ORDER BY** box. Clicking a column header also sorts; an explicit `ORDER BY` wins.
   `✕` clears filters and order.
 - **Page** — results load 100 rows at a time; use `‹` / `›`.
-- **Edit a cell** — double-click it, type a new value, and press Enter to save (via an
-  `UPDATE … WHERE <primary key>`). Requires the table to have a primary key; Esc
-  cancels. Single-click still copies the cell value.
+- **Edit a cell** — double-click it to open a small editor (a multi-line field for long
+  values, plus a **Set to NULL** option); `⌘↵` saves via an `UPDATE … WHERE <primary
+  key>`. Requires the table to have a primary key. Single-click still copies the value.
 - **Structure** — flip the **Data / Structure** toggle to see the table's columns with
-  their type, nullability, and key.
+  their type, nullability, and key, plus the table's approximate **row count** and
+  **on-disk size**.
+- **Export** — **⤓ Excel** (`.xlsx`) or **⤓ CSV**.
 - **Refresh**, a row count and query time, `NULL` shown in muted italics.
 
 Up to 1000 rows are returned per query (a *truncated* note appears if there are more).
@@ -81,11 +93,11 @@ Click **＋ New query** for a SQL editor tab. Write SQL and run it with **`⌘�
 `SELECT` (and `SHOW` / `PRAGMA` / `EXPLAIN` / `WITH`) show a result grid; other
 statements report the number of rows affected.
 
-## Export to Excel
+## Export to Excel / CSV
 
-Any table or query result can be exported with the **⤓ Excel** button — it opens a save
-dialog and writes a real `.xlsx` file. Values are exported as text so identifiers and zip
-codes with leading zeros (e.g. `0484`) are preserved exactly.
+Any table or query result can be exported with **⤓ Excel** (a real `.xlsx`) or **⤓ CSV**.
+Values are exported as text so identifiers and zip codes with leading zeros (e.g. `0484`)
+are preserved exactly.
 
 ## Saved queries (private, per project)
 

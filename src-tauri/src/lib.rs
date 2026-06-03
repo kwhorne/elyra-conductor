@@ -52,6 +52,7 @@ pub fn run() {
             db::db_disconnect,
             db::db_tables,
             db::db_columns,
+            db::db_table_info,
             db::db_query,
         ])
         .run(tauri::generate_context!())

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-06-03
+
+### Added
+
+- **Editable connections** — edit a saved connection (host/port/credentials/TLS) with the
+  ✎ action; it reconnects and re-saves.
+- **Edit cells with NULL & long values** — double-clicking a cell now opens a small
+  editor dialog with a multi-line field and a **Set to NULL** option (`⌘↵` saves).
+- **CSV export** — alongside Excel, on any table or query result.
+- **Table metadata** — the Structure view shows the (approximate) **row count** and
+  **on-disk size** for the table.
+- **TLS for remote PostgreSQL & ClickHouse** — a **Use TLS** option (with an optional
+  **Skip certificate verification** for self-signed/internal hosts) in the connection
+  form. Both use the system TLS stack (macOS Secure Transport); ClickHouse keeps its
+  native protocol over the encrypted stream.
+
+### Fixed
+
+- **“Elyra Conductor is damaged” on download.** The bundled app only carried the Rust
+  linker's ad-hoc signature, which fails `codesign` validation — so a downloaded
+  (quarantined) copy was rejected by Gatekeeper as *damaged*. Builds now ad-hoc sign the
+  app properly (`bundle.macOS.signingIdentity = "-"`), producing a valid signature.
+
+  > The app still isn't Apple-notarized, so first launch needs one of: right-click →
+  > **Open**, or remove the quarantine flag:
+  > `xattr -dr com.apple.quarantine "/Applications/Elyra Conductor.app"`.
+
 ## [0.4.3] — 2026-06-03
 
 ### Added
@@ -337,7 +364,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.0...v0.4.1
