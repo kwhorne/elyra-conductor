@@ -35,6 +35,17 @@ Split any pane to run multiple processes side by side:
 Splits nest freely, and you can **drag the dividers** to resize. Each pane also has hover
 controls in its top-right corner (split right / split down / close).
 
+**Move between panes** with `⌘⌥` + the arrow keys, and **zoom** the active pane to fill the
+tab with `⌘⌥Z` (press again to restore) — tmux-style. Switching tabs, splitting, or
+navigating unzooms automatically.
+
+## Global scrollback search
+
+Press `⇧⌘F` (or the command palette → **Search all terminals**) to search the buffer of
+*every* open terminal at once — not just the focused one. Matches are grouped by pane with
+a count and a sample line; pick one to jump straight to that tab/pane with the match
+highlighted. Great for “which of my six running services logged that error?”
+
 ### Why splitting never loses your session
 
 Terminals live in a **flat, absolutely-positioned layer** keyed by terminal id. A pure

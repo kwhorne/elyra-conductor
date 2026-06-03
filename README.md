@@ -65,7 +65,9 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   to open `http://localhost:<port>` or stop the process.
 - 🎨 **Per-project tab colour** — each tab is tinted by its project so you always know
   which project you're looking at.
-- 🔎 **Terminal search** — `⌘F` opens an in-terminal find bar (↵ / ⇧↵ to step).
+- 🔎 **Terminal search** — `⌘F` finds in the focused terminal; **`⇧⌘F` searches *all*
+  open terminals at once** and jumps to the match.
+- 🧭 **Panes** — `⌘⌥`+arrows to move between split panes, `⌘⌥Z` to zoom one full-screen.
 - 🌓 **Light / dark theme** — toggle in the toolbar or palette; persisted.
 - ↔️ **Drag-to-reorder tabs** — drag a tab sideways to rearrange; jump straight to any
   tab with `⌘1`–`⌘9`.

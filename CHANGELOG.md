@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7] — 2026-06-03
+
+### Added
+
+- **Global scrollback search** (`⇧⌘F`) — search every open terminal's buffer at once.
+  Results are grouped by pane (with match counts and a sample line); jump straight to a
+  match, which switches to that tab/pane and highlights it.
+- **Pane navigation** (`⌘⌥`←↑↓→) — move keyboard focus between split panes by direction.
+- **Pane zoom** (`⌘⌥Z`) — temporarily maximise the active pane (tmux-style); switching
+  tabs, splitting, or navigating unzooms.
+
 ## [0.4.6] — 2026-06-03
 
 ### Added
@@ -387,7 +398,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.7...HEAD
+[0.4.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.3...v0.4.4

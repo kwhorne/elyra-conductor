@@ -8,7 +8,12 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
-  let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark" } = $props();
+  let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark", active = false, register = null, unregister = null } = $props();
+
+  // Focus the xterm when this pane becomes active (e.g. via keyboard pane-nav).
+  $effect(() => {
+    if (active && term) term.focus();
+  });
 
   // Scrollback persistence. A pty can't be revived across restarts, so we only
   // restore the *visual* history (read-only) and start a fresh shell beneath it.
@@ -45,6 +50,21 @@
   let searchInput;
 
   const SEARCH_OPTS = { decorations: { matchOverviewRuler: "#7aa2f7", activeMatchColorOverviewRuler: "#e0af68" } };
+
+  // Plain-text snapshot of the whole buffer (scrollback + viewport), for global search.
+  function getLines() {
+    if (!term) return [];
+    const buf = term.buffer.active;
+    const out = [];
+    for (let i = 0; i < buf.length; i++) {
+      out.push(buf.getLine(i)?.translateToString(true) ?? "");
+    }
+    return out;
+  }
+  function findInTerm(query) {
+    if (search && query) search.findNext(query, SEARCH_OPTS);
+    term?.focus();
+  }
 
   function openSearch() {
     searchOpen = true;
@@ -86,10 +106,11 @@
     serializeAddon = new SerializeAddon();
     term.loadAddon(serializeAddon);
     term.open(el);
+    register?.(id, { getLines, find: findInTerm, focus: () => term?.focus() });
 
     // Intercept Cmd/Ctrl+F to open the in-terminal search instead of the shell.
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type === "keydown" && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+      if (e.type === "keydown" && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "f") {
         openSearch();
         return false;
       }
@@ -195,6 +216,7 @@
   });
 
   onDestroy(() => {
+    unregister?.(id);
     clearInterval(sbTimer);
     window.removeEventListener("pagehide", saveScrollback);
     window.removeEventListener("beforeunload", saveScrollback);

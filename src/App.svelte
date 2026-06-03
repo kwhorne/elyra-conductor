@@ -9,6 +9,7 @@
   import DBPanel from "./lib/DBPanel.svelte";
   import DBView from "./lib/DBView.svelte";
   import PortsModal from "./lib/PortsModal.svelte";
+  import ScrollbackSearch from "./lib/ScrollbackSearch.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
   import FileExplorer from "./lib/FileExplorer.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -448,6 +449,7 @@
   function focusTab(t) {
     activeTabId = t.id;
     activeTermId = t.kind === "term" ? firstLeaf(t.root).termId : null;
+    zoomed = false;
   }
 
   let portsOpen = $state(false);
@@ -459,6 +461,71 @@
     let h = 0;
     for (let i = 0; i < path.length; i++) h = (h * 31 + path.charCodeAt(i)) >>> 0;
     return `hsl(${h % 360} 60% 60%)`;
+  }
+
+  // ---------- pane navigation / zoom / global scrollback search ----------
+  let zoomed = $state(false);
+  let scrollbackOpen = $state(false);
+  let termApis = {}; // termId -> { getLines, find, focus }
+  function registerTerm(id, api) { termApis[id] = api; }
+  function unregisterTerm(id) { delete termApis[id]; }
+
+  // Move pane focus in a direction, by comparing pane-rect centres.
+  function navigatePane(dir) {
+    if (!activeTab || activeTab.kind !== "term") return;
+    const leaves = geo.leaves;
+    const cur = leaves.find((l) => l.termId === activeTermId) ?? leaves[0];
+    if (!cur) return;
+    const cx = cur.rect.x + cur.rect.w / 2;
+    const cy = cur.rect.y + cur.rect.h / 2;
+    let best = null;
+    let bestScore = Infinity;
+    for (const l of leaves) {
+      if (l.termId === activeTermId) continue;
+      const dx = l.rect.x + l.rect.w / 2 - cx;
+      const dy = l.rect.y + l.rect.h / 2 - cy;
+      let ok = false;
+      let score = 0;
+      if (dir === "left") { ok = dx < -1; score = Math.abs(dx) + Math.abs(dy) * 3; }
+      else if (dir === "right") { ok = dx > 1; score = Math.abs(dx) + Math.abs(dy) * 3; }
+      else if (dir === "up") { ok = dy < -1; score = Math.abs(dy) + Math.abs(dx) * 3; }
+      else if (dir === "down") { ok = dy > 1; score = Math.abs(dy) + Math.abs(dx) * 3; }
+      if (ok && score < bestScore) { bestScore = score; best = l; }
+    }
+    if (best) { zoomed = false; activeTermId = best.termId; }
+  }
+
+  // Search every open terminal's buffer (scrollback + viewport).
+  function searchScrollback(query) {
+    const q = (query || "").toLowerCase();
+    if (q.length < 2) return [];
+    const results = [];
+    for (const t of tabs) {
+      if (t.kind !== "term") continue;
+      for (const l of allLeaves(t.root)) {
+        const api = termApis[l.termId];
+        if (!api) continue;
+        let count = 0;
+        let sample = "";
+        for (const line of api.getLines()) {
+          if (line.toLowerCase().includes(q)) {
+            count++;
+            if (!sample) sample = line.trim().slice(0, 140);
+          }
+        }
+        if (count > 0) {
+          results.push({ termId: l.termId, tabId: t.id, label: tabTitle(t), color: projectColor(t.projectPath), count, sample });
+        }
+      }
+    }
+    results.sort((a, b) => b.count - a.count);
+    return results;
+  }
+
+  function jumpToMatch(r, query) {
+    const tab = tabs.find((t) => t.id === r.tabId);
+    if (tab) { focusTab(tab); activeTermId = r.termId; zoomed = false; }
+    setTimeout(() => termApis[r.termId]?.find(query), 60);
   }
 
   // ---------- database browser (multiple connections per project) ----------
@@ -857,6 +924,7 @@
     const leaf = makeLeaf(cwdOf(termId));
     tab.root = splitLeaf(tab.root, termId, dir, leaf, nextId("s"));
     activeTermId = leaf.termId;
+    zoomed = false;
   }
 
   function closePane(termId) {
@@ -948,6 +1016,8 @@
     list.push({ id: "act:toggle-files", title: showFiles ? "Hide file sidebar" : "Show file sidebar", hint: "\u2318B", group: "action", icon: "\u{1F5C2}", action: () => (showFiles = !showFiles) });
     list.push({ id: "act:toggle-db", title: showDb ? "Hide database panel" : "Show database panel", group: "action", icon: "\u{1F5C4}", action: () => (showDb = !showDb) });
     list.push({ id: "act:ports", title: "Show listening ports", group: "action", icon: "\u26a1", action: () => (portsOpen = true) });
+    list.push({ id: "act:scrollback", title: "Search all terminals (scrollback)", hint: "\u21e7\u2318F", group: "action", icon: "\u{1F50E}", action: () => (scrollbackOpen = true) });
+    list.push({ id: "act:zoom", title: zoomed ? "Unzoom pane" : "Zoom active pane", hint: "\u2318\u2325Z", group: "action", icon: "\u26f6", action: () => { if (activeTab?.kind === "term") zoomed = !zoomed; } });
     list.push({ id: "act:toggle-hidden", title: showHidden ? "Hide node_modules/.git in tree" : "Show all files in tree", group: "action", icon: "\u{1F441}", action: () => (showHidden = !showHidden) });
     list.push({ id: "act:toggle-theme", title: theme === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "action", icon: theme === "dark" ? "\u2600" : "\u263D", action: () => (theme = theme === "dark" ? "light" : "dark") });
     list.push({ id: "act:toggle-notify", title: notifyOnFinish ? "Disable finished-command notifications" : "Notify when a background command finishes", group: "action", icon: "\u{1F514}", action: () => { notifyOnFinish = !notifyOnFinish; if (notifyOnFinish) ensureNotifyPermission(); } });
@@ -993,9 +1063,24 @@
       return;
     }
 
+    // Pane navigation (⌘⌥Arrow) and zoom (⌘⌥Z).
+    if (e.altKey && k.startsWith("arrow")) {
+      e.preventDefault();
+      navigatePane(k.slice(5));
+      return;
+    }
+    if (e.altKey && k === "z") {
+      e.preventDefault();
+      if (activeTab?.kind === "term") zoomed = !zoomed;
+      return;
+    }
+
     if (k === "k") {
       e.preventDefault();
       paletteOpen = !paletteOpen;
+    } else if (k === "f" && e.shiftKey) {
+      e.preventDefault();
+      scrollbackOpen = true;
     } else if (k === "d") {
       e.preventDefault();
       if (activeTermId) splitPane(activeTermId, e.shiftKey ? "col" : "row");
@@ -1374,10 +1459,12 @@
               <div
                 class="pane"
                 class:active={leaf.termId === activeTermId && tab.id === activeTabId}
-                style:left="{leaf.rect.x}%"
-                style:top="{leaf.rect.y}%"
-                style:width="{leaf.rect.w}%"
-                style:height="{leaf.rect.h}%"
+                style:left="{zoomed && tab.id === activeTabId ? 0 : leaf.rect.x}%"
+                style:top="{zoomed && tab.id === activeTabId ? 0 : leaf.rect.y}%"
+                style:width="{zoomed && tab.id === activeTabId ? 100 : leaf.rect.w}%"
+                style:height="{zoomed && tab.id === activeTabId ? 100 : leaf.rect.h}%"
+                style:display={zoomed && tab.id === activeTabId && leaf.termId !== activeTermId ? "none" : null}
+                style:z-index={zoomed && leaf.termId === activeTermId ? 5 : null}
                 role="presentation"
                 onpointerdown={() => (activeTermId = leaf.termId)}
               >
@@ -1389,10 +1476,11 @@
                   <button title="Split down (⇧⌘D)" onclick={() => splitPane(leaf.termId, "col")}>▤</button>
                   <button title="Close pane (⌘W)" onclick={() => closePane(leaf.termId)}>×</button>
                 </div>
-                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} persistKey={leaf.key} runCommand={leaf.runOnce ?? null} onactivity={() => markActivity(tab.id)} onuserinput={onPaneInput} />
+                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} persistKey={leaf.key} runCommand={leaf.runOnce ?? null} active={leaf.termId === activeTermId && tab.id === activeTabId} register={registerTerm} unregister={unregisterTerm} onactivity={() => markActivity(tab.id)} onuserinput={onPaneInput} />
               </div>
             {/each}
 
+            {#if !(zoomed && tab.id === activeTabId)}
             {#each g.dividers as d (d.id)}
               {#if d.dir === "row"}
                 <div class="divider row" style:left="{d.pos}%" style:top="{d.rect.y}%" style:height="{d.rect.h}%" role="separator" aria-orientation="vertical" onpointerdown={(e) => startDrag(e, d)}></div>
@@ -1400,6 +1488,7 @@
                 <div class="divider col" style:top="{d.pos}%" style:left="{d.rect.x}%" style:width="{d.rect.w}%" role="separator" aria-orientation="horizontal" onpointerdown={(e) => startDrag(e, d)}></div>
               {/if}
             {/each}
+            {/if}
           </div>
           {/if}
         {/each}
@@ -1448,6 +1537,7 @@
 
   <CommandPalette open={paletteOpen} {commands} onclose={() => (paletteOpen = false)} />
   <PortsModal open={portsOpen} onclose={() => (portsOpen = false)} />
+  <ScrollbackSearch open={scrollbackOpen} onsearch={searchScrollback} onjump={jumpToMatch} onclose={() => (scrollbackOpen = false)} />
 
   <ContextMenu
     open={ctx.open}
