@@ -34,8 +34,28 @@ export CI=true
 echo "==> Building signed release"
 pnpm tauri build "$@"
 
+# ── Notarize + staple the DMG (Developer ID) ───────────────────────────────
+# Requires a notarytool keychain profile. Create once with:
+#   xcrun notarytool store-credentials "$NOTARY_PROFILE" \
+#     --apple-id <id> --team-id <team> --password <app-specific-password>
+NOTARY_PROFILE="${NOTARY_PROFILE:-elyra-notary}"
+DMG="$(ls -t src-tauri/target/release/bundle/dmg/*.dmg 2>/dev/null | head -1 || true)"
+
+if [ -n "$DMG" ] && xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+  echo "==> Notarizing $(basename "$DMG")"
+  xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
+  echo "==> Stapling notarization ticket"
+  xcrun stapler staple "$DMG"
+  echo "==> Gatekeeper assessment"
+  spctl -a -t open --context context:primary-signature -vv "$DMG" 2>&1 || true
+else
+  echo "!! Skipping notarization (no '$NOTARY_PROFILE' keychain profile, or no DMG)."
+  echo "   The DMG is Developer-ID signed but NOT notarized; downloads will warn."
+fi
+
 echo "==> Generating latest.json"
 node scripts/make-latest-json.mjs
 
 echo
 echo "Done. Artifacts in src-tauri/target/release/bundle/ and latest.json"
+if [ -n "$DMG" ]; then echo "DMG: $DMG"; fi

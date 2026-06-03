@@ -82,13 +82,16 @@ pnpm tauri signer generate -w ~/.tauri/elyra-conductor.key
 - Current target is **Apple Silicon (`darwin-aarch64`)**. To support Intel or a
   universal binary, build for that target and add the matching entry under
   `platforms` in `latest.json` (e.g. `darwin-x86_64` or `darwin-universal`).
-- The app is **ad-hoc code-signed** (`bundle.macOS.signingIdentity = "-"`), which is
-  required: without it the bundle carries only the linker's signature, fails `codesign`
-  validation, and a downloaded (quarantined) copy is rejected by Gatekeeper as
-  *“damaged”*. Do **not** remove that setting.
-- Releases are still **not Apple-notarized** (no Developer ID), so a freshly downloaded
-  copy needs one of, on first launch:
-  - right-click the app → **Open**, then confirm, or
-  - `xattr -dr com.apple.quarantine "/Applications/Elyra Conductor.app"`.
-  The in-app **auto-updater** is unaffected (its payload isn't quarantined and is verified
-  by the Tauri update signature).
+- The app is **Developer ID code-signed and Apple-notarized**. Signing identity:
+  `Developer ID Application: GETS AS (7G383N3VY7)` (set in
+  `bundle.macOS.signingIdentity`). `release-build.sh` notarizes the DMG via
+  `xcrun notarytool` (keychain profile **`elyra-notary`**) and staples the ticket, so
+  downloads open with no Gatekeeper warning.
+- One-time notarytool setup on a build machine:
+  ```bash
+  xcrun notarytool store-credentials "elyra-notary" \
+    --apple-id <id> --team-id 7G383N3VY7 --password <app-specific-password>
+  ```
+  The Developer ID signing key must be in the login keychain (a `.p12` with the private
+  key). If the keychain profile is missing, the script still builds and signs but skips
+  notarization (and prints a warning).

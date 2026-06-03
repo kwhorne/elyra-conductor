@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] — 2026-06-03
+
+### Changed
+
+- **The macOS app is now Developer ID signed and Apple-notarized.** Downloads open
+  normally — no more “damaged” or “unidentified developer” warnings, and no quarantine
+  workaround needed.
+- **Bundle identifier is now `com.gets.elyra-conductor`** (GETS AS, Team `7G383N3VY7`).
+  macOS treats this as a fresh app, so locally saved window state starts clean once.
+
 ## [0.4.4] — 2026-06-03
 
 ### Added
@@ -364,7 +374,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.1...v0.4.2
