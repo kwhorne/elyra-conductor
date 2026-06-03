@@ -8,6 +8,7 @@
   import RunbookPanel from "./lib/RunbookPanel.svelte";
   import DBPanel from "./lib/DBPanel.svelte";
   import DBView from "./lib/DBView.svelte";
+  import PortsModal from "./lib/PortsModal.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
   import FileExplorer from "./lib/FileExplorer.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -287,7 +288,7 @@
     const dur = secs < 60 ? `${secs}s` : `${Math.round(secs / 60)}m`;
     const where = tab.title || baseOf(tab.projectPath || "");
     try {
-      sendNotification({ title: `\u2713 ${proc} finished`, body: `${where} \u00b7 ran ${dur}` });
+      sendNotification({ title: `\u2713 ${proc} finished`, body: `${where} \u00b7 ran ${dur}`, sound: "default" });
     } catch {}
   }
 
@@ -447,6 +448,17 @@
   function focusTab(t) {
     activeTabId = t.id;
     activeTermId = t.kind === "term" ? firstLeaf(t.root).termId : null;
+  }
+
+  let portsOpen = $state(false);
+
+  // A stable accent colour per project (derived from its path), so you can tell
+  // at a glance which project a tab belongs to.
+  function projectColor(path) {
+    if (!path) return "transparent";
+    let h = 0;
+    for (let i = 0; i < path.length; i++) h = (h * 31 + path.charCodeAt(i)) >>> 0;
+    return `hsl(${h % 360} 60% 60%)`;
   }
 
   // ---------- database browser (multiple connections per project) ----------
@@ -935,6 +947,7 @@
     list.push({ id: "act:toggle-editor", title: showEditor ? "Hide editor" : "Show editor", group: "action", icon: "\u270E", action: () => (showEditor = !showEditor) });
     list.push({ id: "act:toggle-files", title: showFiles ? "Hide file sidebar" : "Show file sidebar", hint: "\u2318B", group: "action", icon: "\u{1F5C2}", action: () => (showFiles = !showFiles) });
     list.push({ id: "act:toggle-db", title: showDb ? "Hide database panel" : "Show database panel", group: "action", icon: "\u{1F5C4}", action: () => (showDb = !showDb) });
+    list.push({ id: "act:ports", title: "Show listening ports", group: "action", icon: "\u26a1", action: () => (portsOpen = true) });
     list.push({ id: "act:toggle-hidden", title: showHidden ? "Hide node_modules/.git in tree" : "Show all files in tree", group: "action", icon: "\u{1F441}", action: () => (showHidden = !showHidden) });
     list.push({ id: "act:toggle-theme", title: theme === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "action", icon: theme === "dark" ? "\u2600" : "\u263D", action: () => (theme = theme === "dark" ? "light" : "dark") });
     list.push({ id: "act:toggle-notify", title: notifyOnFinish ? "Disable finished-command notifications" : "Notify when a background command finishes", group: "action", icon: "\u{1F514}", action: () => { notifyOnFinish = !notifyOnFinish; if (notifyOnFinish) ensureNotifyPermission(); } });
@@ -1277,6 +1290,7 @@
             class:drop-left={dragOver === i}
             class:drop-right={dragOver === tabs.length && i === tabs.length - 1}
             class:dragging={tabDrag && tabDrag.moved && tabDrag.fromIndex === i}
+            style:border-left-color={projectColor(t.projectPath)}
             onpointerdown={(e) => tabPointerDown(e, i)}
           >
             {#if proc}<span class="run-dot" title={`Running ${proc}`}></span>{:else if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
@@ -1307,6 +1321,7 @@
         <button class:on={showEditor} onclick={() => (showEditor = !showEditor)}>{showEditor ? "Hide editor" : "Show editor"}</button>
         <button class:on={showFiles} title="Toggle file sidebar (⌘B)" onclick={() => (showFiles = !showFiles)}>Files</button>
         <button class:on={showDb} title="Toggle database panel" onclick={() => (showDb = !showDb)}>DB</button>
+        <button title="Listening ports" onclick={() => (portsOpen = true)}>⚡ Ports</button>
         <button class:on={broadcast} title="Broadcast input to all panes in this tab" onclick={() => (broadcast = !broadcast)}>⌁ Sync</button>
         <button title="Toggle theme" onclick={() => (theme = theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀" : "☽"}</button>
         <button title="Keyboard shortcuts (⌘/)" onclick={() => (helpOpen = true)}>?</button>
@@ -1432,6 +1447,7 @@
   </div>
 
   <CommandPalette open={paletteOpen} {commands} onclose={() => (paletteOpen = false)} />
+  <PortsModal open={portsOpen} onclose={() => (portsOpen = false)} />
 
   <ContextMenu
     open={ctx.open}
@@ -1494,7 +1510,7 @@
     padding: 0 8px; gap: 8px;
   }
   .tabs { display: flex; align-items: center; gap: 4px; overflow-x: auto; flex: 1; }
-  .tab { display: flex; align-items: center; background: var(--bg-3); border: 1px solid transparent; border-radius: 6px; padding: 0 2px 0 4px; }
+  .tab { display: flex; align-items: center; background: var(--bg-3); border: 1px solid transparent; border-left-width: 3px; border-radius: 6px; padding: 0 2px 0 4px; }
   .tab.active { border-color: var(--accent); }
   .tab.ring { border-color: var(--green); }
   .tab.drop-left { box-shadow: inset 2px 0 0 0 var(--accent); }

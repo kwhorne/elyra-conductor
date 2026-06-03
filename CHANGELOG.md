@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6] — 2026-06-03
+
+### Added
+
+- **Port dashboard** — a **⚡ Ports** button (and command palette entry) lists the local
+  TCP ports currently listening, with their process and PID. Click a port to open
+  `http://localhost:<port>`, or stop the process (SIGTERM). Refreshes live while open.
+- **Per-project accent colour** — each tab gets a stable colour (derived from the
+  project path) on its left edge, so you can tell at a glance which project a tab
+  belongs to.
+- **Sound on finished-command notifications** — the native notification when a
+  background command completes now plays the default sound.
+
 ## [0.4.5] — 2026-06-03
 
 ### Changed
@@ -374,7 +387,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.2...v0.4.3

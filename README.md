@@ -57,9 +57,14 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
 - 🔔 **Notification rings** — a tab pulses green when a background terminal
   produces output, and clears when you switch to it. Tabs stay alive in the
   background, so nothing is lost when you switch.
-- ✓ **Finished-command notifications** — get a native notification when a long-running
-  command in a background tab completes (build/test/deploy done) while you're elsewhere.
-  Toggleable; only fires for commands ≥ 8s and never for the tab you're watching.
+- ✓ **Finished-command notifications** — get a native notification (with sound) when a
+  long-running command in a background tab completes (build/test/deploy done) while
+  you're elsewhere. Toggleable; only fires for commands ≥ 8s and never for the tab you're
+  watching.
+- ⚡ **Port dashboard** — see which local ports are listening (with process & PID); click
+  to open `http://localhost:<port>` or stop the process.
+- 🎨 **Per-project tab colour** — each tab is tinted by its project so you always know
+  which project you're looking at.
 - 🔎 **Terminal search** — `⌘F` opens an in-terminal find bar (↵ / ⇧↵ to step).
 - 🌓 **Light / dark theme** — toggle in the toolbar or palette; persisted.
 - ↔️ **Drag-to-reorder tabs** — drag a tab sideways to rearrange; jump straight to any

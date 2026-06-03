@@ -311,3 +311,63 @@ pub fn open_in_editor(editor: String, path: String) -> Result<(), String> {
 
     Ok(())
 }
+
+// ── Port dashboard ──────────────────────────────────────────────
+#[derive(Serialize)]
+pub struct PortInfo {
+    port: u16,
+    pid: u32,
+    process: String,
+    addr: String,
+}
+
+/// List local TCP ports in LISTEN state (via `lsof`), one entry per port.
+#[tauri::command]
+pub fn list_ports() -> Vec<PortInfo> {
+    use std::collections::HashMap;
+    let mut map: HashMap<u16, PortInfo> = HashMap::new();
+    let out = std::process::Command::new("lsof")
+        .args(["-nP", "-iTCP", "-sTCP:LISTEN"])
+        .output();
+    if let Ok(o) = out {
+        let text = String::from_utf8_lossy(&o.stdout);
+        for line in text.lines().skip(1) {
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            if cols.len() < 9 {
+                continue;
+            }
+            let process = cols[0].to_string();
+            let pid: u32 = cols[1].parse().unwrap_or(0);
+            let name = cols[8]; // e.g. 127.0.0.1:5173, *:8080, [::1]:3000
+            if let Some(idx) = name.rfind(':') {
+                if let Ok(port) = name[idx + 1..].parse::<u16>() {
+                    let addr = name[..idx].to_string();
+                    map.entry(port).or_insert(PortInfo { port, pid, process, addr });
+                }
+            }
+        }
+    }
+    let mut v: Vec<PortInfo> = map.into_values().collect();
+    v.sort_by_key(|p| p.port);
+    v
+}
+
+/// Send SIGTERM to a process (used by the port dashboard to stop a dev server).
+#[tauri::command]
+pub fn kill_process(pid: u32) -> Result<(), String> {
+    std::process::Command::new("kill")
+        .arg(pid.to_string())
+        .status()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Open a URL in the default browser.
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg(&url)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
