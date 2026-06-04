@@ -64,6 +64,13 @@ Obsidian-style links open a file in the inline Monaco editor:
 
 Relative paths resolve against the **project root**. Links are shown with a 📄 marker.
 
+### 🤖 Send to Elyra
+
+When the [Elyra](elyra-agent.md) CLI is installed, each shell block also shows a **🤖
+Elyra** button. It opens an agent panel with the snippet pre-filled in the composer, so
+you can add a question ("what does this do?", "make this safer", …) and send. Conductor
+just hands Elyra the text — the reasoning happens in Elyra.
+
 ### `[[task:name]]` — run a discovered task
 
 Run a project task (from `package.json`, `composer.json`, `Makefile`, or `justfile`) as a

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-06-04
+
+A milestone release that caps a long run of features — runbooks, a universal
+project runner, finished-command notifications, a full multi-engine database
+browser, Developer ID signing + notarization, a port dashboard, global scrollback
+search, pane navigation/zoom, and per-project health.
+
+### Added
+
+- **Send to Elyra from runbooks** — each shell block in a runbook gets a **🤖 Elyra**
+  button (when the Elyra CLI is installed) that opens an agent panel with the snippet
+  pre-filled in the composer, so you can add your question and send. Runbooks are now
+  runnable, linkable *and* askable. Pure delegation — Conductor only hands Elyra text.
+
+### Internal
+
+- Code-quality pass: `cargo fmt` + a clean `cargo clippy`, and fire-and-forget IPC calls
+  are guarded. No behavioural change.
+
 ## [0.4.9] — 2026-06-04
 
 ### Added (database browser)
@@ -419,7 +438,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.9...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.9...v0.5.0
 [0.4.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.6...v0.4.7
