@@ -13,6 +13,7 @@
   import CommandPalette from "./lib/CommandPalette.svelte";
   import FileExplorer from "./lib/FileExplorer.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
+  import InputDialog from "./lib/InputDialog.svelte";
   import RunModal from "./lib/RunModal.svelte";
   import CommitDialog from "./lib/CommitDialog.svelte";
   import ShortcutsModal from "./lib/ShortcutsModal.svelte";
@@ -164,6 +165,63 @@
   let runModal = $state({ open: false, cwd: "", command: "", title: "" });
   let commit = $state({ open: false, path: "", name: "" });
 
+  // ---------- file operations (rename/new/duplicate/delete) ----------
+  // A counter the file tree watches; bump it to force a reload after any change.
+  let fileRefresh = $state(0);
+  let fileDlg = $state({
+    open: false, title: "", message: "", input: false, value: "",
+    placeholder: "", confirmLabel: "OK", danger: false, onconfirm: null,
+  });
+  function closeFileDlg() { fileDlg = { ...fileDlg, open: false }; }
+  function alertMsg(title, message) {
+    fileDlg = { open: true, title, message, input: false, value: "", placeholder: "",
+      confirmLabel: "OK", danger: false, onconfirm: null };
+  }
+  async function fileOp(promise) {
+    try { await promise; fileRefresh++; }
+    catch (e) { alertMsg("Couldn't complete that", String(e)); }
+  }
+  function renameEntry(e) {
+    fileDlg = {
+      open: true, title: "Rename", message: e.path, input: true, value: baseOf(e.path),
+      placeholder: "New name", confirmLabel: "Rename", danger: false,
+      onconfirm: (name) => fileOp(invoke("rename_path", { from: e.path, to: dirOf(e.path) + "/" + name })),
+    };
+  }
+  function newFileIn(dir) {
+    fileDlg = {
+      open: true, title: "New file", message: dir, input: true, value: "",
+      placeholder: "filename.ext", confirmLabel: "Create", danger: false,
+      onconfirm: (name) => fileOp(invoke("create_file", { path: dir + "/" + name }).then(() => openFile(dir + "/" + name))),
+    };
+  }
+  function newFolderIn(dir) {
+    fileDlg = {
+      open: true, title: "New folder", message: dir, input: true, value: "",
+      placeholder: "folder name", confirmLabel: "Create", danger: false,
+      onconfirm: (name) => fileOp(invoke("create_folder", { path: dir + "/" + name })),
+    };
+  }
+  function duplicateEntry(e) {
+    const name = baseOf(e.path);
+    const dot = name.lastIndexOf(".");
+    const dup = dot > 0 ? `${name.slice(0, dot)} copy${name.slice(dot)}` : `${name} copy`;
+    fileDlg = {
+      open: true, title: "Duplicate", message: e.path, input: true, value: dup,
+      placeholder: "New name", confirmLabel: "Duplicate", danger: false,
+      onconfirm: (n) => fileOp(invoke("copy_path", { from: e.path, to: dirOf(e.path) + "/" + n })),
+    };
+  }
+  function deleteEntry(e) {
+    fileDlg = {
+      open: true, title: "Move to Trash", message: `“${baseOf(e.path)}” will be moved to the Trash.`,
+      input: false, value: "", placeholder: "", confirmLabel: "Move to Trash", danger: true,
+      onconfirm: () => fileOp(invoke("trash_path", { path: e.path })),
+    };
+  }
+  function revealEntry(e) { invoke("reveal_path", { path: e.path }).catch(() => {}); }
+  function copyEntryPath(e) { navigator.clipboard?.writeText(e.path).catch(() => {}); }
+
   function openCommit() {
     const p = activeProject ?? projects.find((x) => x.path === activeTab?.projectPath);
     if (!p) return;
@@ -236,6 +294,17 @@
       ];
       if (elyraVersion)
         items.push({ label: "New Elyra agent here", icon: "\u{1F916}", action: () => newElyraAgent(e.path, baseOf(e.path)) });
+      items.push(
+        { separator: true },
+        { label: "New file\u2026", icon: "\u{1F4C4}", action: () => newFileIn(e.path) },
+        { label: "New folder\u2026", icon: "\u{1F4C1}", action: () => newFolderIn(e.path) },
+        { label: "Rename\u2026", icon: "\u270E", action: () => renameEntry(e) },
+        { label: "Duplicate\u2026", icon: "\u29C9", action: () => duplicateEntry(e) },
+        { separator: true },
+        { label: "Reveal in Finder", icon: "\u{1F50D}", action: () => revealEntry(e) },
+        { label: "Copy path", icon: "\u{1F4CB}", action: () => copyEntryPath(e) },
+        { label: "Move to Trash", icon: "\u{1F5D1}", danger: true, action: () => deleteEntry(e) },
+      );
       return items;
     }
     const items = [
@@ -247,7 +316,13 @@
       { separator: true },
       { label: `Run ${baseOf(e.path)} in a terminal tab`, icon: "\u25B6", action: () => runFileInTab(e) },
       { label: `Run ${baseOf(e.path)}\u2026 (modal)`, icon: "\u25B7", action: () => runInModal(e) },
-      { label: `Run in ${terminalName}`, icon: "\u{1F680}", action: () => runExternal(e) }
+      { label: `Run in ${terminalName}`, icon: "\u{1F680}", action: () => runExternal(e) },
+      { separator: true },
+      { label: "Rename\u2026", icon: "\u270E", action: () => renameEntry(e) },
+      { label: "Duplicate\u2026", icon: "\u29C9", action: () => duplicateEntry(e) },
+      { label: "Reveal in Finder", icon: "\u{1F50D}", action: () => revealEntry(e) },
+      { label: "Copy path", icon: "\u{1F4CB}", action: () => copyEntryPath(e) },
+      { label: "Move to Trash", icon: "\u{1F5D1}", danger: true, action: () => deleteEntry(e) }
     );
     return items;
   });
@@ -1559,6 +1634,7 @@
           activePath={editorPath}
           showAll={showHidden}
           ontoggleall={() => (showHidden = !showHidden)}
+          refreshKey={fileRefresh}
         />
       {/if}
 
@@ -1593,6 +1669,19 @@
     y={ctx.y}
     items={ctxItems}
     onclose={() => (ctx = { ...ctx, open: false })}
+  />
+
+  <InputDialog
+    open={fileDlg.open}
+    title={fileDlg.title}
+    message={fileDlg.message}
+    input={fileDlg.input}
+    value={fileDlg.value}
+    placeholder={fileDlg.placeholder}
+    confirmLabel={fileDlg.confirmLabel}
+    danger={fileDlg.danger}
+    onconfirm={fileDlg.onconfirm}
+    onclose={closeFileDlg}
   />
 
   <ContextMenu

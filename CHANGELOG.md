@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-06-04
+
+### Added (file explorer)
+
+- **File operations** in the right-click menu: **Rename**, **Duplicate**, **New file**,
+  **New folder**, **Reveal in Finder**, **Copy path**, and **Move to Trash**.
+- Delete moves items to the **macOS Trash** (recoverable), never a permanent wipe.
+- The tree refreshes automatically after a change — including inside expanded subfolders.
+  New files open straight in the editor.
+
 ## [0.5.0] — 2026-06-04
 
 A milestone release that caps a long run of features — runbooks, a universal
@@ -438,7 +448,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.9...v0.5.0
 [0.4.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.7...v0.4.8

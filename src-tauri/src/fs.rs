@@ -95,6 +95,84 @@ pub fn write_bytes(path: String, bytes: Vec<u8>) -> Result<(), String> {
     std::fs::write(&path, bytes).map_err(|e| format!("{path}: {e}"))
 }
 
+/// Create a new, empty file. Fails if a file or folder already exists there, so
+/// we never silently clobber.
+#[tauri::command]
+pub fn create_file(path: String) -> Result<(), String> {
+    if Path::new(&path).exists() {
+        return Err(format!("{path} already exists"));
+    }
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map(|_| ())
+        .map_err(|e| format!("{path}: {e}"))
+}
+
+/// Create a new directory (including parents). Fails if it already exists.
+#[tauri::command]
+pub fn create_folder(path: String) -> Result<(), String> {
+    if Path::new(&path).exists() {
+        return Err(format!("{path} already exists"));
+    }
+    std::fs::create_dir_all(&path).map_err(|e| format!("{path}: {e}"))
+}
+
+/// Rename (or move) a path. Refuses to overwrite an existing destination.
+#[tauri::command]
+pub fn rename_path(from: String, to: String) -> Result<(), String> {
+    if from == to {
+        return Ok(());
+    }
+    if Path::new(&to).exists() {
+        return Err(format!("{to} already exists"));
+    }
+    std::fs::rename(&from, &to).map_err(|e| format!("{e}"))
+}
+
+/// Recursively copy a file or directory to a new path. Refuses to overwrite.
+#[tauri::command]
+pub fn copy_path(from: String, to: String) -> Result<(), String> {
+    if Path::new(&to).exists() {
+        return Err(format!("{to} already exists"));
+    }
+    copy_recursive(Path::new(&from), Path::new(&to)).map_err(|e| format!("{e}"))
+}
+
+fn copy_recursive(from: &Path, to: &Path) -> std::io::Result<()> {
+    if from.is_dir() {
+        std::fs::create_dir_all(to)?;
+        for entry in std::fs::read_dir(from)? {
+            let entry = entry?;
+            copy_recursive(&entry.path(), &to.join(entry.file_name()))?;
+        }
+        Ok(())
+    } else {
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(from, to).map(|_| ())
+    }
+}
+
+/// Move a path to the OS trash (recoverable) rather than deleting permanently.
+#[tauri::command]
+pub fn trash_path(path: String) -> Result<(), String> {
+    trash::delete(&path).map_err(|e| format!("{e}"))
+}
+
+/// Reveal a path in Finder (selects the item).
+#[tauri::command]
+pub fn reveal_path(path: String) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(&path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("{e}"))
+}
+
 /// List markdown runbooks for a project, stored under `<project>/.conductor/notes`.
 /// Creates the directory if it does not exist so the first save always works.
 #[tauri::command]

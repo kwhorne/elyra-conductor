@@ -22,6 +22,11 @@ Right-clicking an entry opens a context menu:
 - **Open new terminal here** — a terminal tab rooted at that folder.
 - **New Elyra agent here** — _(when the Elyra CLI is detected)_ an agent panel in that
   folder.
+- **New file… / New folder…** — create an entry inside that folder (new files open in the
+  editor straight away).
+- **Rename… / Duplicate…** — rename or copy the folder (refuses to overwrite).
+- **Reveal in Finder / Copy path** — jump to it in Finder, or copy its absolute path.
+- **Move to Trash** — move it to the macOS Trash (recoverable, never a permanent wipe).
 
 **On a file**
 
@@ -39,6 +44,11 @@ Right-clicking an entry opens a context menu:
   exit keeps the modal open** with the output visible so you can read the error.
 - **Run in `<terminal>`** — run it in your external terminal (iTerm2 / Terminal.app),
   via `detect_terminal` / `run_in_external_terminal`.
+- **Rename… / Duplicate…** — rename or copy the file (refuses to overwrite).
+- **Reveal in Finder / Copy path** — jump to it in Finder, or copy its absolute path.
+- **Move to Trash** — move it to the macOS Trash (recoverable).
+
+The tree refreshes automatically after any change, including inside expanded subfolders.
 
 ## Inline quick-edit (Monaco)
 

@@ -30,7 +30,7 @@
         {#if it.separator}
           <div class="sep"></div>
         {:else}
-          <button class="item" disabled={it.disabled} onclick={() => choose(it)}>
+          <button class="item" class:danger={it.danger} disabled={it.disabled} onclick={() => choose(it)}>
             {#if it.icon}<span class="ico">{it.icon}</span>{/if}
             <span class="label">{it.label}</span>
           </button>
@@ -70,6 +70,12 @@
   }
   .item:hover:not(:disabled) {
     background: var(--accent-2);
+  }
+  .item.danger {
+    color: #e06c5a;
+  }
+  .item.danger:hover:not(:disabled) {
+    background: rgba(192, 57, 43, 0.18);
   }
   .item:disabled {
     color: var(--text-dim);

@@ -2,12 +2,27 @@
   import { invoke } from "@tauri-apps/api/core";
   import Self from "./FileTree.svelte";
   import { filterEntries } from "./fileFilter.js";
+  import { untrack } from "svelte";
 
-  let { entry, onopen, oncontext, activePath = null, depth = 0, showAll = false } = $props();
+  let { entry, onopen, oncontext, activePath = null, depth = 0, showAll = false, refreshKey = 0 } = $props();
 
   let expanded = $state(false);
   let children = $state(null); // null = not loaded yet
   let loading = $state(false);
+
+  // When the parent bumps refreshKey, re-fetch this folder's children if we've
+  // already loaded them (so renames/deletes inside it show up).
+  let lastRefresh = 0;
+  $effect(() => {
+    if (refreshKey !== lastRefresh) {
+      lastRefresh = refreshKey;
+      untrack(() => {
+        if (expanded && children !== null) {
+          invoke("list_dir", { path: entry.path }).then((c) => (children = c)).catch(() => {});
+        }
+      });
+    }
+  });
 
   let visibleChildren = $derived(children ? filterEntries(children, showAll) : []);
 
@@ -52,7 +67,7 @@
 
 {#if expanded && children}
   {#each visibleChildren as c (c.path)}
-    <Self entry={c} {onopen} {oncontext} {activePath} {showAll} depth={depth + 1} />
+    <Self entry={c} {onopen} {oncontext} {activePath} {showAll} {refreshKey} depth={depth + 1} />
   {/each}
 {/if}
 

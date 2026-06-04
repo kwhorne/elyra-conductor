@@ -3,7 +3,7 @@
   import FileTree from "./FileTree.svelte";
   import { filterEntries } from "./fileFilter.js";
 
-  let { root, onopen, oncontext, activePath = null, showAll = false, ontoggleall } = $props();
+  let { root, onopen, oncontext, activePath = null, showAll = false, ontoggleall, refreshKey = 0 } = $props();
 
   let visible = $derived(filterEntries(entries, showAll));
 
@@ -25,6 +25,15 @@
   // (Re)load when the root folder changes.
   $effect(() => {
     if (root && root !== loadedRoot) load(root);
+  });
+
+  // Reload the top level whenever the parent bumps refreshKey (after a file op).
+  let lastRefresh = 0;
+  $effect(() => {
+    if (refreshKey !== lastRefresh) {
+      lastRefresh = refreshKey;
+      if (root) load(root);
+    }
   });
 
   function refresh() {
@@ -56,7 +65,7 @@
       <div class="empty">Empty folder</div>
     {:else}
       {#each visible as e (e.path)}
-        <FileTree entry={e} {onopen} {oncontext} {activePath} {showAll} depth={0} />
+        <FileTree entry={e} {onopen} {oncontext} {activePath} {showAll} {refreshKey} depth={0} />
       {/each}
     {/if}
   </div>
