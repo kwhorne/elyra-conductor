@@ -1670,6 +1670,8 @@
                 projectPath={tab.projectPath}
                 {theme}
                 ontitle={(t) => (tab.title = t)}
+                elyra={!!elyraVersion}
+                onelyra={(text) => sendToElyra(tab.projectPath ?? activeProject?.path ?? root, text)}
               />
             </div>
           {:else if tab.kind === "runbook"}

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-06-04
+
+### Added
+
+- **DB → Elyra bridge** — the database browser can hand structured context to an Elyra
+  agent (text only). A **🤖 Elyra** button on a result/query sends the columns and first
+  rows (and the SQL, in query mode); **Structure** sends the schema; and a per-row 🤖
+  (on hover) sends a single row as a `column | value` table. The snippet is pre-filled in
+  the agent so you add your question — “explain this row”, “write a migration”, “optimise
+  this query”. Conductor only formats and sends text; Elyra reasons.
+
 ## [0.6.1] — 2026-06-04
 
 ### Added
@@ -497,7 +508,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.0...v0.5.1

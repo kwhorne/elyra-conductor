@@ -10,6 +10,8 @@
     table = null,
     projectPath = null,
     ontitle = null,
+    onelyra = null,
+    elyra = false,
     theme = "dark",
   } = $props();
 
@@ -190,6 +192,46 @@
     } catch {
       meta = [];
     }
+  }
+
+  // ----- DB → Elyra bridge: hand structured context to an agent (text only) -----
+  function elyraCell(v) {
+    return v === null ? "NULL" : String(v).replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+  }
+  function elyraMdTable(cols, rws) {
+    const head = `| ${cols.join(" | ")} |`;
+    const sep = `| ${cols.map(() => "---").join(" | ")} |`;
+    const body = rws.map((r) => `| ${r.map(elyraCell).join(" | ")} |`).join("\n");
+    return `${head}\n${sep}\n${body}`;
+  }
+  function askResult() {
+    if (!columns.length) return;
+    const sample = rows.slice(0, 20);
+    let ctx = `Here is a result from my ${engine} database`;
+    if (mode === "table" && table) ctx += ` (table \`${table}\`)`;
+    ctx += `:\n\n${elyraMdTable(columns, sample)}`;
+    if (rows.length > sample.length || truncated)
+      ctx += `\n\n(showing ${sample.length} of ${rows.length}${truncated ? "+" : ""} rows)`;
+    if (mode === "query" && sql.trim())
+      ctx = `Query:\n\`\`\`sql\n${sql.trim()}\n\`\`\`\n\n${ctx}`;
+    onelyra?.(ctx);
+  }
+  function askRow(ri) {
+    const r = rows[ri];
+    if (!r) return;
+    const lines = columns.map((c, i) => `| ${c} | ${elyraCell(r[i])} |`).join("\n");
+    onelyra?.(
+      `Explain this row from \`${table || "the query"}\` (${engine}):\n\n| column | value |\n| --- | --- |\n${lines}`
+    );
+  }
+  function askStructure() {
+    if (!meta.length) return;
+    const lines = meta
+      .map((c) => `| ${c.name} | ${c.data_type} | ${c.nullable ? "YES" : "NO"} | ${c.key || ""} |`)
+      .join("\n");
+    onelyra?.(
+      `Schema of \`${table}\` (${engine}):\n\n| column | type | nullable | key |\n| --- | --- | --- | --- |\n${lines}`
+    );
   }
 
   // ----- editable cells (table mode, requires a primary key) -----
@@ -388,6 +430,7 @@
         <button class="btn" onclick={loadTable} title="Refresh">⟳</button>
         <button class="btn" onclick={exportExcel} disabled={!columns.length || exporting} title="Export to Excel (.xlsx)">⤓ Excel</button>
         <button class="btn" onclick={exportCsv} disabled={!columns.length || exporting} title="Export to CSV">⤓ CSV</button>
+        {#if elyra}<button class="btn" onclick={askResult} disabled={!columns.length} title="Send this result to an Elyra agent">🤖 Elyra</button>{/if}
         <div class="spacer"></div>
         <div class="pager">
           <button class="btn" onclick={prevPage} disabled={page === 0}>‹</button>
@@ -395,6 +438,7 @@
           <button class="btn" onclick={nextPage} disabled={rows.length < PAGE}>›</button>
         </div>
       {:else}
+        {#if elyra}<button class="btn" onclick={askStructure} disabled={!meta.length} title="Send this schema to an Elyra agent">🤖 Elyra</button>{/if}
         <div class="spacer"></div>
         <span class="pageinfo">
           {meta.length} column{meta.length === 1 ? "" : "s"}{#if tableInfo} · {tableInfo.approximate ? "≈ " : ""}{fmtNum(tableInfo.rows) ?? "?"} rows{#if tableInfo.bytes != null} · {fmtBytes(tableInfo.bytes)}{/if}{/if}
@@ -419,6 +463,7 @@
       <div class="spacer"></div>
       <button class="btn" onclick={exportExcel} disabled={!columns.length || exporting} title="Export to Excel (.xlsx)">⤓ Excel</button>
       <button class="btn" onclick={exportCsv} disabled={!columns.length || exporting} title="Export to CSV">⤓ CSV</button>
+      {#if elyra}<button class="btn" onclick={askResult} disabled={!columns.length} title="Send this query & result to an Elyra agent">🤖 Elyra</button>{/if}
       <button class="btn primary" onclick={runQuery} disabled={loading || !sql.trim()}>▶ Run <kbd>⌘↵</kbd></button>
     {/if}
   </div>
@@ -498,7 +543,10 @@
         <tbody>
           {#each rows as row, ri (ri)}
             <tr>
-              <td class="rownum">{page * PAGE + ri + 1}</td>
+              <td class="rownum">
+                <span class="rn">{page * PAGE + ri + 1}</span>
+                {#if elyra}<button class="rowask" title="Explain this row with Elyra" onclick={() => askRow(ri)}>🤖</button>{/if}
+              </td>
               {#each row as cell, ci (ci)}
                 <td
                   class:null={cell === null}
@@ -613,6 +661,9 @@
   .grid tbody tr:nth-child(even) { background: color-mix(in srgb, var(--bg) 40%, transparent); }
   .grid tbody td { color: var(--text); cursor: default; }
   .grid td.null { color: var(--text-dim); font-style: italic; }
-  .grid .rownum { color: var(--text-dim); text-align: right; background: var(--bg-3); position: sticky; left: 0; }
+  .grid .rownum { color: var(--text-dim); text-align: right; background: var(--bg-3); position: sticky; left: 0; white-space: nowrap; }
+  .grid .rownum .rowask { border: none; background: transparent; cursor: pointer; font-size: 11px; padding: 0 2px; opacity: 0; transition: opacity 0.1s; }
+  .grid tbody tr:hover .rownum .rowask { opacity: 0.85; }
+  .grid .rownum .rowask:hover { opacity: 1; }
   .empty { padding: 24px; text-align: center; color: var(--text-dim); }
 </style>

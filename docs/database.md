@@ -101,6 +101,18 @@ Any table or query result can be exported with **⤓ Excel** (a real `.xlsx`) or
 Values are exported as text so identifiers and zip codes with leading zeros (e.g. `0484`)
 are preserved exactly.
 
+## Ask Elyra about your data
+
+When the [Elyra](elyra-agent.md) CLI is installed, a **🤖 Elyra** button appears on results.
+It hands structured context to a fresh agent (pre-filled in its composer, so you add the
+question) — Conductor only formats and sends text; the reasoning happens in Elyra:
+
+- **On a result / query** — sends the columns and first rows (and the SQL, in query mode).
+  Good for “explain this result” or “optimise this query”.
+- **Structure view** — sends the table schema. Good for “write a migration that…”.
+- **Per row** — hover a row and click the small 🤖 in the **#** column to send that single
+  row as a `column | value` table. Good for “explain this row”.
+
 ## Saved queries (private, per project)
 
 In a query tab you can **⭐ Save** the current SQL under a name and reload it later from
