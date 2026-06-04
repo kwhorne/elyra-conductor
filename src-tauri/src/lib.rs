@@ -52,6 +52,7 @@ pub fn run() {
             projects::list_ports,
             projects::kill_process,
             projects::open_url,
+            projects::list_containers,
             projects::detect_terminal,
             projects::run_in_external_terminal,
             projects::home_dir,

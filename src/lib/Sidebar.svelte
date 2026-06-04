@@ -12,6 +12,8 @@
     onagent,
     onstart,
     ports = {},
+    containers = {},
+    running = {},
     onopenport,
     elyra = false,
     root = "",
@@ -51,8 +53,18 @@
       onkeydown={(e) => e.key === "Enter" && onselect?.(p)}
     >
       <div class="row1">
+        {#if running[p.path]}
+          <span class="run-dot" title="A command is running in this project"></span>
+        {/if}
         <span class="name">{p.name}</span>
         <span class="spacer"></span>
+        {#if containers[p.path]}
+          <span
+            class="ctr"
+            class:up={containers[p.path].running > 0}
+            title={`${containers[p.path].running}/${containers[p.path].total} container(s) running`}
+          >🐳{containers[p.path].running}/{containers[p.path].total}</span>
+        {/if}
         {#if p.dirty}
           <span class="dirty" title="Uncommitted changes">●</span>
         {/if}
@@ -231,6 +243,35 @@
     color: #e0af68;
     font-size: 9px;
     line-height: 1;
+  }
+  .run-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    flex: none;
+    margin-right: 5px;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 70%, transparent);
+    animation: run-pulse 1.6s ease-out infinite;
+  }
+  @keyframes run-pulse {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 60%, transparent); }
+    70% { box-shadow: 0 0 0 5px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  .ctr {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 4px;
+    flex: none;
+  }
+  .ctr.up {
+    color: #4aa3df;
+    border-color: color-mix(in srgb, #4aa3df 50%, transparent);
+    background: color-mix(in srgb, #4aa3df 15%, transparent);
   }
   .track {
     font-size: 10px;

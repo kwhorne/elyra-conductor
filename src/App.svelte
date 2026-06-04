@@ -20,11 +20,13 @@
   import GitPanel from "./lib/GitPanel.svelte";
   import TasksModal from "./lib/TasksModal.svelte";
   import EnvModal from "./lib/EnvModal.svelte";
+  import TimelineModal from "./lib/TimelineModal.svelte";
   import ShortcutsModal from "./lib/ShortcutsModal.svelte";
   import { check as checkUpdate } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
   import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
   import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf, allLeaves } from "./lib/layout.js";
+  import { dirOf, baseOf, detectRunCommand, isIdleProc, rankDevTasks, scoreDevTask } from "./lib/util.js";
 
   let root = $state("");
   let projects = $state([]);
@@ -258,33 +260,8 @@
     gitPanel = { open: true, path: p.path, name: p.name };
   }
 
-  function dirOf(path) {
-    const i = path.lastIndexOf("/");
-    return i > 0 ? path.slice(0, i) : "/";
-  }
-  function baseOf(path) {
-    return path.split("/").pop();
-  }
-
   function onFileContext(entry, x, y) {
     ctx = { open: true, x, y, entry };
-  }
-
-  // Pick a sensible run command for a file based on its extension, so running a
-  // script doesn't fail with "permission denied" just because it lacks +x. The
-  // command is editable in the modal, so this is only a starting point.
-  const RUN_BY_EXT = {
-    sh: "bash", bash: "bash", zsh: "zsh", fish: "fish",
-    py: "python3", rb: "ruby", pl: "perl", lua: "lua", php: "php",
-    js: "node", cjs: "node", mjs: "node", ts: "npx tsx", tsx: "npx tsx",
-    go: "go run",
-  };
-  function detectRunCommand(name) {
-    const ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
-    const runner = RUN_BY_EXT[ext];
-    // Shell-quote the filename so spaces/specials are safe.
-    const q = `'${name.replace(/'/g, "'\\''")}'`;
-    return runner ? `${runner} ${q}` : `./${q}`;
   }
 
   function runInModal(entry) {
@@ -370,9 +347,37 @@
   let appFocused = true;
   let procRuns = {}; // termId -> { proc, since } for the current foreground command
   const NOTIFY_MIN_MS = 8000; // ignore commands shorter than this
-  const SHELLS = new Set(["zsh", "-zsh", "bash", "-bash", "sh", "-sh", "fish", "-fish", "nu", "pwsh", "login", "tmux"]);
-  function isIdleProc(name) {
-    return !name || SHELLS.has(name.toLowerCase());
+
+  // ---------- command timeline (flight recorder) ----------
+  // Built from the same foreground-process transitions we use for notifications:
+  // each finished command is logged with its pane, duration, and timestamps.
+  // Session-only (not persisted); newest first, capped.
+  let commandLog = $state([]);
+  let timelineOpen = $state(false);
+  function recordCommand(termId, proc, since, now) {
+    const tab = tabForTerm(termId);
+    commandLog = [
+      {
+        id: `cmd-${++idSeq}`,
+        termId,
+        tabId: tab?.id ?? null,
+        label: tab ? tab.title || baseOf(tab.projectPath || "") : "",
+        projectPath: tab?.projectPath ?? null,
+        proc,
+        startedAt: since,
+        endedAt: now,
+        duration: now - since,
+      },
+      ...commandLog,
+    ].slice(0, 200);
+  }
+  function jumpToCommand(entry) {
+    const tab = tabs.find((t) => t.id === entry.tabId);
+    if (tab) {
+      focusTab(tab);
+      if (entry.termId) activeTermId = entry.termId;
+    }
+    timelineOpen = false;
   }
   function tabForTerm(termId) {
     return tabs.find((t) => t.kind === "term" && allLeaves(t.root).some((l) => l.termId === termId));
@@ -439,7 +444,10 @@
       } else if (nowIdle && !wasIdle) {
         const run = procRuns[id];
         delete procRuns[id];
-        if (run && now - run.since >= NOTIFY_MIN_MS) notifyFinished(id, run.proc, now - run.since);
+        if (run) {
+          recordCommand(id, run.proc, run.since, now);
+          if (now - run.since >= NOTIFY_MIN_MS) notifyFinished(id, run.proc, now - run.since);
+        }
       }
     }
     titles = next;
@@ -594,6 +602,44 @@
   function openLocalPort(port) {
     invoke("open_url", { url: `http://localhost:${port}` }).catch(() => {});
   }
+
+  // ---------- per-project health: docker containers ----------
+  let projectContainers = $state({}); // projectPath -> { running, total }
+  let dockerAvailable = $state(true);
+  function refreshContainers() {
+    if (!dockerAvailable) return;
+    invoke("list_containers")
+      .then((list) => {
+        const all = [...projects, ...pinned];
+        const map = {};
+        for (const c of list) {
+          if (!c.working_dir) continue;
+          for (const proj of all) {
+            if (c.working_dir === proj.path || c.working_dir.startsWith(proj.path + "/")) {
+              const m = (map[proj.path] ??= { running: 0, total: 0 });
+              m.total++;
+              if (c.state === "running") m.running++;
+            }
+          }
+        }
+        projectContainers = map;
+      })
+      .catch(() => { dockerAvailable = false; });
+  }
+
+  // Which projects currently have a foreground command running in one of their
+  // term tabs (uses the titles we already poll).
+  let projectRunning = $derived.by(() => {
+    const map = {};
+    for (const t of tabs) {
+      if (t.kind !== "term" || !t.projectPath) continue;
+      for (const l of allLeaves(t.root)) {
+        const name = titles[l.termId];
+        if (name && !isIdleProc(name)) { map[t.projectPath] = true; break; }
+      }
+    }
+    return map;
+  });
 
   // ---------- pane navigation / zoom / global scrollback search ----------
   let zoomed = $state(false);
@@ -903,23 +949,6 @@
   }
 
   // Score a task by how likely it is the project's "start/dev" command.
-  const DEV_EXACT = { dev: 100, start: 90, serve: 80, develop: 75, "start:dev": 95, "dev:server": 85, watch: 60 };
-  function scoreDevTask(t) {
-    const l = t.label.toLowerCase();
-    if (DEV_EXACT[l]) return DEV_EXACT[l];
-    if (l.includes("dev")) return 50;
-    if (l.includes("serve")) return 45;
-    if (l.includes("start")) return 40;
-    if (l.includes("watch")) return 30;
-    return 0;
-  }
-  function rankDevTasks(tasks) {
-    return tasks
-      .map((t) => ({ t, s: scoreDevTask(t) }))
-      .filter((x) => x.s > 0)
-      .sort((a, b) => b.s - a.s)
-      .map((x) => x.t);
-  }
 
   // Quick-pick shown when several equally-likely dev commands exist (e.g. a
   // Laravel app with both `composer run dev` and `npm run dev`). The choice is
@@ -1171,6 +1200,7 @@
     list.push({ id: "act:toggle-files", title: showFiles ? "Hide file sidebar" : "Show file sidebar", hint: "\u2318B", group: "action", icon: "\u{1F5C2}", action: () => (showFiles = !showFiles) });
     list.push({ id: "act:toggle-db", title: showDb ? "Hide database panel" : "Show database panel", group: "action", icon: "\u{1F5C4}", action: () => (showDb = !showDb) });
     list.push({ id: "act:ports", title: "Show listening ports", group: "action", icon: "\u26a1", action: () => (portsOpen = true) });
+    list.push({ id: "act:timeline", title: "Command timeline", group: "action", icon: "\ud83d\udd58", action: () => (timelineOpen = true) });
     list.push({ id: "act:scrollback", title: "Search all terminals (scrollback)", hint: "\u21e7\u2318F", group: "action", icon: "\u{1F50E}", action: () => (scrollbackOpen = true) });
     list.push({ id: "act:zoom", title: zoomed ? "Unzoom pane" : "Zoom active pane", hint: "\u2318\u2325Z", group: "action", icon: "\u26f6", action: () => { if (activeTab?.kind === "term") zoomed = !zoomed; } });
     list.push({ id: "act:toggle-hidden", title: showHidden ? "Hide node_modules/.git in tree" : "Show all files in tree", group: "action", icon: "\u{1F441}", action: () => (showHidden = !showHidden) });
@@ -1483,7 +1513,7 @@
     window.addEventListener("pagehide", flushState);
     window.addEventListener("beforeunload", flushState);
     titleTimer = setInterval(pollTitles, 1800);
-    portsTimer = setInterval(() => { if (!document.hidden) refreshProjectPorts(); }, 5000);
+    portsTimer = setInterval(() => { if (!document.hidden) { refreshProjectPorts(); refreshContainers(); } }, 5000);
     ensureNotifyPermission();
     editors = await invoke("detect_editors");
     terminalName = await invoke("detect_terminal");
@@ -1512,6 +1542,7 @@
     restore();
     loadGitStatus(); // enrich pinned items resolved during restore
     refreshProjectPorts();
+    refreshContainers();
     loaded = true;
 
     // Dismiss the startup splash once the UI is ready.
@@ -1553,6 +1584,8 @@
     onpin={togglePin}
     onstart={(p) => startProject(p)}
     ports={projectPorts}
+    containers={projectContainers}
+    running={projectRunning}
     onopenport={openLocalPort}
     elyra={!!elyraVersion}
     onagent={(p) => newElyraAgent(p.path, p.name)}
@@ -1603,6 +1636,7 @@
         <button class:on={showFiles} title="Toggle file sidebar (⌘B)" onclick={() => (showFiles = !showFiles)}>Files</button>
         <button class:on={showDb} title="Toggle database panel" onclick={() => (showDb = !showDb)}>DB</button>
         <button title="Listening ports" onclick={() => (portsOpen = true)}>⚡ Ports</button>
+        <button title="Command timeline — what ran, where, how long" onclick={() => (timelineOpen = true)}>🕘 Timeline</button>
         {#if projectTasks.length}<button title="Run a project task (npm/composer/make/just)" onclick={() => (tasksOpen = true)}>☰ Tasks</button>{/if}
         {#if activeProject}<button title="View & edit .env (masked)" onclick={() => (envOpen = true)}>🔑 Env</button>{/if}
         <button class:on={broadcast} title="Broadcast input to all panes in this tab" onclick={() => (broadcast = !broadcast)}>⌁ Sync</button>
@@ -1800,6 +1834,8 @@
   <TasksModal open={tasksOpen} tasks={projectTasks} projectName={activeProject?.name ?? ""} onrun={runTask} onclose={() => (tasksOpen = false)} />
 
   <EnvModal open={envOpen} path={activeProject?.path ?? ""} projectName={activeProject?.name ?? ""} onclose={() => (envOpen = false)} />
+
+  <TimelineModal open={timelineOpen} entries={commandLog} onjump={jumpToCommand} onclear={() => (commandLog = [])} onclose={() => (timelineOpen = false)} />
 
   <CommitDialog
     open={commit.open}

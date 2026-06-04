@@ -608,3 +608,48 @@ pub fn open_url(url: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[derive(Serialize)]
+pub struct Container {
+    name: String,
+    state: String,
+    working_dir: String,
+}
+
+/// List Docker containers and the Compose working-dir they belong to, so the UI
+/// can show a per-project container badge. Returns empty if Docker isn't
+/// available (no daemon, not installed) — best-effort, never an error.
+#[tauri::command]
+pub fn list_containers() -> Vec<Container> {
+    let out = std::process::Command::new("docker")
+        .args([
+            "ps",
+            "--all",
+            "--format",
+            "{{.Names}}\t{{.State}}\t{{.Label \"com.docker.compose.project.working_dir\"}}",
+        ])
+        .output();
+    let Ok(out) = out else {
+        return vec![];
+    };
+    if !out.status.success() {
+        return vec![];
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|l| {
+            let mut parts = l.splitn(3, '\t');
+            let name = parts.next()?.to_string();
+            let state = parts.next().unwrap_or("").to_string();
+            let working_dir = parts.next().unwrap_or("").to_string();
+            if name.is_empty() {
+                return None;
+            }
+            Some(Container {
+                name,
+                state,
+                working_dir,
+            })
+        })
+        .collect()
+}

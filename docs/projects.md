@@ -53,10 +53,20 @@ accurate even when they live outside the current root.
 
 ## Project health at a glance
 
-Each project row shows its git status (branch, a dirty marker, ahead/behind) **and** a
-green **⚡port** badge for any local server currently listening from inside that project
-— detected from each process's working directory (`lsof`), so it works with any stack and
-needs no configuration. Click a badge to open `http://localhost:<port>` in your browser.
+Each project row shows, at a glance:
+
+- **git status** — branch, a dirty marker, and ahead/behind counts.
+- a green **⚡port** badge for any local server currently listening from inside that
+  project — detected from each process's working directory (`lsof`), so it works with any
+  stack and needs no configuration. Click a badge to open `http://localhost:<port>`.
+- a pulsing **running dot** when a foreground command is active in one of the project's
+  terminal tabs.
+- a **🐳 container badge** (`running/total`) for Docker containers belonging to the
+  project, mapped via each container's Compose working-dir. Hidden when Docker isn't
+  running.
+
+See the **🕘 Timeline** top-action for a session history of finished commands across all
+panes (process, duration, and a click to jump back).
 
 ## Related
 

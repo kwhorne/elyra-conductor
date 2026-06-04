@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-06-04
+
+### Added
+
+- **Command timeline (🕘 Timeline)** — a flight recorder for your terminals: every finished
+  foreground command is logged with its process, time, duration, and pane. Click an entry
+  to jump back to that pane. Session-only; clearable.
+- **Health strip 2.0** — each project row in the sidebar now also shows a pulsing **running
+  dot** when a command is active in one of its tabs, and a **🐳 container badge**
+  (`running/total`) for Docker containers mapped to the project via their Compose
+  working-dir (hidden when Docker isn't available) — alongside the existing git status and
+  port badges.
+
+### Internal
+
+- Modularisation (phase 1): pure, state-free helpers (`dirOf`, `baseOf`, run-command
+  detection, idle-process detection, dev-task ranking) moved out of `App.svelte` into
+  `src/lib/util.js`.
+
 ## [0.6.0] — 2026-06-04
 
 A workflow release — the file tree, editor, finder, and Git all grow up.
@@ -478,7 +497,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.9...v0.5.0
