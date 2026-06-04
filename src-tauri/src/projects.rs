@@ -319,9 +319,12 @@ pub struct PortInfo {
     pid: u32,
     process: String,
     addr: String,
+    cwd: String,
 }
 
-/// List local TCP ports in LISTEN state (via `lsof`), one entry per port.
+/// List local TCP ports in LISTEN state (via `lsof`), one entry per port,
+/// including each owning process's working directory (so ports can be attributed
+/// to a project).
 #[tauri::command]
 pub fn list_ports() -> Vec<PortInfo> {
     use std::collections::HashMap;
@@ -342,7 +345,36 @@ pub fn list_ports() -> Vec<PortInfo> {
             if let Some(idx) = name.rfind(':') {
                 if let Ok(port) = name[idx + 1..].parse::<u16>() {
                     let addr = name[..idx].to_string();
-                    map.entry(port).or_insert(PortInfo { port, pid, process, addr });
+                    map.entry(port).or_insert(PortInfo { port, pid, process, addr, cwd: String::new() });
+                }
+            }
+        }
+    }
+    // Resolve each owning process's cwd in one batched lsof call.
+    let pids: Vec<String> = {
+        let mut s: Vec<u32> = map.values().map(|p| p.pid).filter(|p| *p > 0).collect();
+        s.sort_unstable();
+        s.dedup();
+        s.iter().map(|p| p.to_string()).collect()
+    };
+    if !pids.is_empty() {
+        if let Ok(o) = std::process::Command::new("lsof")
+            .args(["-a", "-d", "cwd", "-Fn", "-p", &pids.join(",")])
+            .output()
+        {
+            let text = String::from_utf8_lossy(&o.stdout);
+            let mut cwd_by_pid: HashMap<u32, String> = HashMap::new();
+            let mut cur: u32 = 0;
+            for line in text.lines() {
+                if let Some(rest) = line.strip_prefix('p') {
+                    cur = rest.parse().unwrap_or(0);
+                } else if let Some(rest) = line.strip_prefix('n') {
+                    cwd_by_pid.entry(cur).or_insert_with(|| rest.to_string());
+                }
+            }
+            for p in map.values_mut() {
+                if let Some(c) = cwd_by_pid.get(&p.pid) {
+                    p.cwd = c.clone();
                 }
             }
         }

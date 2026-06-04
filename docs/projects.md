@@ -51,6 +51,13 @@ accurate even when they live outside the current root.
 - If the [Elyra](elyra-agent.md) CLI is installed, use the agent button to open a native
   agent panel in that project.
 
+## Project health at a glance
+
+Each project row shows its git status (branch, a dirty marker, ahead/behind) **and** a
+green **⚡port** badge for any local server currently listening from inside that project
+— detected from each process's working directory (`lsof`), so it works with any stack and
+needs no configuration. Click a badge to open `http://localhost:<port>` in your browser.
+
 ## Related
 
 - [Git](git.md) — the in-app commit dialog.

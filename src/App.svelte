@@ -463,6 +463,33 @@
     return `hsl(${h % 360} 60% 60%)`;
   }
 
+  // ---------- per-project health: listening ports ----------
+  let projectPorts = $state({}); // projectPath -> [{ port, process }]
+  let portsTimer = null;
+  function refreshProjectPorts() {
+    invoke("list_ports")
+      .then((ports) => {
+        const all = [...projects, ...pinned];
+        const map = {};
+        for (const p of ports) {
+          if (!p.cwd) continue;
+          for (const proj of all) {
+            if (p.cwd === proj.path || p.cwd.startsWith(proj.path + "/")) {
+              (map[proj.path] ??= []).push({ port: p.port, process: p.process });
+            }
+          }
+        }
+        for (const k in map) {
+          map[k] = [...new Map(map[k].map((x) => [x.port, x])).values()].sort((a, b) => a.port - b.port);
+        }
+        projectPorts = map;
+      })
+      .catch(() => {});
+  }
+  function openLocalPort(port) {
+    invoke("open_url", { url: `http://localhost:${port}` }).catch(() => {});
+  }
+
   // ---------- pane navigation / zoom / global scrollback search ----------
   let zoomed = $state(false);
   let scrollbackOpen = $state(false);
@@ -1292,6 +1319,7 @@
     window.addEventListener("pagehide", flushState);
     window.addEventListener("beforeunload", flushState);
     titleTimer = setInterval(pollTitles, 1800);
+    portsTimer = setInterval(() => { if (!document.hidden) refreshProjectPorts(); }, 5000);
     ensureNotifyPermission();
     editors = await invoke("detect_editors");
     terminalName = await invoke("detect_terminal");
@@ -1319,6 +1347,7 @@
     loadDevCmds();
     restore();
     loadGitStatus(); // enrich pinned items resolved during restore
+    refreshProjectPorts();
     loaded = true;
 
     // Dismiss the startup splash once the UI is ready.
@@ -1342,6 +1371,7 @@
     window.removeEventListener("beforeunload", flushState);
     flushState();
     clearInterval(titleTimer);
+    clearInterval(portsTimer);
   });
 </script>
 
@@ -1358,6 +1388,8 @@
     onrefresh={loadProjects}
     onpin={togglePin}
     onstart={(p) => startProject(p)}
+    ports={projectPorts}
+    onopenport={openLocalPort}
     elyra={!!elyraVersion}
     onagent={(p) => newElyraAgent(p.path, p.name)}
   />

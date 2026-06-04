@@ -64,7 +64,8 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   you're elsewhere. Toggleable; only fires for commands ≥ 8s and never for the tab you're
   watching.
 - ⚡ **Port dashboard** — see which local ports are listening (with process & PID); click
-  to open `http://localhost:<port>` or stop the process.
+  to open `http://localhost:<port>` or stop the process. Each project also shows a green
+  **⚡port** badge in the sidebar when it has a server running.
 - 🎨 **Per-project tab colour** — each tab is tinted by its project so you always know
   which project you're looking at.
 - 🔎 **Terminal search** — `⌘F` finds in the focused terminal; **`⇧⌘F` searches *all*

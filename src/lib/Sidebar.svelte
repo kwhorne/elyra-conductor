@@ -11,6 +11,8 @@
     onpin,
     onagent,
     onstart,
+    ports = {},
+    onopenport,
     elyra = false,
     root = "",
   } = $props();
@@ -63,6 +65,13 @@
         {#if p.is_git}
           <span class="branch">⎇ {p.branch ?? "detached"}</span>
         {/if}
+        {#each (ports[p.path] ?? []).slice(0, 3) as pt (pt.port)}
+          <button
+            class="port"
+            title={`${pt.process} listening on :${pt.port} — open in browser`}
+            onclick={(e) => { e.stopPropagation(); onopenport?.(pt.port); }}
+          >⚡{pt.port}</button>
+        {/each}
         <button
           class="play"
           title="Start this project's dev command (⌘R)"
@@ -280,6 +289,8 @@
     opacity: 0.55;
   }
   .play:hover { color: var(--accent); opacity: 1; }
+  .port { background: color-mix(in srgb, var(--green) 18%, transparent); border: 1px solid color-mix(in srgb, var(--green) 55%, transparent); color: var(--green); border-radius: 4px; padding: 0 5px; font-size: 10px; font-family: var(--font-mono); cursor: pointer; flex: none; }
+  .port:hover { background: color-mix(in srgb, var(--green) 35%, transparent); }
   .actions button.agent {
     border-color: #f9731680;
     color: #fb923c;

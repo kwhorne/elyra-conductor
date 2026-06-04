@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.8] — 2026-06-03
+
+### Added
+
+- **Project health: running servers in the sidebar.** Each project now shows a green
+  **⚡port** badge for any local server whose working directory is inside it (detected
+  via `lsof`, so it works with any stack — no config). Click a badge to open
+  `http://localhost:<port>`. Alongside the existing git status, the sidebar is now a
+  glanceable health view: what has changes, and what's running (and where).
+
 ## [0.4.7] — 2026-06-03
 
 ### Added
@@ -398,7 +408,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.7...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.8...HEAD
+[0.4.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.4...v0.4.5
