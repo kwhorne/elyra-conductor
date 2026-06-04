@@ -634,6 +634,11 @@
     }
   }
 
+  async function dbTestConnection(cfg) {
+    // Throws on failure so the panel can show the error.
+    await invoke("db_test", { config: cfg });
+  }
+
   async function dbAddConnection(cfg) {
     if (!dbProject) dbProject = dbProjectPath();
     const entry = { key: `dbc-${++dbSeq}`, config: cfg, id: null, tables: [], expanded: false, connecting: false, error: null };
@@ -1562,6 +1567,7 @@
           onaddenv={dbAddFromEnv}
           onaddmanual={dbAddConnection}
           onedit={dbEditConnection}
+          ontest={dbTestConnection}
         />
       {/if}
     </div>

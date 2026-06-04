@@ -13,13 +13,38 @@
     onaddenv,
     onaddmanual,
     onedit,
+    ontest,
   } = $props();
 
   let adding = $state(false);
   let editingEntry = $state(null); // entry being edited (null = adding new)
   let filters = $state({}); // entry.key -> table filter text
-  const blankForm = () => ({ engine: "mysql", host: "127.0.0.1", port: 3306, database: "", username: "root", password: "", path: "", tls: false, tls_insecure: false });
+  let collapsed = $state({}); // group name -> collapsed?
+  let testState = $state(null); // null | "testing" | "ok" | error string
+  const blankForm = () => ({ engine: "mysql", host: "127.0.0.1", port: 3306, database: "", username: "root", password: "", path: "", tls: false, tls_insecure: false, group: "" });
   let form = $state(blankForm());
+
+  // Group connections for the tree: ungrouped first, then named groups.
+  let groups = $derived.by(() => {
+    const byGroup = new Map();
+    for (const e of conns) {
+      const g = (e.config.group || "").trim();
+      if (!byGroup.has(g)) byGroup.set(g, []);
+      byGroup.get(g).push(e);
+    }
+    const names = [...byGroup.keys()].sort((a, b) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b)));
+    return names.map((name) => ({ name, entries: byGroup.get(name) }));
+  });
+
+  async function testConn() {
+    testState = "testing";
+    try {
+      await ontest?.({ ...form, port: Number(form.port) || 0 });
+      testState = "ok";
+    } catch (e) {
+      testState = String(e);
+    }
+  }
 
   const ENGINE_ICON = { mysql: "🐬", postgres: "🐘", clickhouse: "🟡", sqlite: "📦" };
   function icon(e) { return ENGINE_ICON[e] ?? "🗄"; }
@@ -47,6 +72,7 @@
     else onaddmanual?.(cfg);
     adding = false;
     editingEntry = null;
+    testState = null;
     form = blankForm();
   }
   function onEngineChange() {
@@ -92,6 +118,13 @@
             {/if}
           {/if}
         {/if}
+        <label>Group <input bind:value={form.group} placeholder="(optional, e.g. Staging)" /></label>
+        <div class="btnrow">
+          <button class="ghost" onclick={testConn} disabled={testState === "testing"}>Test connection</button>
+          {#if testState === "testing"}<span class="tdim">testing…</span>
+          {:else if testState === "ok"}<span class="tok">✓ OK</span>
+          {:else if testState}<span class="terr" title={testState}>✗ failed</span>{/if}
+        </div>
         <button class="primary" onclick={submitManual}>{editingEntry ? "Save & reconnect" : "Connect & save"}</button>
         <div class="hint">Saved securely in your OS keychain — never written to the project or git.</div>
       </div>
@@ -101,7 +134,16 @@
   {#if error}<div class="err">{error}</div>{/if}
 
   <div class="tree">
-    {#each conns as entry (entry.key)}
+    {#each groups as grp (grp.name)}
+      {#if grp.name}
+        <button class="group-head" onclick={() => (collapsed = { ...collapsed, [grp.name]: !collapsed[grp.name] })}>
+          <span class="caret">{collapsed[grp.name] ? "▸" : "▾"}</span>
+          <span class="gname">📁 {grp.name}</span>
+          <span class="gcount">{grp.entries.length}</span>
+        </button>
+      {/if}
+      {#if !grp.name || !collapsed[grp.name]}
+        {#each grp.entries as entry (entry.key)}
       <div class="conn" class:connected={!!entry.id}>
         <div class="conn-row">
           <button class="conn-head" onclick={() => ontoggle?.(entry)} title={sub(entry.config)}>
@@ -136,6 +178,8 @@
           {/if}
         {/if}
       </div>
+        {/each}
+      {/if}
     {/each}
 
     {#if conns.length === 0 && !adding}
@@ -163,6 +207,17 @@
   .form label.chk { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
   .form label.chk input { width: auto; }
   .hint { color: var(--text-dim); font-size: 11px; }
+  .btnrow { display: flex; align-items: center; gap: 8px; }
+  .ghost { background: var(--bg-2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 10px; font-size: 12px; }
+  .ghost:hover:not(:disabled) { border-color: var(--accent); }
+  .ghost:disabled { opacity: 0.5; }
+  .tok { color: var(--green); font-size: 11px; }
+  .terr { color: #f7768e; font-size: 11px; cursor: help; }
+  .tdim { color: var(--text-dim); font-size: 11px; }
+  .group-head { display: flex; align-items: center; gap: 6px; width: 100%; background: transparent; border: none; color: var(--text-dim); padding: 5px 4px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; }
+  .group-head:hover { color: var(--text); }
+  .group-head .gname { font-weight: 600; }
+  .group-head .gcount { margin-left: auto; font-family: var(--font-mono); }
   .err { color: #f7768e; font-size: 11px; font-family: var(--font-mono); padding: 6px 12px; word-break: break-word; }
   .err.small { padding: 4px 8px 4px 24px; }
   .tree { flex: 1; overflow-y: auto; padding: 4px 6px 10px; }

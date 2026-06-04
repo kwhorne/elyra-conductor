@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.9] — 2026-06-04
+
+### Added (database browser)
+
+- **Connection groups** — give a connection a *Group* and the panel organises connections
+  into collapsible folders (ungrouped first).
+- **Test connection** — a button in the connection form verifies host/port/credentials/TLS
+  without saving, showing ✓ OK or the error.
+- **Query history** — a query tab keeps a per-project history of the queries you've run;
+  pick one from the **History…** dropdown to load it back (last 50, newest first).
+
 ## [0.4.8] — 2026-06-03
 
 ### Added
@@ -408,7 +419,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.8...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.9...HEAD
+[0.4.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.5...v0.4.6

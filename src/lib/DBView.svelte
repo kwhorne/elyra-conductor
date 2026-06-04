@@ -47,6 +47,26 @@
   // Stored in <project>/.conductor/queries/queries.json (never committed).
   let saved = $state([]);
   let selectedSaved = $state("");
+
+  // ----- query history (per project, local) -----
+  let history = $state([]);
+  let selectedHist = $state("");
+  function histKey() {
+    return projectPath ? `conductor:dbhistory:${projectPath}` : null;
+  }
+  function loadHistory() {
+    const k = histKey();
+    if (!k) { history = []; return; }
+    try { history = JSON.parse(localStorage.getItem(k) ?? "[]") ?? []; } catch { history = []; }
+  }
+  function recordHistory(q) {
+    const k = histKey();
+    const item = (q || "").trim();
+    if (!k || !item) return;
+    history = [item, ...history.filter((h) => h !== item)].slice(0, 50);
+    try { localStorage.setItem(k, JSON.stringify(history)); } catch {}
+  }
+
   async function loadSaved() {
     if (!projectPath) {
       saved = [];
@@ -290,6 +310,7 @@
   }
 
   function runQuery() {
+    if (sql.trim()) recordHistory(sql);
     if (sql.trim()) run(sql);
   }
 
@@ -333,6 +354,7 @@
       } else if (m === "query") {
         ontitle?.("query");
         loadSaved();
+        loadHistory();
       }
     });
   });
@@ -387,6 +409,12 @@
         </select>
         <button class="btn" onclick={saveCurrentQuery} disabled={!sql.trim()} title="Save this query for reuse (private, gitignored)">⭐ Save</button>
         {#if selectedSaved}<button class="btn" onclick={deleteSavedQuery} title="Delete saved query">✕</button>{/if}
+        {#if history.length}
+          <select class="saved" value={selectedHist} onchange={(e) => { if (e.currentTarget.value !== "") { sql = history[+e.currentTarget.value]; selectedHist = ""; } }} title="Recent queries (this project)">
+            <option value="">History…</option>
+            {#each history as h, i (i)}<option value={i}>{h.replace(/\s+/g, " ").slice(0, 60)}</option>{/each}
+          </select>
+        {/if}
       {/if}
       <div class="spacer"></div>
       <button class="btn" onclick={exportExcel} disabled={!columns.length || exporting} title="Export to Excel (.xlsx)">⤓ Excel</button>

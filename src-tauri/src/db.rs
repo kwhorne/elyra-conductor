@@ -36,6 +36,9 @@ pub struct DbConfig {
     /// Skip certificate verification (self-signed / internal hosts).
     #[serde(default)]
     pub tls_insecure: bool,
+    /// Optional group/folder name for organising connections in the panel.
+    #[serde(default)]
+    pub group: String,
 }
 
 enum Conn {
@@ -178,6 +181,7 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
                 .unwrap_or(3306),
             tls: false,
             tls_insecure: false,
+            group: String::new(),
             database: env.get("DB_DATABASE").cloned().unwrap_or_default(),
             username: env.get("DB_USERNAME").cloned().unwrap_or_default(),
             password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
@@ -190,6 +194,7 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             port: env.get("DB_PORT").and_then(|p| p.parse().ok()).unwrap_or(5432),
             tls: false,
             tls_insecure: false,
+            group: String::new(),
             database: env.get("DB_DATABASE").cloned().unwrap_or_default(),
             username: env.get("DB_USERNAME").cloned().unwrap_or_default(),
             password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
@@ -202,6 +207,7 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             port: env.get("DB_PORT").and_then(|p| p.parse().ok()).unwrap_or(9000),
             tls: false,
             tls_insecure: false,
+            group: String::new(),
             database: env.get("DB_DATABASE").cloned().unwrap_or_default(),
             username: env.get("DB_USERNAME").cloned().unwrap_or_else(|| "default".into()),
             password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
@@ -261,9 +267,8 @@ pub fn save_connections(project: String, connections: Vec<DbConfig>) -> Result<(
 
 // ── connect / disconnect ───────────────────────────────────────
 
-#[tauri::command]
-pub fn db_connect(state: State<DbManager>, config: DbConfig) -> Result<String, String> {
-    let conn = match config.engine.as_str() {
+fn open_conn(config: &DbConfig) -> Result<Conn, String> {
+    Ok(match config.engine.as_str() {
         "mysql" => {
             let opts = mysql::OptsBuilder::new()
                 .ip_or_hostname(Some(config.host.clone()))
@@ -355,14 +360,25 @@ pub fn db_connect(state: State<DbManager>, config: DbConfig) -> Result<String, S
             Conn::Clickhouse(client)
         }
         other => return Err(format!("Unsupported engine: {other}")),
-    };
+    })
+}
 
+#[tauri::command]
+pub fn db_connect(state: State<DbManager>, config: DbConfig) -> Result<String, String> {
+    let conn = open_conn(&config)?;
     let mut seq = state.seq.lock().unwrap();
     *seq += 1;
     let id = format!("db-{}", *seq);
     drop(seq);
     state.conns.lock().unwrap().insert(id.clone(), conn);
     Ok(id)
+}
+
+/// Try a connection without storing it (the "Test connection" button).
+#[tauri::command]
+pub fn db_test(config: DbConfig) -> Result<(), String> {
+    open_conn(&config)?;
+    Ok(())
 }
 
 #[tauri::command]

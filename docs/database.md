@@ -32,7 +32,8 @@ can be committed; the connections simply reappear (collapsed) when you reopen th
 project, ready to connect with a click.
 
 Hover a connection and use **✎** to edit it (host/port/credentials/TLS) — it reconnects
-and re-saves.
+and re-saves. Give a connection a **Group** to organise the list into collapsible folders,
+and use **Test connection** in the form to verify the settings before saving.
 
 ### TLS (remote PostgreSQL / ClickHouse)
 
@@ -91,7 +92,8 @@ Up to 1000 rows are returned per query (a *truncated* note appears if there are 
 
 Click **＋ New query** for a SQL editor tab. Write SQL and run it with **`⌘↵`**.
 `SELECT` (and `SHOW` / `PRAGMA` / `EXPLAIN` / `WITH`) show a result grid; other
-statements report the number of rows affected.
+statements report the number of rows affected. A query tab keeps a per-project **history**
+of what you've run — pick one from the **History…** dropdown to load it back (last 50).
 
 ## Export to Excel / CSV
 

@@ -52,6 +52,7 @@ pub fn run() {
             db::list_connections,
             db::save_connections,
             db::db_connect,
+            db::db_test,
             db::db_disconnect,
             db::db_tables,
             db::db_columns,
