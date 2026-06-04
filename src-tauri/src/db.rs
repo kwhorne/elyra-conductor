@@ -92,10 +92,7 @@ fn ch_value_to_string(v: &klickhouse::Value) -> Option<String> {
 
 // Run a query via Postgres' simple protocol, which returns every value as text
 // (Option<&str>) — ideal for a generic browser (no per-type decoding needed).
-fn pg_query(
-    client: &mut postgres::Client,
-    sql: &str,
-) -> Result<QueryRows, String> {
+fn pg_query(client: &mut postgres::Client, sql: &str) -> Result<QueryRows, String> {
     use postgres::SimpleQueryMessage::*;
     let msgs = client.simple_query(sql).map_err(|e| e.to_string())?;
     let mut columns: Vec<String> = Vec::new();

@@ -106,7 +106,20 @@
     serializeAddon = new SerializeAddon();
     term.loadAddon(serializeAddon);
     term.open(el);
-    register?.(id, { getLines, find: findInTerm, focus: () => term?.focus() });
+    register?.(id, {
+      getLines,
+      find: findInTerm,
+      focus: () => term?.focus(),
+      // Re-measure and resize the pty to the current container size. Used when
+      // the surrounding layout changes (editor/files/db panels open or close),
+      // where ResizeObserver doesn't always fire reliably in WebKit.
+      fit: () => {
+        try {
+          fit?.fit();
+          invoke("pty_resize", { id, cols: term.cols, rows: term.rows }).catch(() => {});
+        } catch {}
+      },
+    });
 
     // Intercept Cmd/Ctrl+F to open the in-terminal search instead of the shell.
     term.attachCustomKeyEventHandler((e) => {

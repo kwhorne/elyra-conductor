@@ -21,10 +21,26 @@ many repositories doesn't spawn a burst of git processes and freeze the UI on fo
 Pinned projects resolve their status independently, so they stay accurate even outside
 the current root folder.
 
+## The Git panel (⌘G)
+
+When the active project is a git repo, open the full Git panel from the **⎇ Git**
+top-action or `⌘G`. It gives you:
+
+- **Staged** and **Changes** lists — stage, unstage, or discard individual files (or use
+  **Stage all** / **Unstage all**). Backed by `git_files`, `git_stage`, `git_unstage`,
+  `git_discard`.
+- A **diff view** — click a file to see its unified diff (added/removed lines coloured),
+  via `git_diff`.
+- **Branches** — switch with the dropdown or create a new one (`git_branches`,
+  `git_checkout`, `git_create_branch`).
+- **Stash** — stash all changes, then pop or drop entries (`git_stash_*`).
+- **Commit** — write a message and **Commit** or **Commit & Push** the staged index
+  (`git_commit_index`).
+
 ## The commit dialog
 
-When the active project is a git repo, open the commit dialog from the **⎇ Commit**
-top-action or `⌘K` → **Git: commit `<project>`…**.
+For a quick all-in-one commit, open the commit dialog from `⌘K` →
+**Git: commit `<project>`…**.
 
 The dialog lets you:
 

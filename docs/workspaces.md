@@ -17,17 +17,23 @@ A workspace stores the same shape as the auto-saved session:
 
 Workspaces are **global** — independent of which root folder is currently selected.
 
+## The Layout menu
+
+The top bar has a **⬡ Layout** button (it shows the active workspace name once one is
+loaded). Click it to **Save current layout…**, switch to any saved workspace, or delete
+one. The same actions are also in the command palette (`⌘K`).
+
 ## Saving a workspace
 
 1. Arrange your tabs, splits, and open project the way you want.
-2. Open the command palette (`⌘K`) → **Save workspace…**
+2. **⬡ Layout** → **Save current layout…** (or `⌘K` → **Save workspace…**).
 3. Enter a name. Saving again with the same name overwrites it.
 
 ## Loading a workspace
 
-Open the command palette (`⌘K`) and pick **Load workspace: `<name>`** from the
-**workspace** group. If the workspace was saved against a different projects folder,
-Conductor switches the root and re-scans automatically before applying the layout.
+Pick a workspace from the **⬡ Layout** menu (or `⌘K` → **Load workspace: `<name>`**). If
+the workspace was saved against a different projects folder, Conductor switches the root
+and re-scans automatically before applying the layout.
 
 > Loading a workspace replaces the current tabs. Because terminals are real shells that
 > cannot be revived, the panes come back with the same structure and working directories

@@ -10,6 +10,8 @@ recursive tree of the active project, backed by the `list_dir` Tauri command (di
 first, then files).
 
 - **Click a file** to open it in the Monaco editor.
+- **Drag & drop** a file or folder onto another folder to move it (or onto the empty area
+  to move it to the project root). Reuses `rename_path`; the tree refreshes after.
 - **Hide noise:** by default `node_modules`, `.git`, and build output are hidden. Toggle
   with `⌘K` → **Show all files in tree** / **Hide node_modules/.git in tree** (persisted).
 
@@ -57,8 +59,23 @@ engine behind VS Code), loaded on demand so startup stays fast.
 
 - Open via a file in the tree, the **Quick edit** top-action, or `⌘K` → **Quick edit
   file…**.
-- **Save** with `⌘S` (writes through the `write_file` command).
-- **Close** the editor with `⌘W` or its **✕** button.
+- Open files become **tabs** along the top, each with an unsaved **“•”** marker; scroll
+  position and cursor are remembered per tab.
+- **Save** with `⌘S` — it **formats on save** when the language has a formatter
+  (JSON/JS/TS/CSS/HTML/…), then writes through the `write_file` command.
+- **Close** the active tab with `⌘W` (you're asked before discarding unsaved changes);
+  closing the last tab hides the editor.
+
+## Find files & search contents (⌘P)
+
+Press `⌘P` for a quick finder with two tabs:
+
+- **Files** — fuzzy match by name across the project (powered by `list_files`).
+- **Text** — search file contents with [ripgrep](https://github.com/BurntSushi/ripgrep)
+  (`search_content`, falling back to a built-in walk); selecting a hit opens the file at
+  the matching line.
+
+`⇥` switches tabs, `↑`/`↓` moves, `↵` opens, `esc` closes.
 
 ### Focus-aware shortcuts
 

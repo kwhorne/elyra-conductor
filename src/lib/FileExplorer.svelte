@@ -3,7 +3,20 @@
   import FileTree from "./FileTree.svelte";
   import { filterEntries } from "./fileFilter.js";
 
-  let { root, onopen, oncontext, activePath = null, showAll = false, ontoggleall, refreshKey = 0 } = $props();
+  let { root, onopen, oncontext, activePath = null, showAll = false, ontoggleall, refreshKey = 0, onmove } = $props();
+
+  let rootDropping = $state(false);
+  function onRootDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    rootDropping = true;
+  }
+  function onRootDrop(e) {
+    e.preventDefault();
+    rootDropping = false;
+    const from = e.dataTransfer.getData("text/plain");
+    if (from && root) onmove?.(from, root);
+  }
 
   let visible = $derived(filterEntries(entries, showAll));
 
@@ -56,7 +69,7 @@
       onclick={() => ontoggleall?.()}>{showAll ? "👁" : "⊘"}</button>
     <button class="refresh" title="Refresh" onclick={refresh}>⟳</button>
   </div>
-  <div class="list">
+  <div class="list" class:dropping={rootDropping} ondragover={onRootDragOver} ondragleave={() => (rootDropping = false)} ondrop={onRootDrop} role="tree">
     {#if !root}
       <div class="empty">No folder</div>
     {:else if error}
@@ -65,7 +78,7 @@
       <div class="empty">Empty folder</div>
     {:else}
       {#each visible as e (e.path)}
-        <FileTree entry={e} {onopen} {oncontext} {activePath} {showAll} {refreshKey} depth={0} />
+        <FileTree entry={e} {onopen} {oncontext} {activePath} {showAll} {refreshKey} {onmove} depth={0} />
       {/each}
     {/if}
   </div>
@@ -117,6 +130,9 @@
     flex: 1;
     overflow: auto;
     padding: 4px 0;
+  }
+  .list.dropping {
+    box-shadow: inset 0 0 0 2px var(--accent);
   }
   .empty {
     color: var(--text-dim);

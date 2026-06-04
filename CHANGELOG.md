@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-06-04
+
+A workflow release — the file tree, editor, finder, and Git all grow up.
+
+### Added
+
+- **Multi-file editor** — open files become tabs with an unsaved “•” marker; ⌘S saves
+  (and formats on save for JSON/JS/TS/CSS/HTML/…); ⌘W closes the active tab; scroll and
+  cursor are remembered per tab.
+- **Fuzzy finder (⌘P)** — a quick file finder with a **Files** tab (fuzzy by name) and a
+  **Text** tab (ripgrep content search across the project). ⇥ switches, ↑/↓ navigates,
+  ↵ opens — text hits jump to the line.
+- **Drag & drop in the file tree** — move files and folders between folders (or to the
+  project root) by dragging.
+- **Git panel (⌘G)** — stage/unstage/discard files (and “all”), a diff view, branch
+  switching + create, stash (push/pop/drop), and commit / commit & push of the staged index.
+- **Workspaces** — save the whole layout (tabs, panes, files) under a name and switch
+  between them from the **⬡ Layout** menu.
+- **Task dashboard (☰ Tasks)** — one-click run of scripts discovered in package.json,
+  composer.json, Makefile, and justfile, grouped by source.
+- **.env explorer (🔑 Env)** — view and edit `.env` files with masked secret values
+  (reveal per row), add/remove keys; values stay in the file.
+
+### Fixed
+
+- Opening a file no longer leaves the terminal pane stuck narrow — terminals re-fit when
+  the editor/Files/DB panels toggle, on tab switch, and on zoom.
+- Opening a file could throw “ModelService: Cannot add model because it already exists”
+  under a concurrent-open race; the editor now re-checks before creating a model.
+
 ## [0.5.1] — 2026-06-04
 
 ### Added (file explorer)
@@ -448,7 +478,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.9...v0.5.0
 [0.4.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.4.8...v0.4.9

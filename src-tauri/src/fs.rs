@@ -95,6 +95,155 @@ pub fn write_bytes(path: String, bytes: Vec<u8>) -> Result<(), String> {
     std::fs::write(&path, bytes).map_err(|e| format!("{path}: {e}"))
 }
 
+/// Directories we never descend into when listing or searching a project — they
+/// are huge and rarely what you want.
+const SKIP_DIRS: &[&str] = &[
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    "vendor",
+    ".cache",
+    "coverage",
+    ".venv",
+    "__pycache__",
+    ".idea",
+    ".turbo",
+    "out",
+];
+
+/// Recursively list files under `root` (relative paths), skipping heavy dirs.
+/// Capped so a giant tree can't hang the UI.
+#[tauri::command]
+pub fn list_files(root: String) -> Result<Vec<String>, String> {
+    let root_path = Path::new(&root);
+    let mut out: Vec<String> = Vec::new();
+    let mut stack: Vec<std::path::PathBuf> = vec![root_path.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        if out.len() >= 20000 {
+            break;
+        }
+        let rd = match std::fs::read_dir(&dir) {
+            Ok(rd) => rd,
+            Err(_) => continue,
+        };
+        for entry in rd.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+            if is_dir {
+                if SKIP_DIRS.contains(&name.as_str()) {
+                    continue;
+                }
+                stack.push(path);
+            } else if let Ok(rel) = path.strip_prefix(root_path) {
+                out.push(rel.to_string_lossy().to_string());
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+#[derive(serde::Serialize)]
+pub struct Match {
+    pub path: String,
+    pub line: u32,
+    pub text: String,
+}
+
+/// Search file contents under `root` for `query`. Uses ripgrep when available
+/// (fast, respects .gitignore); otherwise falls back to a simple Rust walk.
+#[tauri::command]
+pub fn search_content(root: String, query: String) -> Result<Vec<Match>, String> {
+    if query.trim().is_empty() {
+        return Ok(vec![]);
+    }
+    match rg_search(&root, &query) {
+        Ok(hits) => Ok(hits),
+        Err(_) => Ok(fallback_search(&root, &query)),
+    }
+}
+
+fn rg_search(root: &str, query: &str) -> Result<Vec<Match>, String> {
+    let output = std::process::Command::new("rg")
+        .current_dir(root)
+        .args([
+            "--line-number",
+            "--no-heading",
+            "--color",
+            "never",
+            "--max-columns",
+            "300",
+            "--smart-case",
+            "--",
+            query,
+            ".",
+        ])
+        .output()
+        .map_err(|e| format!("{e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut out = Vec::new();
+    for line in stdout.lines() {
+        // Format: ./relpath:line:text
+        let rel = line.strip_prefix("./").unwrap_or(line);
+        let mut it = rel.splitn(3, ':');
+        let (Some(p), Some(l), Some(t)) = (it.next(), it.next(), it.next()) else {
+            continue;
+        };
+        let Ok(num) = l.parse::<u32>() else { continue };
+        out.push(Match {
+            path: format!("{}/{}", root.trim_end_matches('/'), p),
+            line: num,
+            text: t.trim().chars().take(300).collect(),
+        });
+        if out.len() >= 300 {
+            break;
+        }
+    }
+    Ok(out)
+}
+
+fn fallback_search(root: &str, query: &str) -> Vec<Match> {
+    let needle = query.to_lowercase();
+    let mut out = Vec::new();
+    let files = list_files(root.to_string()).unwrap_or_default();
+    for rel in files {
+        if out.len() >= 300 {
+            break;
+        }
+        let full = format!("{}/{}", root.trim_end_matches('/'), rel);
+        let meta = match std::fs::metadata(&full) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        if meta.len() > 2_000_000 {
+            continue; // skip very large files
+        }
+        let content = match std::fs::read_to_string(&full) {
+            Ok(c) => c,
+            Err(_) => continue, // binary / non-utf8
+        };
+        for (i, line) in content.lines().enumerate() {
+            if line.to_lowercase().contains(&needle) {
+                out.push(Match {
+                    path: full.clone(),
+                    line: (i + 1) as u32,
+                    text: line.trim().chars().take(300).collect(),
+                });
+                if out.len() >= 300 {
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Create a new, empty file. Fails if a file or folder already exists there, so
 /// we never silently clobber.
 #[tauri::command]

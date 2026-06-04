@@ -11,11 +11,15 @@
   import PortsModal from "./lib/PortsModal.svelte";
   import ScrollbackSearch from "./lib/ScrollbackSearch.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
+  import FileFinder from "./lib/FileFinder.svelte";
   import FileExplorer from "./lib/FileExplorer.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import InputDialog from "./lib/InputDialog.svelte";
   import RunModal from "./lib/RunModal.svelte";
   import CommitDialog from "./lib/CommitDialog.svelte";
+  import GitPanel from "./lib/GitPanel.svelte";
+  import TasksModal from "./lib/TasksModal.svelte";
+  import EnvModal from "./lib/EnvModal.svelte";
   import ShortcutsModal from "./lib/ShortcutsModal.svelte";
   import { check as checkUpdate } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
@@ -36,6 +40,7 @@
   let showEditor = $state(false);
   let editorPath = $state(null);
   let paletteOpen = $state(false);
+  let finderOpen = $state(false);
   let helpOpen = $state(false);
 
   // ---------- auto-update ----------
@@ -102,6 +107,8 @@
       .then((t) => (projectTasks = Array.isArray(t) ? t : []))
       .catch(() => (projectTasks = []));
   });
+  let tasksOpen = $state(false);
+  let envOpen = $state(false);
   function runTask(task) {
     const cwd = activeProject?.path ?? root;
     newTab(cwd, task.label, task.command);
@@ -127,10 +134,15 @@
 
   let fileRoot = $derived(activeProject?.path ?? root);
 
-  function openFile(path) {
+  function openFile(path, line = null) {
     editorPath = path;
+    pendingLine = line;
+    openSeq++;
     showEditor = true;
   }
+  let pendingLine = $state(null);
+  let openSeq = $state(0);
+  let editorRef = $state(null);
 
   // Monaco is heavy (~2.5MB). Load it on demand (and preload when idle) instead
   // of at startup, so the app opens fast.
@@ -219,6 +231,17 @@
       onconfirm: () => fileOp(invoke("trash_path", { path: e.path })),
     };
   }
+  // Move a path into a destination folder (drag & drop). Guards against no-ops
+  // and dropping a folder into itself or a descendant.
+  function moveEntry(from, toDir) {
+    const dest = toDir + "/" + baseOf(from);
+    if (from === dest || dirOf(from) === toDir) return;
+    if (toDir === from || toDir.startsWith(from + "/")) {
+      alertMsg("Can't move there", "A folder can't be moved into itself.");
+      return;
+    }
+    fileOp(invoke("rename_path", { from, to: dest }));
+  }
   function revealEntry(e) { invoke("reveal_path", { path: e.path }).catch(() => {}); }
   function copyEntryPath(e) { navigator.clipboard?.writeText(e.path).catch(() => {}); }
 
@@ -226,6 +249,13 @@
     const p = activeProject ?? projects.find((x) => x.path === activeTab?.projectPath);
     if (!p) return;
     commit = { open: true, path: p.path, name: p.name };
+  }
+
+  let gitPanel = $state({ open: false, path: "", name: "" });
+  function openGitPanel() {
+    const p = activeProject ?? projects.find((x) => x.path === activeTab?.projectPath);
+    if (!p) return;
+    gitPanel = { open: true, path: p.path, name: p.name };
   }
 
   function dirOf(path) {
@@ -568,9 +598,19 @@
   // ---------- pane navigation / zoom / global scrollback search ----------
   let zoomed = $state(false);
   let scrollbackOpen = $state(false);
-  let termApis = {}; // termId -> { getLines, find, focus }
+  let termApis = {}; // termId -> { getLines, find, focus, fit }
   function registerTerm(id, api) { termApis[id] = api; }
   function unregisterTerm(id) { delete termApis[id]; }
+  function refitTerminals() {
+    for (const a of Object.values(termApis)) a.fit?.();
+  }
+  // When the layout around the terminals changes (editor/files/db panels toggle,
+  // tab switch, zoom), re-fit them. WebKit's ResizeObserver doesn't always fire
+  // when a flex sibling is added/removed, which left terminals stuck narrow.
+  $effect(() => {
+    showEditor; showFiles; showDb; zoomed; activeTabId;
+    setTimeout(refitTerminals, 80);
+  });
 
   // Move pane focus in a direction, by comparing pane-rect centres.
   function navigatePane(dir) {
@@ -1139,8 +1179,10 @@
     list.push({ id: "act:toggle-broadcast", title: broadcast ? "Stop broadcasting input" : "Broadcast input to all panes", group: "action", icon: "\u2301", action: () => (broadcast = !broadcast) });
     list.push({ id: "act:quick-edit", title: "Quick edit file\u2026", group: "action", icon: "\u270E", action: quickEdit });
     list.push({ id: "act:change-root", title: "Change projects folder\u2026", group: "action", icon: "\u{1F4C2}", action: changeRoot });
-    if (activeProject?.is_git)
+    if (activeProject?.is_git) {
       list.push({ id: "act:commit", title: `Git: commit ${activeProject.name}\u2026`, group: "action", icon: "\u2387", action: openCommit });
+      list.push({ id: "act:git", title: `Git: open panel for ${activeProject.name}`, group: "action", icon: "\u2387", action: openGitPanel });
+    }
     list.push({ id: "act:help", title: "Keyboard shortcuts", hint: "\u2318/", group: "action", icon: "?", action: () => (helpOpen = true) });
     list.push({ id: "act:check-update", title: "Check for updates\u2026", group: "action", icon: "\u21BB", action: () => checkForUpdate(true) });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
@@ -1173,7 +1215,11 @@
     if (inEditorContext()) {
       if (k === "w") {
         e.preventDefault();
-        showEditor = false;
+        if (editorRef?.closeActiveTab) editorRef.closeActiveTab();
+        else showEditor = false;
+      } else if (k === "p") {
+        e.preventDefault();
+        finderOpen = !finderOpen;
       }
       return;
     }
@@ -1193,6 +1239,9 @@
     if (k === "k") {
       e.preventDefault();
       paletteOpen = !paletteOpen;
+    } else if (k === "p") {
+      e.preventDefault();
+      finderOpen = !finderOpen;
     } else if (k === "f" && e.shiftKey) {
       e.preventDefault();
       scrollbackOpen = true;
@@ -1205,6 +1254,9 @@
     } else if (k === "r") {
       e.preventDefault();
       startProject(activeProject);
+    } else if (k === "g") {
+      e.preventDefault();
+      openGitPanel();
     } else if (k === "b") {
       e.preventDefault();
       showFiles = !showFiles;
@@ -1362,12 +1414,36 @@
     } catch {}
   }
   function saveWorkspacePrompt() {
-    const name = prompt("Save current layout as workspace:", activeWorkspace ?? "")?.trim();
-    if (!name) return;
-    workspaces = { ...workspaces, [name]: serialize() };
-    activeWorkspace = name;
-    persistWorkspaces();
+    fileDlg = {
+      open: true, title: "Save workspace", message: "Save the current layout (tabs, panes, files) under a name.",
+      input: true, value: activeWorkspace ?? "", placeholder: "workspace name", confirmLabel: "Save", danger: false,
+      onconfirm: (name) => {
+        workspaces = { ...workspaces, [name]: serialize() };
+        activeWorkspace = name;
+        persistWorkspaces();
+      },
+    };
   }
+
+  // Workspaces menu (topbar).
+  let wsMenu = $state({ open: false, x: 0, y: 0 });
+  function openWsMenu(e) {
+    const r = e.currentTarget.getBoundingClientRect();
+    wsMenu = { open: true, x: r.left, y: r.bottom + 4 };
+  }
+  let wsItems = $derived.by(() => {
+    const items = [{ label: "Save current layout\u2026", icon: "\u{1F4BE}", action: saveWorkspacePrompt }];
+    const names = Object.keys(workspaces);
+    if (names.length) {
+      items.push({ separator: true });
+      for (const name of names)
+        items.push({ label: name === activeWorkspace ? `\u2713 ${name}` : name, icon: "\u{1F5C4}", action: () => loadWorkspace(name) });
+      items.push({ separator: true });
+      for (const name of names)
+        items.push({ label: `Delete ${name}`, icon: "\u{1F5D1}", danger: true, action: () => deleteWorkspace(name) });
+    }
+    return items;
+  });
   async function loadWorkspace(name) {
     const snap = workspaces[name];
     if (!snap) return;
@@ -1527,11 +1603,14 @@
         <button class:on={showFiles} title="Toggle file sidebar (⌘B)" onclick={() => (showFiles = !showFiles)}>Files</button>
         <button class:on={showDb} title="Toggle database panel" onclick={() => (showDb = !showDb)}>DB</button>
         <button title="Listening ports" onclick={() => (portsOpen = true)}>⚡ Ports</button>
+        {#if projectTasks.length}<button title="Run a project task (npm/composer/make/just)" onclick={() => (tasksOpen = true)}>☰ Tasks</button>{/if}
+        {#if activeProject}<button title="View & edit .env (masked)" onclick={() => (envOpen = true)}>🔑 Env</button>{/if}
         <button class:on={broadcast} title="Broadcast input to all panes in this tab" onclick={() => (broadcast = !broadcast)}>⌁ Sync</button>
         <button title="Toggle theme" onclick={() => (theme = theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀" : "☽"}</button>
+        <button class:on={activeWorkspace} title="Workspaces — save & switch layouts" onclick={openWsMenu}>⬡ {activeWorkspace ?? "Layout"}</button>
         <button title="Keyboard shortcuts (⌘/)" onclick={() => (helpOpen = true)}>?</button>
         {#if activeProject?.is_git}
-          <button title="Commit changes" onclick={openCommit}>⎇ Commit</button>
+          <button title="Git: stage, diff, branch, stash, commit (⌘G)" onclick={openGitPanel}>⎇ Git</button>
         {/if}
       </div>
     </div>
@@ -1619,7 +1698,7 @@
       {#if showEditor}
         <div class="editor-area">
           {#if EditorComp}
-            <EditorComp path={editorPath} {theme} onclose={() => (showEditor = false)} />
+            <EditorComp bind:this={editorRef} path={editorPath} gotoLine={pendingLine} {openSeq} {theme} onclose={() => (showEditor = false)} />
           {:else}
             <div class="editor-loading">Loading editor…</div>
           {/if}
@@ -1635,6 +1714,7 @@
           showAll={showHidden}
           ontoggleall={() => (showHidden = !showHidden)}
           refreshKey={fileRefresh}
+          onmove={moveEntry}
         />
       {/if}
 
@@ -1660,6 +1740,13 @@
   </div>
 
   <CommandPalette open={paletteOpen} {commands} onclose={() => (paletteOpen = false)} />
+
+  <FileFinder
+    open={finderOpen}
+    root={fileRoot}
+    onopen={(p, line) => openFile(p, line)}
+    onclose={() => (finderOpen = false)}
+  />
   <PortsModal open={portsOpen} onclose={() => (portsOpen = false)} />
   <ScrollbackSearch open={scrollbackOpen} onsearch={searchScrollback} onjump={jumpToMatch} onclose={() => (scrollbackOpen = false)} />
 
@@ -1699,6 +1786,20 @@
     title={runModal.title}
     onclose={() => (runModal = { ...runModal, open: false })}
   />
+
+  <GitPanel
+    open={gitPanel.open}
+    path={gitPanel.path}
+    projectName={gitPanel.name}
+    onclose={() => (gitPanel = { ...gitPanel, open: false })}
+    onchanged={() => loadGitStatus()}
+  />
+
+  <ContextMenu open={wsMenu.open} x={wsMenu.x} y={wsMenu.y} items={wsItems} onclose={() => (wsMenu = { ...wsMenu, open: false })} />
+
+  <TasksModal open={tasksOpen} tasks={projectTasks} projectName={activeProject?.name ?? ""} onrun={runTask} onclose={() => (tasksOpen = false)} />
+
+  <EnvModal open={envOpen} path={activeProject?.path ?? ""} projectName={activeProject?.name ?? ""} onclose={() => (envOpen = false)} />
 
   <CommitDialog
     open={commit.open}

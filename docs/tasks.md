@@ -35,6 +35,13 @@ For `package.json` scripts, the package manager is chosen by lockfile:
   skipped; the recipe name is the first token before any parameters.
 - The first matching `Makefile`/`justfile` variant found is used.
 
+## The task dashboard (☰ Tasks)
+
+When the active project has any tasks, a **☰ Tasks** button appears in the top bar. It
+opens a dashboard listing every discovered task grouped by source (package.json,
+composer.json, Makefile, justfile) with a one-click **▶** to run each in a new terminal
+tab.
+
 ## Running a task
 
 1. Open the command palette (`⌘K`).

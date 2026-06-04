@@ -156,6 +156,178 @@ fn run_git_capture(path: &str, args: &[&str], log: &mut String) -> Result<(), St
     Ok(())
 }
 
+/// Run git and return stdout on success, or a readable error from stderr.
+fn git_try(path: &str, args: &[&str]) -> Result<String, String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(args)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).to_string())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+#[derive(Serialize)]
+pub struct GitFile {
+    file: String,
+    x: String, // index (staged) status
+    y: String, // worktree (unstaged) status
+    staged: bool,
+    untracked: bool,
+}
+
+/// Richer change list: separates staged (index) from unstaged (worktree) state
+/// using the two porcelain status columns.
+#[tauri::command]
+pub fn git_files(path: String) -> Vec<GitFile> {
+    let Some(out) = git(&path, &["status", "--porcelain"]) else {
+        return vec![];
+    };
+    out.lines()
+        .filter(|l| l.len() >= 3)
+        .map(|l| {
+            let x = &l[0..1];
+            let y = &l[1..2];
+            let mut file = l[3..].to_string();
+            // Renames look like "old -> new"; keep the new path.
+            if let Some(idx) = file.find(" -> ") {
+                file = file[idx + 4..].to_string();
+            }
+            GitFile {
+                file,
+                x: x.to_string(),
+                y: y.to_string(),
+                staged: x != " " && x != "?",
+                untracked: x == "?" && y == "?",
+            }
+        })
+        .collect()
+}
+
+/// Unified diff for a single file. `staged` shows the index diff; untracked
+/// files are shown as an all-added diff against /dev/null.
+#[tauri::command]
+pub fn git_diff(path: String, file: String, staged: bool, untracked: bool) -> String {
+    let args: Vec<&str> = if untracked {
+        vec!["diff", "--no-color", "--no-index", "--", "/dev/null", &file]
+    } else if staged {
+        vec!["diff", "--no-color", "--cached", "--", &file]
+    } else {
+        vec!["diff", "--no-color", "--", &file]
+    };
+    // --no-index returns exit code 1 when files differ, so don't treat that as
+    // an error; just take whatever stdout we got.
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(&path)
+        .args(&args)
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+pub fn git_stage(path: String, file: String) -> Result<(), String> {
+    git_try(&path, &["add", "--", &file]).map(|_| ())
+}
+
+#[tauri::command]
+pub fn git_unstage(path: String, file: String) -> Result<(), String> {
+    git_try(&path, &["reset", "-q", "HEAD", "--", &file]).map(|_| ())
+}
+
+#[tauri::command]
+pub fn git_stage_all(path: String) -> Result<(), String> {
+    git_try(&path, &["add", "-A"]).map(|_| ())
+}
+
+#[tauri::command]
+pub fn git_unstage_all(path: String) -> Result<(), String> {
+    git_try(&path, &["reset", "-q", "HEAD"]).map(|_| ())
+}
+
+/// Discard worktree changes for a tracked file (restore from index/HEAD).
+#[tauri::command]
+pub fn git_discard(path: String, file: String) -> Result<(), String> {
+    git_try(&path, &["restore", "--", &file]).map(|_| ())
+}
+
+#[derive(Serialize)]
+pub struct Branches {
+    current: Option<String>,
+    all: Vec<String>,
+}
+
+#[tauri::command]
+pub fn git_branches(path: String) -> Branches {
+    let current = git(&path, &["rev-parse", "--abbrev-ref", "HEAD"]).filter(|b| b != "HEAD");
+    let all = git(&path, &["branch", "--format=%(refname:short)"])
+        .map(|s| {
+            s.lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    Branches { current, all }
+}
+
+#[tauri::command]
+pub fn git_checkout(path: String, branch: String) -> Result<(), String> {
+    git_try(&path, &["checkout", &branch]).map(|_| ())
+}
+
+#[tauri::command]
+pub fn git_create_branch(path: String, name: String) -> Result<(), String> {
+    git_try(&path, &["checkout", "-b", &name]).map(|_| ())
+}
+
+#[derive(Serialize)]
+pub struct Stash {
+    index: u32,
+    text: String,
+}
+
+#[tauri::command]
+pub fn git_stash_list(path: String) -> Vec<Stash> {
+    let Some(out) = git(&path, &["stash", "list"]) else {
+        return vec![];
+    };
+    out.lines()
+        .enumerate()
+        .map(|(i, l)| Stash {
+            index: i as u32,
+            text: l.to_string(),
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn git_stash_push(path: String, message: String) -> Result<(), String> {
+    let mut args = vec!["stash", "push"];
+    if !message.trim().is_empty() {
+        args.push("-m");
+        args.push(&message);
+    }
+    git_try(&path, &args).map(|_| ())
+}
+
+#[tauri::command]
+pub fn git_stash_pop(path: String, index: u32) -> Result<(), String> {
+    let r = format!("stash@{{{index}}}");
+    git_try(&path, &["stash", "pop", &r]).map(|_| ())
+}
+
+#[tauri::command]
+pub fn git_stash_drop(path: String, index: u32) -> Result<(), String> {
+    let r = format!("stash@{{{index}}}");
+    git_try(&path, &["stash", "drop", &r]).map(|_| ())
+}
+
 #[tauri::command]
 pub fn git_commit(path: String, message: String, push: bool) -> Result<String, String> {
     if message.trim().is_empty() {
@@ -163,6 +335,21 @@ pub fn git_commit(path: String, message: String, push: bool) -> Result<String, S
     }
     let mut log = String::new();
     run_git_capture(&path, &["add", "-A"], &mut log)?;
+    run_git_capture(&path, &["commit", "-m", &message], &mut log)?;
+    if push {
+        run_git_capture(&path, &["push"], &mut log)?;
+    }
+    Ok(log)
+}
+
+/// Commit only what's already staged (the index) — used by the Git panel where
+/// staging is explicit. Fails if nothing is staged.
+#[tauri::command]
+pub fn git_commit_index(path: String, message: String, push: bool) -> Result<String, String> {
+    if message.trim().is_empty() {
+        return Err("Commit message is empty".to_string());
+    }
+    let mut log = String::new();
     run_git_capture(&path, &["commit", "-m", &message], &mut log)?;
     if push {
         run_git_capture(&path, &["push"], &mut log)?;
