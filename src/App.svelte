@@ -425,8 +425,8 @@
   }
 
   // ---------- Elyra agent (RPC host) ----------
-  function newElyraAgent(cwd, name, initialPrompt = null) {
-    const tab = { id: nextId("tab"), kind: "agent", title: name ?? "elyra", projectPath: cwd, cwd, initialPrompt };
+  function newElyraAgent(cwd, name, initialPrompt = null, initialDraft = null) {
+    const tab = { id: nextId("tab"), kind: "agent", title: name ?? "elyra", projectPath: cwd, cwd, initialPrompt, initialDraft };
     tabs = [...tabs, tab];
     activeTabId = tab.id;
     activeTermId = null;
@@ -730,6 +730,14 @@
 
   // Run a shell command (from a runbook) in the project's terminal: reuse a
   // matching terminal tab/pane if one exists, otherwise open a fresh one.
+  // Send a runbook step/snippet to a fresh Elyra agent, pre-filled in its
+  // composer so the user can add their question before sending. Pure delegation
+  // — Conductor just hands Elyra some text.
+  function sendToElyra(cwd, text) {
+    const draft = "```\n" + (text || "").trim() + "\n```\n\n";
+    newElyraAgent(cwd, "elyra", null, draft);
+  }
+
   function runInProjectTerminal(cwd, cmd) {
     let tab =
       activeTab && activeTab.kind === "term" && activeTab.projectPath === cwd
@@ -739,7 +747,7 @@
       const leaf = firstLeaf(tab.root);
       focusTab(tab);
       const data = cmd.endsWith("\n") ? cmd : cmd + "\n";
-      invoke("pty_write", { id: leaf.termId, data });
+      invoke("pty_write", { id: leaf.termId, data }).catch(() => {});
     } else {
       newTab(cwd, baseOf(cwd), cmd);
     }
@@ -1462,7 +1470,7 @@
         {#each tabs as tab (tab.id)}
           {#if tab.kind === "agent"}
             <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
-              <AgentPanel id={tab.id} cwd={tab.cwd} initialPrompt={tab.initialPrompt ?? null} onactivity={() => markActivity(tab.id)} ontitle={(t) => (tab.title = t)} />
+              <AgentPanel id={tab.id} cwd={tab.cwd} initialPrompt={tab.initialPrompt ?? null} initialDraft={tab.initialDraft ?? null} onactivity={() => markActivity(tab.id)} ontitle={(t) => (tab.title = t)} />
             </div>
           {:else if tab.kind === "db"}
             <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
@@ -1487,6 +1495,8 @@
                 onrun={(cmd) => runInProjectTerminal(tab.projectPath, cmd)}
                 onopenfile={(p) => openFile(p)}
                 ontask={(label) => runRunbookTask(tab.projectPath, label)}
+                elyra={!!elyraVersion}
+                onelyra={(text) => sendToElyra(tab.projectPath, text)}
               />
             </div>
           {:else}

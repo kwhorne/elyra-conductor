@@ -133,7 +133,7 @@
         if (mod > 1) {
           if (e.type === "keydown") {
             e.preventDefault();
-            invoke("pty_write", { id, data: `\x1b[13;${mod}u` });
+            invoke("pty_write", { id, data: `\x1b[13;${mod}u` }).catch(() => {});
           }
           return false;
         }
@@ -165,7 +165,7 @@
     cleanup.push(unData, unExit);
 
     term.onData((d) => {
-      invoke("pty_write", { id, data: d });
+      invoke("pty_write", { id, data: d }).catch(() => {});
       onuserinput?.(id, d);
     });
 
@@ -202,7 +202,7 @@
 
     const ro = new ResizeObserver(() => {
       fit.fit();
-      invoke("pty_resize", { id, cols: term.cols, rows: term.rows });
+      invoke("pty_resize", { id, cols: term.cols, rows: term.rows }).catch(() => {});
     });
     ro.observe(el);
     cleanup.push(() => ro.disconnect());

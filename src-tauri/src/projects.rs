@@ -48,7 +48,7 @@ pub fn list_projects(root: String) -> Result<Vec<Project>, String> {
         });
     }
 
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|a| a.name.to_lowercase());
     Ok(out)
 }
 
@@ -82,7 +82,12 @@ pub fn git_status(path: String) -> GitStatus {
     // per changed path.
     let out = git(&path, &["status", "--porcelain=v2", "--branch"]);
     let Some(out) = out else {
-        return GitStatus { branch: None, dirty: false, ahead: 0, behind: 0 };
+        return GitStatus {
+            branch: None,
+            dirty: false,
+            ahead: 0,
+            behind: 0,
+        };
     };
 
     let mut branch: Option<String> = None;
@@ -234,9 +239,16 @@ pub fn detect_editors() -> Vec<String> {
 #[tauri::command]
 pub fn detect_elyra() -> Option<String> {
     let bin = find_bin("elyra")?;
-    let out = std::process::Command::new(&bin).arg("--version").output().ok()?;
+    let out = std::process::Command::new(&bin)
+        .arg("--version")
+        .output()
+        .ok()?;
     let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    Some(if v.is_empty() { "installed".to_string() } else { v })
+    Some(if v.is_empty() {
+        "installed".to_string()
+    } else {
+        v
+    })
 }
 
 /// Name of the external terminal we will launch (for labelling the UI).
@@ -345,7 +357,13 @@ pub fn list_ports() -> Vec<PortInfo> {
             if let Some(idx) = name.rfind(':') {
                 if let Ok(port) = name[idx + 1..].parse::<u16>() {
                     let addr = name[..idx].to_string();
-                    map.entry(port).or_insert(PortInfo { port, pid, process, addr, cwd: String::new() });
+                    map.entry(port).or_insert(PortInfo {
+                        port,
+                        pid,
+                        process,
+                        addr,
+                        cwd: String::new(),
+                    });
                 }
             }
         }

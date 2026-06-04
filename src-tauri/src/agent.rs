@@ -50,7 +50,9 @@ pub fn agent_spawn(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(|e| format!("failed to start elyra: {e}"))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to start elyra: {e}"))?;
     let stdout = child.stdout.take().ok_or("no stdout")?;
     let stderr = child.stderr.take().ok_or("no stderr")?;
     let stdin = child.stdin.take().ok_or("no stdin")?;
@@ -100,7 +102,9 @@ pub fn agent_send(state: State<AgentManager>, id: String, command: Value) -> Res
     let mut sessions = state.sessions.lock().unwrap();
     if let Some(s) = sessions.get_mut(&id) {
         let line = serde_json::to_string(&command).map_err(|e| e.to_string())?;
-        s.stdin.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
+        s.stdin
+            .write_all(line.as_bytes())
+            .map_err(|e| e.to_string())?;
         s.stdin.write_all(b"\n").map_err(|e| e.to_string())?;
         s.stdin.flush().map_err(|e| e.to_string())?;
     }

@@ -104,7 +104,10 @@ pub fn list_runbooks(project: String) -> Result<Vec<DirEntry>, String> {
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
     let mut out = Vec::new();
-    for entry in std::fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?.flatten() {
+    for entry in std::fs::read_dir(&dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .flatten()
+    {
         let p = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
         if p.is_file() && name.to_lowercase().ends_with(".md") {
@@ -115,7 +118,7 @@ pub fn list_runbooks(project: String) -> Result<Vec<DirEntry>, String> {
             });
         }
     }
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|a| a.name.to_lowercase());
     Ok(out)
 }
 
@@ -194,11 +197,17 @@ pub fn list_tasks(path: String) -> Vec<Task> {
             if first == ' ' || first == '\t' || first == '#' || first == '.' {
                 continue;
             }
-            let Some(colon) = line.find(':') else { continue };
+            let Some(colon) = line.find(':') else {
+                continue;
+            };
             let name = line[..colon].trim();
             let after = &line[colon..];
             // Skip variable assignments (FOO := bar) and malformed names.
-            if after.starts_with(":=") || name.is_empty() || name.contains('=') || name.contains(' ') {
+            if after.starts_with(":=")
+                || name.is_empty()
+                || name.contains('=')
+                || name.contains(' ')
+            {
                 continue;
             }
             tasks.push(Task {
@@ -223,7 +232,9 @@ pub fn list_tasks(path: String) -> Vec<Task> {
             if first == ' ' || first == '\t' || first == '#' || first == '@' {
                 continue;
             }
-            let Some(colon) = line.find(':') else { continue };
+            let Some(colon) = line.find(':') else {
+                continue;
+            };
             let after = &line[colon..];
             if after.starts_with(":=") {
                 continue; // variable assignment

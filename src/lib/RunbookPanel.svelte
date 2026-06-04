@@ -10,6 +10,8 @@
     onrun = null,
     onopenfile = null,
     ontask = null,
+    onelyra = null,
+    elyra = false,
     theme = "dark",
   } = $props();
 
@@ -269,6 +271,9 @@ pnpm dev
                 <div class="spacer"></div>
                 {#if b.runnable}
                   <button class="run" onclick={() => run(b.code)} title="Run in this project's terminal">▶ Run</button>
+                {/if}
+                {#if elyra}
+                  <button class="copy" onclick={() => onelyra?.(b.code)} title="Send to an Elyra agent">🤖 Elyra</button>
                 {/if}
                 <button class="copy" onclick={() => copy(b.code)} title="Copy">⧉</button>
               </div>

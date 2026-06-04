@@ -37,7 +37,11 @@ pub fn pty_spawn(
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
     let mut cmd = CommandBuilder::new(&shell);
-    match run_command.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    match run_command
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         // Run a command deterministically at startup, then drop into a normal
         // interactive login shell. Using `-i -c` (instead of typing into the
         // PTY) avoids the race where keystrokes are sent before an interactive
@@ -153,9 +157,7 @@ pub fn pty_title(state: State<PtyManager>, id: String) -> Option<String> {
         .unwrap_or(line)
         .trim_start_matches('-');
 
-    const SHELLS: &[&str] = &[
-        "zsh", "bash", "sh", "fish", "dash", "tcsh", "ksh", "login",
-    ];
+    const SHELLS: &[&str] = &["zsh", "bash", "sh", "fish", "dash", "tcsh", "ksh", "login"];
     if SHELLS.contains(&base) {
         return None;
     }

@@ -5,7 +5,7 @@
 
   // Pure host UI for an external `elyra --mode rpc` process. No AI logic here —
   // we only render events and forward commands (see ARCHITECTURE.md).
-  let { id, cwd, initialPrompt = null, onactivity = null, ontitle = null } = $props();
+  let { id, cwd, initialPrompt = null, initialDraft = null, onactivity = null, ontitle = null } = $props();
 
   let entries = $state([]); // { kind: 'user'|'assistant'|'tool'|'note', text, ... }
   let status = $state({}); // statusKey -> text (from setStatus)
@@ -203,6 +203,9 @@
         entries.push({ kind: "user", text: initialPrompt });
         send({ type: "prompt", message: initialPrompt });
         bump();
+      } else if (initialDraft) {
+        // Pre-fill the composer (don't send) so the user can add their question.
+        draft = initialDraft;
       }
     } catch (e) {
       entries.push({ kind: "note", level: "error", text: `Could not start Elyra: ${e}` });

@@ -41,6 +41,12 @@ pub struct DbConfig {
     pub group: String,
 }
 
+/// Columns, rows (each cell text-or-null), rows-affected, and a truncated flag.
+type QueryRows = (Vec<String>, Vec<Vec<Option<String>>>, Option<u64>, bool);
+
+// A handful of connections live in the registry; the size difference between
+// variants is irrelevant here.
+#[allow(clippy::large_enum_variant)]
 enum Conn {
     Mysql(mysql::Pool),
     Sqlite(String), // file path; opened per query (cheap, avoids !Sync issues)
@@ -62,7 +68,10 @@ impl klickhouse::Row for ChRow {
         map: Vec<(&str, &klickhouse::Type, klickhouse::Value)>,
     ) -> klickhouse::Result<Self> {
         Ok(ChRow {
-            cells: map.into_iter().map(|(n, _t, v)| (n.to_string(), v)).collect(),
+            cells: map
+                .into_iter()
+                .map(|(n, _t, v)| (n.to_string(), v))
+                .collect(),
         })
     }
     fn serialize_row(
@@ -86,7 +95,7 @@ fn ch_value_to_string(v: &klickhouse::Value) -> Option<String> {
 fn pg_query(
     client: &mut postgres::Client,
     sql: &str,
-) -> Result<(Vec<String>, Vec<Vec<Option<String>>>, Option<u64>, bool), String> {
+) -> Result<QueryRows, String> {
     use postgres::SimpleQueryMessage::*;
     let msgs = client.simple_query(sql).map_err(|e| e.to_string())?;
     let mut columns: Vec<String> = Vec::new();
@@ -106,7 +115,9 @@ fn pg_query(
                     truncated = true;
                     continue;
                 }
-                let vals = (0..row.len()).map(|i| row.get(i).map(|s| s.to_string())).collect();
+                let vals = (0..row.len())
+                    .map(|i| row.get(i).map(|s| s.to_string()))
+                    .collect();
                 rows.push(vals);
             }
             CommandComplete(n) => affected = Some(n),
@@ -144,7 +155,9 @@ fn parse_env(path: &Path) -> HashMap<String, String> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let Some((k, v)) = line.split_once('=') else { continue };
+        let Some((k, v)) = line.split_once('=') else {
+            continue;
+        };
         let mut v = v.trim().to_string();
         // Strip surrounding quotes.
         if (v.starts_with('"') && v.ends_with('"') && v.len() >= 2)
@@ -174,7 +187,10 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
     match engine.as_str() {
         "mysql" | "mariadb" => Some(DbConfig {
             engine: "mysql".into(),
-            host: env.get("DB_HOST").cloned().unwrap_or_else(|| "127.0.0.1".into()),
+            host: env
+                .get("DB_HOST")
+                .cloned()
+                .unwrap_or_else(|| "127.0.0.1".into()),
             port: env
                 .get("DB_PORT")
                 .and_then(|p| p.parse().ok())
@@ -190,8 +206,14 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
         }),
         "pgsql" | "postgres" | "postgresql" => Some(DbConfig {
             engine: "postgres".into(),
-            host: env.get("DB_HOST").cloned().unwrap_or_else(|| "127.0.0.1".into()),
-            port: env.get("DB_PORT").and_then(|p| p.parse().ok()).unwrap_or(5432),
+            host: env
+                .get("DB_HOST")
+                .cloned()
+                .unwrap_or_else(|| "127.0.0.1".into()),
+            port: env
+                .get("DB_PORT")
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(5432),
             tls: false,
             tls_insecure: false,
             group: String::new(),
@@ -203,13 +225,22 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
         }),
         "clickhouse" => Some(DbConfig {
             engine: "clickhouse".into(),
-            host: env.get("DB_HOST").cloned().unwrap_or_else(|| "127.0.0.1".into()),
-            port: env.get("DB_PORT").and_then(|p| p.parse().ok()).unwrap_or(9000),
+            host: env
+                .get("DB_HOST")
+                .cloned()
+                .unwrap_or_else(|| "127.0.0.1".into()),
+            port: env
+                .get("DB_PORT")
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(9000),
             tls: false,
             tls_insecure: false,
             group: String::new(),
             database: env.get("DB_DATABASE").cloned().unwrap_or_default(),
-            username: env.get("DB_USERNAME").cloned().unwrap_or_else(|| "default".into()),
+            username: env
+                .get("DB_USERNAME")
+                .cloned()
+                .unwrap_or_else(|| "default".into()),
             password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
             path: String::new(),
             label,
@@ -295,9 +326,13 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
         }
         "postgres" | "postgresql" | "pgsql" => {
             let mut pg = postgres::Config::new();
-            pg.host(if config.host.is_empty() { "127.0.0.1" } else { &config.host })
-                .port(if config.port == 0 { 5432 } else { config.port })
-                .user(&config.username);
+            pg.host(if config.host.is_empty() {
+                "127.0.0.1"
+            } else {
+                &config.host
+            })
+            .port(if config.port == 0 { 5432 } else { config.port })
+            .user(&config.username);
             if !config.password.is_empty() {
                 pg.password(&config.password);
             }
@@ -319,10 +354,18 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
             }
         }
         "clickhouse" | "ch" => {
-            let host = if config.host.is_empty() { "127.0.0.1".to_string() } else { config.host.clone() };
+            let host = if config.host.is_empty() {
+                "127.0.0.1".to_string()
+            } else {
+                config.host.clone()
+            };
             let port = if config.port == 0 { 9000 } else { config.port };
             let opts = klickhouse::ClientOptions {
-                username: if config.username.is_empty() { "default".into() } else { config.username.clone() },
+                username: if config.username.is_empty() {
+                    "default".into()
+                } else {
+                    config.username.clone()
+                },
                 password: config.password.clone(),
                 default_database: config.database.clone(),
                 ..Default::default()
@@ -342,9 +385,14 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
                         .build()
                         .map_err(|e| e.to_string())?;
                     let connector = tokio_native_tls::TlsConnector::from(connector);
-                    let tcp = tokio::net::TcpStream::connect(&addr).await.map_err(|e| e.to_string())?;
+                    let tcp = tokio::net::TcpStream::connect(&addr)
+                        .await
+                        .map_err(|e| e.to_string())?;
                     let _ = tcp.set_nodelay(true);
-                    let tls = connector.connect(&host_cloned, tcp).await.map_err(|e| e.to_string())?;
+                    let tls = connector
+                        .connect(&host_cloned, tcp)
+                        .await
+                        .map_err(|e| e.to_string())?;
                     let (read, mut writer) = tokio::io::split(tls);
                     let _ = writer.flush().await;
                     klickhouse::Client::connect_stream(read, writer, opts)
@@ -356,7 +404,8 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
                     .map_err(|e| e.to_string())?
             };
             // Validate eagerly.
-            tauri::async_runtime::block_on(client.execute("SELECT 1")).map_err(|e| e.to_string())?;
+            tauri::async_runtime::block_on(client.execute("SELECT 1"))
+                .map_err(|e| e.to_string())?;
             Conn::Clickhouse(client)
         }
         other => return Err(format!("Unsupported engine: {other}")),
@@ -415,14 +464,23 @@ pub fn db_tables(state: State<DbManager>, id: String) -> Result<Vec<String>, Str
                 &mut client,
                 "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema') ORDER BY tablename",
             )?;
-            Ok(rows.into_iter().filter_map(|r| r.into_iter().next().flatten()).collect())
-        }
-        Conn::Clickhouse(client) => {
-            let rows: Vec<ChRow> = tauri::async_runtime::block_on(client.query_collect::<ChRow>("SHOW TABLES"))
-                .map_err(|e| e.to_string())?;
             Ok(rows
                 .into_iter()
-                .filter_map(|r| r.cells.into_iter().next().and_then(|(_, v)| ch_value_to_string(&v)))
+                .filter_map(|r| r.into_iter().next().flatten())
+                .collect())
+        }
+        Conn::Clickhouse(client) => {
+            let rows: Vec<ChRow> =
+                tauri::async_runtime::block_on(client.query_collect::<ChRow>("SHOW TABLES"))
+                    .map_err(|e| e.to_string())?;
+            Ok(rows
+                .into_iter()
+                .filter_map(|r| {
+                    r.cells
+                        .into_iter()
+                        .next()
+                        .and_then(|(_, v)| ch_value_to_string(&v))
+                })
                 .collect())
         }
     }
@@ -511,9 +569,23 @@ pub fn db_columns(
                 .map(|r| {
                     let name = r.first().cloned().flatten().unwrap_or_default();
                     let data_type = r.get(1).cloned().flatten().unwrap_or_default();
-                    let nullable = r.get(2).cloned().flatten().unwrap_or_default().eq_ignore_ascii_case("YES");
-                    let key = if pks.contains(&name) { "PRI".to_string() } else { String::new() };
-                    ColumnInfo { name, data_type, nullable, key }
+                    let nullable = r
+                        .get(2)
+                        .cloned()
+                        .flatten()
+                        .unwrap_or_default()
+                        .eq_ignore_ascii_case("YES");
+                    let key = if pks.contains(&name) {
+                        "PRI".to_string()
+                    } else {
+                        String::new()
+                    };
+                    ColumnInfo {
+                        name,
+                        data_type,
+                        nullable,
+                        key,
+                    }
                 })
                 .collect())
         }
@@ -525,11 +597,17 @@ pub fn db_columns(
             Ok(rows
                 .into_iter()
                 .map(|r| {
-                    let v: Vec<Option<String>> = r.cells.iter().map(|(_, x)| ch_value_to_string(x)).collect();
+                    let v: Vec<Option<String>> =
+                        r.cells.iter().map(|(_, x)| ch_value_to_string(x)).collect();
                     let name = v.first().cloned().flatten().unwrap_or_default();
                     let data_type = v.get(1).cloned().flatten().unwrap_or_default();
                     let nullable = data_type.starts_with("Nullable(");
-                    ColumnInfo { name, data_type, nullable, key: String::new() }
+                    ColumnInfo {
+                        name,
+                        data_type,
+                        nullable,
+                        key: String::new(),
+                    }
                 })
                 .collect())
         }
@@ -546,7 +624,11 @@ pub struct TableInfo {
 }
 
 #[tauri::command]
-pub fn db_table_info(state: State<DbManager>, id: String, table: String) -> Result<TableInfo, String> {
+pub fn db_table_info(
+    state: State<DbManager>,
+    id: String,
+    table: String,
+) -> Result<TableInfo, String> {
     let conns = state.conns.lock().unwrap();
     let conn = conns.get(&id).ok_or("Connection not found")?;
     match conn {
@@ -561,13 +643,21 @@ pub fn db_table_info(state: State<DbManager>, id: String, table: String) -> Resu
                 ))
                 .map_err(|e| e.to_string())?;
             let (rows, bytes) = row.unwrap_or((None, None));
-            Ok(TableInfo { rows, bytes, approximate: true })
+            Ok(TableInfo {
+                rows,
+                bytes,
+                approximate: true,
+            })
         }
         Conn::Sqlite(path) => {
             let c = rusqlite::Connection::open(path).map_err(|e| e.to_string())?;
             let q = format!("SELECT COUNT(*) FROM \"{}\"", table.replace('"', "\"\""));
             let cnt: i64 = c.query_row(&q, [], |r| r.get(0)).unwrap_or(-1);
-            Ok(TableInfo { rows: Some(cnt).filter(|n| *n >= 0), bytes: None, approximate: false })
+            Ok(TableInfo {
+                rows: Some(cnt).filter(|n| *n >= 0),
+                bytes: None,
+                approximate: false,
+            })
         }
         Conn::Postgres(m) => {
             let mut client = m.lock().unwrap();
@@ -582,9 +672,22 @@ pub fn db_table_info(state: State<DbManager>, id: String, table: String) -> Resu
                 ),
             )?;
             let first = rows_data.into_iter().next().unwrap_or_default();
-            let rows = first.first().cloned().flatten().and_then(|s| s.parse::<i64>().ok()).filter(|n| *n >= 0);
-            let bytes = first.get(1).cloned().flatten().and_then(|s| s.parse::<i64>().ok());
-            Ok(TableInfo { rows, bytes, approximate: true })
+            let rows = first
+                .first()
+                .cloned()
+                .flatten()
+                .and_then(|s| s.parse::<i64>().ok())
+                .filter(|n| *n >= 0);
+            let bytes = first
+                .get(1)
+                .cloned()
+                .flatten()
+                .and_then(|s| s.parse::<i64>().ok());
+            Ok(TableInfo {
+                rows,
+                bytes,
+                approximate: true,
+            })
         }
         Conn::Clickhouse(client) => {
             let t = table.replace('\'', "''");
@@ -594,7 +697,8 @@ pub fn db_table_info(state: State<DbManager>, id: String, table: String) -> Resu
             .map_err(|e| e.to_string())?;
             let (rows, bytes) = match rows_ch.into_iter().next() {
                 Some(r) => {
-                    let v: Vec<Option<String>> = r.cells.iter().map(|(_, x)| ch_value_to_string(x)).collect();
+                    let v: Vec<Option<String>> =
+                        r.cells.iter().map(|(_, x)| ch_value_to_string(x)).collect();
                     (
                         v.first().cloned().flatten().and_then(|s| s.parse().ok()),
                         v.get(1).cloned().flatten().and_then(|s| s.parse().ok()),
@@ -602,7 +706,11 @@ pub fn db_table_info(state: State<DbManager>, id: String, table: String) -> Resu
                 }
                 None => (None, None),
             };
-            Ok(TableInfo { rows, bytes, approximate: true })
+            Ok(TableInfo {
+                rows,
+                bytes,
+                approximate: true,
+            })
         }
     }
 }
@@ -631,7 +739,13 @@ fn mysql_value_to_string(v: &mysql::Value) -> Option<String> {
 
 fn is_select(sql: &str) -> bool {
     let s = sql.trim_start().to_lowercase();
-    s.starts_with("select") || s.starts_with("show") || s.starts_with("pragma") || s.starts_with("explain") || s.starts_with("describe") || s.starts_with("desc ") || s.starts_with("with")
+    s.starts_with("select")
+        || s.starts_with("show")
+        || s.starts_with("pragma")
+        || s.starts_with("explain")
+        || s.starts_with("describe")
+        || s.starts_with("desc ")
+        || s.starts_with("with")
 }
 
 const MAX_ROWS: usize = 1000;
@@ -649,8 +763,12 @@ pub fn db_query(state: State<DbManager>, id: String, sql: String) -> Result<Quer
             use mysql::prelude::Queryable;
             if select {
                 let result = c.query_iter(&sql).map_err(|e| e.to_string())?;
-                let columns: Vec<String> =
-                    result.columns().as_ref().iter().map(|c| c.name_str().to_string()).collect();
+                let columns: Vec<String> = result
+                    .columns()
+                    .as_ref()
+                    .iter()
+                    .map(|c| c.name_str().to_string())
+                    .collect();
                 let mut rows = Vec::new();
                 let mut truncated = false;
                 for row in result {
@@ -738,9 +856,23 @@ pub fn db_query(state: State<DbManager>, id: String, sql: String) -> Result<Quer
             let (columns, rows, affected, truncated) = pg_query(&mut client, &sql)?;
             let elapsed_ms = start.elapsed().as_millis() as u64;
             if select {
-                Ok(QueryResult { columns, rows, rows_affected: None, elapsed_ms, is_select: true, truncated })
+                Ok(QueryResult {
+                    columns,
+                    rows,
+                    rows_affected: None,
+                    elapsed_ms,
+                    is_select: true,
+                    truncated,
+                })
             } else {
-                Ok(QueryResult { columns: vec![], rows: vec![], rows_affected: affected, elapsed_ms, is_select: false, truncated: false })
+                Ok(QueryResult {
+                    columns: vec![],
+                    rows: vec![],
+                    rows_affected: affected,
+                    elapsed_ms,
+                    is_select: false,
+                    truncated: false,
+                })
             }
         }
         Conn::Clickhouse(client) => {
@@ -770,7 +902,8 @@ pub fn db_query(state: State<DbManager>, id: String, sql: String) -> Result<Quer
                     truncated,
                 })
             } else {
-                tauri::async_runtime::block_on(client.execute(sql.clone())).map_err(|e| e.to_string())?;
+                tauri::async_runtime::block_on(client.execute(sql.clone()))
+                    .map_err(|e| e.to_string())?;
                 Ok(QueryResult {
                     columns: vec![],
                     rows: vec![],
