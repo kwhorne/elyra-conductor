@@ -17,6 +17,9 @@ Conductor is keyboard-first. The shortcuts below use `⌘` on macOS; on Linux/Wi
 | `⇧⌘D` | Split the active pane down |
 | `⌘W` | Close the active pane (or close the editor when it is focused) |
 | `⌘B` | Toggle the file sidebar |
+| `⌘P` | Find files / search file contents |
+| `⌘T` | Toggle the database explorer |
+| `⌘G` | Open the Git panel |
 | `⌘S` | Save the file (when the editor is focused) |
 | `⌘F` | Find in terminal (when a terminal is focused) |
 | `⌘↵` | Commit (in the commit dialog) |

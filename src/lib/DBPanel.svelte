@@ -21,7 +21,7 @@
   let filters = $state({}); // entry.key -> table filter text
   let collapsed = $state({}); // group name -> collapsed?
   let testState = $state(null); // null | "testing" | "ok" | error string
-  const blankForm = () => ({ engine: "mysql", host: "127.0.0.1", port: 3306, database: "", username: "root", password: "", path: "", tls: false, tls_insecure: false, group: "" });
+  const blankForm = () => ({ engine: "mysql", host: "127.0.0.1", port: 3306, database: "", username: "root", password: "", path: "", tls: false, tls_insecure: false, group: "", use_ssh: false, ssh_host: "", ssh_port: 22, ssh_user: "", ssh_auth: "key", ssh_password: "", ssh_key_path: "", ssh_passphrase: "" });
   let form = $state(blankForm());
 
   // Group connections for the tree: ungrouped first, then named groups.
@@ -39,7 +39,7 @@
   async function testConn() {
     testState = "testing";
     try {
-      await ontest?.({ ...form, port: Number(form.port) || 0 });
+      await ontest?.({ ...form, port: Number(form.port) || 0, ssh_port: Number(form.ssh_port) || 22 });
       testState = "ok";
     } catch (e) {
       testState = String(e);
@@ -67,7 +67,7 @@
     adding = true;
   }
   function submitManual() {
-    const cfg = { ...form, port: Number(form.port) || 0 };
+    const cfg = { ...form, port: Number(form.port) || 0, ssh_port: Number(form.ssh_port) || 22 };
     if (editingEntry) onedit?.(editingEntry, cfg);
     else onaddmanual?.(cfg);
     adding = false;
@@ -116,6 +116,26 @@
             {#if form.tls}
               <label class="chk"><input type="checkbox" bind:checked={form.tls_insecure} /> Skip certificate verification (self-signed)</label>
             {/if}
+          {/if}
+          <label class="chk"><input type="checkbox" bind:checked={form.use_ssh} /> Use SSH tunnel (remote)</label>
+          {#if form.use_ssh}
+            <div class="ssh">
+              <label>SSH host <input bind:value={form.ssh_host} placeholder="ssh.example.com" /></label>
+              <label>SSH port <input type="number" bind:value={form.ssh_port} /></label>
+              <label>SSH user <input bind:value={form.ssh_user} placeholder="deploy" /></label>
+              <label>Auth method
+                <select bind:value={form.ssh_auth}>
+                  <option value="key">Public key</option>
+                  <option value="password">Password</option>
+                </select>
+              </label>
+              {#if form.ssh_auth === "password"}
+                <label>SSH password <input type="password" bind:value={form.ssh_password} /></label>
+              {:else}
+                <label>Private key <input bind:value={form.ssh_key_path} placeholder="~/.ssh/id_ed25519" /></label>
+                <label>Passphrase <input type="password" bind:value={form.ssh_passphrase} placeholder="(if the key has one)" /></label>
+              {/if}
+            </div>
           {/if}
         {/if}
         <label>Group <input bind:value={form.group} placeholder="(optional, e.g. Staging)" /></label>
@@ -208,6 +228,8 @@
   .form label.chk input { width: auto; }
   .hint { color: var(--text-dim); font-size: 11px; }
   .btnrow { display: flex; align-items: center; gap: 8px; }
+  .ssh { display: flex; flex-direction: column; gap: 6px; padding: 8px; margin-top: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-2); }
+  .ssh select { background: var(--bg-3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 6px; font-size: 12px; }
   .ghost { background: var(--bg-2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 10px; font-size: 12px; }
   .ghost:hover:not(:disabled) { border-color: var(--accent); }
   .ghost:disabled { opacity: 0.5; }

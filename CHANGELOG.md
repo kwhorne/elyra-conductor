@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-06-05
+
+### Added
+
+- **SSH tunnels for remote databases** — a connection can tunnel through SSH. Tick **Use
+  SSH tunnel** and fill in host, port, user, and an auth method (public key with optional
+  passphrase, or password). Conductor runs a local port-forward via the system `ssh` and
+  points the driver at it; secrets are provided via a one-shot askpass helper and stored
+  in the Keychain with the rest of the connection.
+- **Whole-table export** — in a table's Data view, **Excel** and **CSV** now export the
+  *entire* table (not just the visible page), with the database field names as the header
+  row. Active filters and ordering are respected.
+- **Two-tier header** — the global toolbar and the work tabs now live on separate rows, so
+  tabs get full width and scroll horizontally instead of being squeezed. Actions are
+  grouped (View · Tools).
+- **⌘T** toggles the database explorer.
+
 ## [0.6.2] — 2026-06-04
 
 ### Added
@@ -508,7 +525,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.5.1...v0.6.0

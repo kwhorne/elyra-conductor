@@ -121,9 +121,11 @@
         filters: [{ name: "Excel", extensions: ["xlsx"] }],
       });
       if (!path) return;
+      const { cols, rws } = await exportRows();
       const XLSX = await import("xlsx");
-      // Keep values as text to preserve IDs/zips with leading zeros.
-      const aoa = [columns, ...rows.map((r) => r.map((c) => (c === null ? "" : c)))];
+      // Keep values as text to preserve IDs/zips with leading zeros. Column
+      // names (database fields) are the first row / heading.
+      const aoa = [cols, ...rws.map((r) => r.map((c) => (c === null ? "" : c)))];
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, base.slice(0, 31) || "Sheet1");
@@ -148,7 +150,8 @@
         const v = String(s);
         return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
       };
-      const lines = [columns.map(cell).join(","), ...rows.map((r) => r.map(cell).join(","))];
+      const { cols, rws } = await exportRows();
+      const lines = [cols.map(cell).join(","), ...rws.map((r) => r.map(cell).join(","))];
       await invoke("write_file", { path, content: lines.join("\n") });
     } catch (e) {
       error = `Export failed: ${e}`;
@@ -169,7 +172,7 @@
     return `CAST(${q(col)} AS TEXT)`;
   }
 
-  function buildTableSql() {
+  function buildTableSql(noLimit = false) {
     const conds = [];
     const global = where.trim().replace(/^where\s+/i, "");
     if (global) conds.push(`(${global})`);
@@ -181,8 +184,19 @@
     const ob = orderBy.trim().replace(/^order\s+by\s+/i, "");
     if (ob) s += ` ORDER BY ${ob}`;
     else if (sortCol) s += ` ORDER BY ${q(sortCol)} ${sortDir === "desc" ? "DESC" : "ASC"}`;
-    s += ` LIMIT ${PAGE} OFFSET ${page * PAGE}`;
+    if (!noLimit) s += ` LIMIT ${PAGE} OFFSET ${page * PAGE}`;
     return s;
+  }
+
+  // For exports in table mode, fetch the whole table (current filters/order, no
+  // pagination). The backend row cap is lifted via `max`.
+  const EXPORT_MAX = 1_000_000;
+  async function exportRows() {
+    if (mode === "table" && table) {
+      const res = await invoke("db_query", { id: connId, sql: buildTableSql(true), max: EXPORT_MAX });
+      return { cols: res.columns, rws: res.rows, truncated: res.truncated };
+    }
+    return { cols: columns, rws: rows, truncated };
   }
 
   async function loadMeta() {

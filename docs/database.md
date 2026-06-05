@@ -42,6 +42,22 @@ encrypted channel; tick **Skip certificate verification** for self-signed/intern
 hosts. TLS uses the system stack (macOS Secure Transport). ClickHouse keeps its native
 protocol over the encrypted stream.
 
+### SSH tunnels (remote databases)
+
+For a database that's only reachable through a jump host, tick **Use SSH tunnel** in the
+connection form and fill in:
+
+- **SSH host / port / user**
+- **Auth method** — **Public key** (with a **Private key** path like `~/.ssh/id_ed25519`
+  and an optional **Passphrase**) or **Password**.
+
+The **Host** and **Port** above are the database address *as seen from the SSH server*
+(often `127.0.0.1` and the default port). Conductor opens a local port-forward with the
+system `ssh` and connects the driver to it; the tunnel lives as long as the connection.
+Secrets are passed to `ssh` via a one-shot askpass helper (deleted right after auth) and
+stored in the Keychain with the rest of the connection. TLS is skipped for tunneled
+connections — the SSH channel is the encryption.
+
 ## Connecting
 
 - **Connect from `.env`** — with a project selected, Conductor reads the Laravel-style
@@ -100,6 +116,10 @@ of what you've run — pick one from the **History…** dropdown to load it back
 Any table or query result can be exported with **⤓ Excel** (a real `.xlsx`) or **⤓ CSV**.
 Values are exported as text so identifiers and zip codes with leading zeros (e.g. `0484`)
 are preserved exactly.
+
+In a table's **Data** view the export covers the **whole table** (not just the visible
+page), with the database field names as the header row, and it respects any active WHERE /
+column filters and ordering. In a query tab, the current result is exported.
 
 ## Ask Elyra about your data
 

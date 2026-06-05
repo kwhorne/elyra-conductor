@@ -39,6 +39,24 @@ pub struct DbConfig {
     /// Optional group/folder name for organising connections in the panel.
     #[serde(default)]
     pub group: String,
+    /// Tunnel the DB connection through SSH (remote databases).
+    #[serde(default)]
+    pub use_ssh: bool,
+    #[serde(default)]
+    pub ssh_host: String,
+    #[serde(default)]
+    pub ssh_port: u16,
+    #[serde(default)]
+    pub ssh_user: String,
+    /// "key" | "password"
+    #[serde(default)]
+    pub ssh_auth: String,
+    #[serde(default)]
+    pub ssh_password: String,
+    #[serde(default)]
+    pub ssh_key_path: String,
+    #[serde(default)]
+    pub ssh_passphrase: String,
 }
 
 /// Columns, rows (each cell text-or-null), rows-affected, and a truncated flag.
@@ -92,7 +110,7 @@ fn ch_value_to_string(v: &klickhouse::Value) -> Option<String> {
 
 // Run a query via Postgres' simple protocol, which returns every value as text
 // (Option<&str>) — ideal for a generic browser (no per-type decoding needed).
-fn pg_query(client: &mut postgres::Client, sql: &str) -> Result<QueryRows, String> {
+fn pg_query(client: &mut postgres::Client, sql: &str, max_rows: usize) -> Result<QueryRows, String> {
     use postgres::SimpleQueryMessage::*;
     let msgs = client.simple_query(sql).map_err(|e| e.to_string())?;
     let mut columns: Vec<String> = Vec::new();
@@ -108,7 +126,7 @@ fn pg_query(client: &mut postgres::Client, sql: &str) -> Result<QueryRows, Strin
                 if columns.is_empty() {
                     columns = row.columns().iter().map(|c| c.name().to_string()).collect();
                 }
-                if rows.len() >= MAX_ROWS {
+                if rows.len() >= max_rows {
                     truncated = true;
                     continue;
                 }
@@ -127,7 +145,190 @@ fn pg_query(client: &mut postgres::Client, sql: &str) -> Result<QueryRows, Strin
 #[derive(Default)]
 pub struct DbManager {
     conns: Mutex<HashMap<String, Conn>>,
+    tunnels: Mutex<HashMap<String, SshTunnel>>,
     seq: Mutex<u64>,
+}
+
+// ── SSH tunnel (remote databases) ──────────────────────────────
+// We shell out to the system `ssh` with a local port-forward. It handles both
+// key and password auth and multiple concurrent forwards cleanly. Conductor is
+// a GUI app with no controlling tty, so ssh uses SSH_ASKPASS for secrets.
+struct SshTunnel {
+    child: std::process::Child,
+    local_port: u16,
+}
+
+impl Drop for SshTunnel {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn engine_default_port(engine: &str) -> u16 {
+    match engine {
+        "mysql" => 3306,
+        "postgres" | "postgresql" | "pgsql" => 5432,
+        "clickhouse" | "ch" => 9000,
+        _ => 0,
+    }
+}
+
+fn free_local_port() -> Result<u16, String> {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
+    let p = l.local_addr().map_err(|e| e.to_string())?.port();
+    Ok(p)
+}
+
+/// Write a temporary SSH_ASKPASS helper that echoes the secret. Mode 0700.
+fn write_askpass(secret: &str) -> Result<std::path::PathBuf, String> {
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    let mut path = std::env::temp_dir();
+    path.push(format!("ec-askpass-{}-{}.sh", std::process::id(), rand_suffix()));
+    let escaped = secret.replace('\'', "'\\''");
+    let script = format!("#!/bin/sh\nprintf '%s\\n' '{escaped}'\n");
+    let mut f = std::fs::File::create(&path).map_err(|e| e.to_string())?;
+    f.write_all(script.as_bytes()).map_err(|e| e.to_string())?;
+    let perms = std::fs::Permissions::from_mode(0o700);
+    std::fs::set_permissions(&path, perms).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
+fn expand_tilde(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return format!("{home}/{rest}");
+        }
+    }
+    path.to_string()
+}
+
+fn rand_suffix() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0)
+}
+
+fn wait_port(
+    port: u16,
+    child: &mut std::process::Child,
+    timeout: std::time::Duration,
+) -> Result<(), String> {
+    use std::io::Read;
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(_status) = child.try_wait().map_err(|e| e.to_string())? {
+            let mut err = String::new();
+            if let Some(mut s) = child.stderr.take() {
+                let _ = s.read_to_string(&mut err);
+            }
+            let msg = err.trim();
+            return Err(if msg.is_empty() {
+                "SSH tunnel failed (ssh exited)".to_string()
+            } else {
+                format!("SSH tunnel failed: {msg}")
+            });
+        }
+        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            return Ok(());
+        }
+        if start.elapsed() > timeout {
+            return Err("SSH tunnel timed out (port did not open)".to_string());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+}
+
+fn start_tunnel(config: &DbConfig) -> Result<SshTunnel, String> {
+    if config.ssh_host.trim().is_empty() {
+        return Err("SSH host is required".to_string());
+    }
+    if config.ssh_user.trim().is_empty() {
+        return Err("SSH user is required".to_string());
+    }
+    let local_port = free_local_port()?;
+    let db_host = if config.host.is_empty() {
+        "127.0.0.1".to_string()
+    } else {
+        config.host.clone()
+    };
+    let db_port = if config.port == 0 {
+        engine_default_port(&config.engine)
+    } else {
+        config.port
+    };
+    let ssh_port = if config.ssh_port == 0 { 22 } else { config.ssh_port };
+
+    let mut cmd = std::process::Command::new("ssh");
+    cmd.arg("-N")
+        .args(["-o", "ExitOnForwardFailure=yes"])
+        .args(["-o", "StrictHostKeyChecking=accept-new"])
+        .args(["-o", "ConnectTimeout=10"])
+        .args(["-o", "ServerAliveInterval=30"])
+        .args(["-o", "ServerAliveCountMax=3"])
+        .args(["-o", "NumberOfPasswordPrompts=1"])
+        .args(["-p", &ssh_port.to_string()])
+        .args(["-L", &format!("127.0.0.1:{local_port}:{db_host}:{db_port}")]);
+
+    let password_auth = config.ssh_auth == "password";
+    let secret = if password_auth {
+        config.ssh_password.clone()
+    } else {
+        config.ssh_passphrase.clone()
+    };
+
+    if password_auth {
+        cmd.args(["-o", "PubkeyAuthentication=no"]);
+        cmd.args(["-o", "PreferredAuthentications=password,keyboard-interactive"]);
+    } else if !config.ssh_key_path.trim().is_empty() {
+        cmd.args(["-i", &expand_tilde(config.ssh_key_path.trim())]);
+        cmd.args(["-o", "IdentitiesOnly=yes"]);
+    }
+
+    let mut askpass: Option<std::path::PathBuf> = None;
+    if secret.is_empty() {
+        cmd.args(["-o", "BatchMode=yes"]);
+    } else {
+        let p = write_askpass(&secret)?;
+        cmd.env("SSH_ASKPASS", &p);
+        cmd.env("SSH_ASKPASS_REQUIRE", "force");
+        cmd.env("DISPLAY", "localhost:0");
+        askpass = Some(p);
+    }
+
+    cmd.arg(format!("{}@{}", config.ssh_user, config.ssh_host));
+    cmd.stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| format!("failed to start ssh: {e}"))?;
+    let res = wait_port(local_port, &mut child, std::time::Duration::from_secs(15));
+    // Remove the askpass helper as soon as auth is done (success or fail).
+    if let Some(p) = &askpass {
+        let _ = std::fs::remove_file(p);
+    }
+    res?;
+    Ok(SshTunnel { child, local_port })
+}
+
+/// Resolve a config to what `open_conn` should actually connect to. When SSH is
+/// enabled, start a tunnel and point the connection at the local forwarded port.
+fn prepare(config: &DbConfig) -> Result<(DbConfig, Option<SshTunnel>), String> {
+    if config.use_ssh && config.engine != "sqlite" {
+        let tunnel = start_tunnel(config)?;
+        let mut eff = config.clone();
+        eff.host = "127.0.0.1".to_string();
+        eff.port = tunnel.local_port;
+        // The SSH tunnel is the transport encryption; TLS to 127.0.0.1 would
+        // fail hostname verification, so disable it for tunneled connections.
+        eff.tls = false;
+        Ok((eff, Some(tunnel)))
+    } else {
+        Ok((config.clone(), None))
+    }
 }
 
 #[derive(Serialize)]
@@ -200,6 +401,7 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
             path: String::new(),
             label,
+            ..Default::default()
         }),
         "pgsql" | "postgres" | "postgresql" => Some(DbConfig {
             engine: "postgres".into(),
@@ -219,6 +421,7 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
             path: String::new(),
             label,
+            ..Default::default()
         }),
         "clickhouse" => Some(DbConfig {
             engine: "clickhouse".into(),
@@ -241,6 +444,7 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             password: env.get("DB_PASSWORD").cloned().unwrap_or_default(),
             path: String::new(),
             label,
+            ..Default::default()
         }),
         "sqlite" => {
             let raw = env.get("DB_DATABASE").cloned().unwrap_or_default();
@@ -411,25 +615,32 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
 
 #[tauri::command]
 pub fn db_connect(state: State<DbManager>, config: DbConfig) -> Result<String, String> {
-    let conn = open_conn(&config)?;
+    let (eff, tunnel) = prepare(&config)?;
+    let conn = open_conn(&eff)?;
     let mut seq = state.seq.lock().unwrap();
     *seq += 1;
     let id = format!("db-{}", *seq);
     drop(seq);
     state.conns.lock().unwrap().insert(id.clone(), conn);
+    if let Some(t) = tunnel {
+        state.tunnels.lock().unwrap().insert(id.clone(), t);
+    }
     Ok(id)
 }
 
-/// Try a connection without storing it (the "Test connection" button).
+/// Try a connection without storing it (the "Test connection" button). The
+/// tunnel (if any) is torn down when this returns.
 #[tauri::command]
 pub fn db_test(config: DbConfig) -> Result<(), String> {
-    open_conn(&config)?;
+    let (eff, _tunnel) = prepare(&config)?;
+    open_conn(&eff)?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn db_disconnect(state: State<DbManager>, id: String) {
     state.conns.lock().unwrap().remove(&id);
+    state.tunnels.lock().unwrap().remove(&id);
 }
 
 // ── schema ─────────────────────────────────────────────────────
@@ -460,6 +671,7 @@ pub fn db_tables(state: State<DbManager>, id: String) -> Result<Vec<String>, Str
             let (_c, rows, _a, _t) = pg_query(
                 &mut client,
                 "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema') ORDER BY tablename",
+                MAX_ROWS,
             )?;
             Ok(rows
                 .into_iter()
@@ -549,6 +761,7 @@ pub fn db_columns(
                        ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema \
                      WHERE tc.table_name = '{t}' AND tc.constraint_type = 'PRIMARY KEY'"
                 ),
+                MAX_ROWS,
             )?;
             let pks: std::collections::HashSet<String> = pk_rows
                 .into_iter()
@@ -560,6 +773,7 @@ pub fn db_columns(
                     "SELECT column_name, data_type, is_nullable FROM information_schema.columns \
                      WHERE table_name = '{t}' ORDER BY ordinal_position"
                 ),
+                MAX_ROWS,
             )?;
             Ok(rows
                 .into_iter()
@@ -667,6 +881,7 @@ pub fn db_table_info(
                      WHERE c.relname = '{t}' AND n.nspname NOT IN ('pg_catalog','information_schema') \
                      ORDER BY (n.nspname = 'public') DESC LIMIT 1"
                 ),
+                MAX_ROWS,
             )?;
             let first = rows_data.into_iter().next().unwrap_or_default();
             let rows = first
@@ -748,7 +963,13 @@ fn is_select(sql: &str) -> bool {
 const MAX_ROWS: usize = 1000;
 
 #[tauri::command]
-pub fn db_query(state: State<DbManager>, id: String, sql: String) -> Result<QueryResult, String> {
+pub fn db_query(
+    state: State<DbManager>,
+    id: String,
+    sql: String,
+    max: Option<usize>,
+) -> Result<QueryResult, String> {
+    let max_rows = max.unwrap_or(MAX_ROWS);
     let conns = state.conns.lock().unwrap();
     let conn = conns.get(&id).ok_or("Connection not found")?;
     let select = is_select(&sql);
@@ -770,7 +991,7 @@ pub fn db_query(state: State<DbManager>, id: String, sql: String) -> Result<Quer
                 let mut truncated = false;
                 for row in result {
                     let row = row.map_err(|e| e.to_string())?;
-                    if rows.len() >= MAX_ROWS {
+                    if rows.len() >= max_rows {
                         truncated = true;
                         break;
                     }
@@ -810,7 +1031,7 @@ pub fn db_query(state: State<DbManager>, id: String, sql: String) -> Result<Quer
                 let mut truncated = false;
                 let mut q = stmt.query([]).map_err(|e| e.to_string())?;
                 while let Some(row) = q.next().map_err(|e| e.to_string())? {
-                    if rows.len() >= MAX_ROWS {
+                    if rows.len() >= max_rows {
                         truncated = true;
                         break;
                     }
@@ -850,7 +1071,7 @@ pub fn db_query(state: State<DbManager>, id: String, sql: String) -> Result<Quer
         }
         Conn::Postgres(m) => {
             let mut client = m.lock().unwrap();
-            let (columns, rows, affected, truncated) = pg_query(&mut client, &sql)?;
+            let (columns, rows, affected, truncated) = pg_query(&mut client, &sql, max_rows)?;
             let elapsed_ms = start.elapsed().as_millis() as u64;
             if select {
                 Ok(QueryResult {
@@ -884,7 +1105,7 @@ pub fn db_query(state: State<DbManager>, id: String, sql: String) -> Result<Quer
                 let mut rows = Vec::new();
                 let mut truncated = false;
                 for r in chrows {
-                    if rows.len() >= MAX_ROWS {
+                    if rows.len() >= max_rows {
                         truncated = true;
                         break;
                     }

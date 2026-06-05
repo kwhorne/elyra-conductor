@@ -1198,7 +1198,7 @@
     list.push({ id: "act:close-pane", title: "Close pane", hint: "\u2318W", group: "action", icon: "\u00D7", action: () => activeTermId && closePane(activeTermId) });
     list.push({ id: "act:toggle-editor", title: showEditor ? "Hide editor" : "Show editor", group: "action", icon: "\u270E", action: () => (showEditor = !showEditor) });
     list.push({ id: "act:toggle-files", title: showFiles ? "Hide file sidebar" : "Show file sidebar", hint: "\u2318B", group: "action", icon: "\u{1F5C2}", action: () => (showFiles = !showFiles) });
-    list.push({ id: "act:toggle-db", title: showDb ? "Hide database panel" : "Show database panel", group: "action", icon: "\u{1F5C4}", action: () => (showDb = !showDb) });
+    list.push({ id: "act:toggle-db", title: showDb ? "Hide database panel" : "Show database panel", hint: "\u2318T", group: "action", icon: "\u{1F5C4}", action: () => (showDb = !showDb) });
     list.push({ id: "act:ports", title: "Show listening ports", group: "action", icon: "\u26a1", action: () => (portsOpen = true) });
     list.push({ id: "act:timeline", title: "Command timeline", group: "action", icon: "\ud83d\udd58", action: () => (timelineOpen = true) });
     list.push({ id: "act:scrollback", title: "Search all terminals (scrollback)", hint: "\u21e7\u2318F", group: "action", icon: "\u{1F50E}", action: () => (scrollbackOpen = true) });
@@ -1265,7 +1265,6 @@
       if (activeTab?.kind === "term") zoomed = !zoomed;
       return;
     }
-
     if (k === "k") {
       e.preventDefault();
       paletteOpen = !paletteOpen;
@@ -1287,6 +1286,9 @@
     } else if (k === "g") {
       e.preventDefault();
       openGitPanel();
+    } else if (k === "t") {
+      e.preventDefault();
+      showDb = !showDb;
     } else if (k === "b") {
       e.preventDefault();
       showFiles = !showFiles;
@@ -1592,7 +1594,29 @@
   />
 
   <div class="main">
-    <div class="topbar">
+    <div class="toolbar">
+      <button class="kbd-btn" onclick={() => (paletteOpen = true)}>Search <kbd>⌘K</kbd></button>
+      <button onclick={quickEdit}>Quick edit</button>
+      <span class="tsep"></span>
+      <span class="tgroup">View</span>
+      <button class:on={showFiles} title="Toggle file sidebar (⌘B)" onclick={() => (showFiles = !showFiles)}>Files</button>
+      <button class:on={showDb} title="Toggle database explorer (⌘T)" onclick={() => (showDb = !showDb)}>DB</button>
+      <button class:on={showEditor} title="Toggle editor" onclick={() => (showEditor = !showEditor)}>Editor</button>
+      <span class="tsep"></span>
+      <span class="tgroup">Tools</span>
+      <button title="Listening ports" onclick={() => (portsOpen = true)}>⚡ Ports</button>
+      <button title="Command timeline — what ran, where, how long" onclick={() => (timelineOpen = true)}>🕘 Timeline</button>
+      {#if projectTasks.length}<button title="Run a project task (npm/composer/make/just)" onclick={() => (tasksOpen = true)}>☰ Tasks</button>{/if}
+      {#if activeProject}<button title="View & edit .env (masked)" onclick={() => (envOpen = true)}>🔑 Env</button>{/if}
+      {#if activeProject?.is_git}<button title="Git: stage, diff, branch, stash, commit (⌘G)" onclick={openGitPanel}>⎇ Git</button>{/if}
+      <div class="tspacer"></div>
+      <button class:on={broadcast} title="Broadcast input to all panes in this tab" onclick={() => (broadcast = !broadcast)}>⁁ Sync</button>
+      <button title="Toggle theme" onclick={() => (theme = theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀" : "☽"}</button>
+      <button class:on={activeWorkspace} title="Workspaces — save & switch layouts" onclick={openWsMenu}>⬡ {activeWorkspace ?? "Layout"}</button>
+      <button title="Keyboard shortcuts (⌘/)" onclick={() => (helpOpen = true)}>?</button>
+    </div>
+
+    <div class="tabbar">
       <div class="tabs">
         {#each tabs as t, i (t.id)}
           {@const proc = tabProc(t)}
@@ -1628,24 +1652,6 @@
           </div>
         {/each}
         <button class="new-tab" title="New tab" onclick={() => newTab(activeProject?.path ?? root, activeProject?.name)}>＋</button>
-      </div>
-      <div class="top-actions">
-        <button class="kbd-btn" onclick={() => (paletteOpen = true)}>Search <kbd>⌘K</kbd></button>
-        <button onclick={quickEdit}>Quick edit</button>
-        <button class:on={showEditor} onclick={() => (showEditor = !showEditor)}>{showEditor ? "Hide editor" : "Show editor"}</button>
-        <button class:on={showFiles} title="Toggle file sidebar (⌘B)" onclick={() => (showFiles = !showFiles)}>Files</button>
-        <button class:on={showDb} title="Toggle database panel" onclick={() => (showDb = !showDb)}>DB</button>
-        <button title="Listening ports" onclick={() => (portsOpen = true)}>⚡ Ports</button>
-        <button title="Command timeline — what ran, where, how long" onclick={() => (timelineOpen = true)}>🕘 Timeline</button>
-        {#if projectTasks.length}<button title="Run a project task (npm/composer/make/just)" onclick={() => (tasksOpen = true)}>☰ Tasks</button>{/if}
-        {#if activeProject}<button title="View & edit .env (masked)" onclick={() => (envOpen = true)}>🔑 Env</button>{/if}
-        <button class:on={broadcast} title="Broadcast input to all panes in this tab" onclick={() => (broadcast = !broadcast)}>⌁ Sync</button>
-        <button title="Toggle theme" onclick={() => (theme = theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀" : "☽"}</button>
-        <button class:on={activeWorkspace} title="Workspaces — save & switch layouts" onclick={openWsMenu}>⬡ {activeWorkspace ?? "Layout"}</button>
-        <button title="Keyboard shortcuts (⌘/)" onclick={() => (helpOpen = true)}>?</button>
-        {#if activeProject?.is_git}
-          <button title="Git: stage, diff, branch, stash, commit (⌘G)" onclick={openGitPanel}>⎇ Git</button>
-        {/if}
       </div>
     </div>
 
@@ -1870,13 +1876,23 @@
 <style>
   .app { display: flex; height: 100%; }
   .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  .topbar {
+  .toolbar {
     display: flex; align-items: center; height: 38px;
     background: var(--bg-2); border-bottom: 1px solid var(--border);
-    padding: 0 8px; gap: 8px;
+    padding: 0 8px; gap: 6px; overflow-x: auto;
+  }
+  .toolbar button { background: var(--bg-3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 10px; font-size: 12px; flex: none; white-space: nowrap; }
+  .toolbar button.on { border-color: var(--accent); color: var(--accent); }
+  .tsep { width: 1px; height: 20px; background: var(--border); flex: none; margin: 0 2px; }
+  .tgroup { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; flex: none; }
+  .tspacer { margin-left: auto; }
+  .tabbar {
+    display: flex; align-items: center; height: 34px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0 8px;
   }
   .tabs { display: flex; align-items: center; gap: 4px; overflow-x: auto; flex: 1; }
-  .tab { display: flex; align-items: center; background: var(--bg-3); border: 1px solid transparent; border-left-width: 3px; border-radius: 6px; padding: 0 2px 0 4px; }
+  .tab { display: flex; align-items: center; background: var(--bg-3); border: 1px solid transparent; border-left-width: 3px; border-radius: 6px; padding: 0 2px 0 4px; flex: 0 0 auto; }
   .tab.active { border-color: var(--accent); }
   .tab.ring { border-color: var(--green); }
   .tab.drop-left { box-shadow: inset 2px 0 0 0 var(--accent); }
@@ -1897,9 +1913,6 @@
   .tab { -webkit-user-select: none; user-select: none; }
   .tab-x:hover { color: var(--text); }
   .new-tab { background: transparent; border: none; color: var(--text-dim); font-size: 16px; padding: 0 6px; }
-  .top-actions { display: flex; gap: 6px; }
-  .top-actions button { background: var(--bg-3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 10px; font-size: 12px; }
-  .top-actions button.on { border-color: var(--accent); color: var(--accent); }
   .kbd-btn { display: flex; align-items: center; gap: 6px; }
   kbd { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); }
   .panes { flex: 1; display: flex; min-height: 0; }

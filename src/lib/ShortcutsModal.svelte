@@ -32,6 +32,8 @@
       title: "Files & editor",
       items: [
         ["⌘B", "Toggle file sidebar"],
+        ["⌘P", "Find files / search contents"],
+        ["⌘T", "Toggle database explorer"],
         ["Right-click file", "Run in modal / external terminal, open"],
         ["⌘S", "Save file (editor focused)"],
         ["⌘F · ⌘/ · ⌘D", "Editor: find · comment · multi-cursor"],
