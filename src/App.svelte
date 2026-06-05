@@ -1225,7 +1225,7 @@
       list.push({ id: `proj:${p.path}`, title: p.name, hint: p.path, group: "project", icon: "\u{1F4C1}", action: () => selectProject(p) });
     for (const t of tabs)
       list.push({ id: `tab:${t.id}`, title: t.title, hint: t.projectPath, group: "tab", icon: "\u{1F5C2}", action: () => focusTab(t) });
-    list.push({ id: "act:new-tab", title: "New terminal tab", hint: "", group: "action", icon: "\u002B", action: () => newTab(activeProject?.path ?? root, activeProject?.name) });
+    list.push({ id: "act:new-tab", title: "New terminal tab", hint: "\u2318N", group: "action", icon: "\u002B", action: () => newTab(activeProject?.path ?? root, activeProject?.name) });
     list.push({ id: "act:open-runbook", title: "Open project runbook", hint: "", group: "action", icon: "\u{1F4D3}", action: () => openRunbook(activeProject?.path ?? root, activeProject?.name) });
     if (activeProject || activeTab?.projectPath) {
       list.push({ id: "act:start-project", title: `Start project (dev)${activeProject ? ": " + activeProject.name : ""}`, hint: "\u2318R", group: "action", icon: "\u25B6", action: () => startProject(activeProject) });
@@ -1292,6 +1292,9 @@
       } else if (k === "p") {
         e.preventDefault();
         finderOpen = !finderOpen;
+      } else if (k === "n") {
+        e.preventDefault();
+        newTab(activeProject?.path ?? root, activeProject?.name);
       }
       return;
     }
@@ -1331,6 +1334,9 @@
     } else if (k === "t") {
       e.preventDefault();
       showDb = !showDb;
+    } else if (k === "n") {
+      e.preventDefault();
+      newTab(activeProject?.path ?? root, activeProject?.name);
     } else if (k === "b") {
       e.preventDefault();
       showFiles = !showFiles;
@@ -1697,7 +1703,7 @@
             >×</span>
           </div>
         {/each}
-        <button class="new-tab" title="New tab" onclick={() => newTab(activeProject?.path ?? root, activeProject?.name)}>＋</button>
+        <button class="new-tab" title="New tab (⌘N)" onclick={() => newTab(activeProject?.path ?? root, activeProject?.name)}>＋</button>
       </div>
     </div>
 

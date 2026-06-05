@@ -18,7 +18,7 @@
         ["⌘W", "Close active pane (or editor when focused)"],
         ["Drag tab", "Reorder tabs"],
         ["Drag divider", "Resize panes"],
-        ["＋", "New terminal tab"],
+        ["⌘N · ＋", "New terminal tab"],
       ],
     },
     {
