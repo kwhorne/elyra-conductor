@@ -264,7 +264,11 @@ pub struct Branches {
 
 #[tauri::command]
 pub fn git_branches(path: String) -> Branches {
-    let current = git(&path, &["rev-parse", "--abbrev-ref", "HEAD"]).filter(|b| b != "HEAD");
+    // `symbolic-ref` returns the branch name even for an unborn branch (one with
+    // no commits yet) and only fails on a genuine detached HEAD — unlike
+    // `rev-parse --abbrev-ref HEAD`, which reports "HEAD" for unborn branches and
+    // made the panel wrongly show "(detached)".
+    let current = git(&path, &["symbolic-ref", "--quiet", "--short", "HEAD"]).filter(|b| !b.is_empty());
     let all = git(&path, &["branch", "--format=%(refname:short)"])
         .map(|s| {
             s.lines()
