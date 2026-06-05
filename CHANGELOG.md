@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-06-05
+
+### Added
+
+- **Shell integration (zsh), opt-in** — enable it from the command palette
+  (“Enable shell integration”) and new terminals capture real **command lines** and
+  **exit codes** via OSC 133/633. It works by pointing `ZDOTDIR` at a shim that sources
+  your own `.zshenv` / `.zprofile` / `.zshrc` (your prompt and environment are untouched)
+  and adds `precmd`/`preexec` hooks.
+  - **Command timeline** now shows the full command and a ✓ / ✗ exit-code badge (falling
+    back to the process-name view for non-integrated terminals).
+  - **Health strip** shows a per-project **✓ / ✗ test** badge from the last test run
+    (pest, phpunit, vitest, jest, pytest, cargo/go test, …).
+
 ## [0.6.6] — 2026-06-05
 
 ### Added
@@ -562,7 +576,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.6...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.6...v0.7.0
 [0.6.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.3...v0.6.4

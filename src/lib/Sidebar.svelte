@@ -14,6 +14,7 @@
     ports = {},
     containers = {},
     running = {},
+    lastTest = {},
     onopenport,
     elyra = false,
     root = "",
@@ -64,6 +65,9 @@
             class:up={containers[p.path].running > 0}
             title={`${containers[p.path].running}/${containers[p.path].total} container(s) running`}
           >🐳{containers[p.path].running}/{containers[p.path].total}</span>
+        {/if}
+        {#if lastTest[p.path]}
+          <span class="ltest" class:ok={lastTest[p.path].ok} title={`Last test run ${lastTest[p.path].ok ? "passed" : "failed"}`}>{lastTest[p.path].ok ? "✓ test" : "✗ test"}</span>
         {/if}
         {#if p.dirty}
           <span class="dirty" title="Uncommitted changes">●</span>
@@ -272,6 +276,21 @@
     color: #4aa3df;
     border-color: color-mix(in srgb, #4aa3df 50%, transparent);
     background: color-mix(in srgb, #4aa3df 15%, transparent);
+  }
+  .ltest {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    border-radius: 4px;
+    padding: 0 4px;
+    flex: none;
+    color: #e06c5a;
+    border: 1px solid color-mix(in srgb, #e06c5a 45%, transparent);
+    background: color-mix(in srgb, #e06c5a 14%, transparent);
+  }
+  .ltest.ok {
+    color: var(--green);
+    border-color: color-mix(in srgb, var(--green) 45%, transparent);
+    background: color-mix(in srgb, var(--green) 14%, transparent);
   }
   .track {
     font-size: 10px;

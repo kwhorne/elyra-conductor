@@ -8,7 +8,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
-  let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark", active = false, register = null, unregister = null } = $props();
+  let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark", active = false, register = null, unregister = null, shellIntegration = false, oncommand = null } = $props();
 
   // Focus the xterm when this pane becomes active (e.g. via keyboard pane-nav).
   $effect(() => {
@@ -106,6 +106,33 @@
     serializeAddon = new SerializeAddon();
     term.loadAddon(serializeAddon);
     term.open(el);
+
+    // Shell-integration OSC sequences (emitted by the zsh shim): 633;E;<cmdline>,
+    // 133;C (output start), 133;D[;exit] (done). We turn these into command
+    // records with the real command line and exit code.
+    let scCmd = null;
+    let scStart = 0;
+    let scActive = false;
+    term.parser.registerOscHandler(633, (data) => {
+      if (data.startsWith("E;")) scCmd = data.slice(2);
+      return true;
+    });
+    term.parser.registerOscHandler(133, (data) => {
+      if (data[0] === "C") {
+        scStart = Date.now();
+        scActive = true;
+      } else if (data[0] === "D") {
+        if (scActive) {
+          const m = data.match(/^D;?(\d+)?/);
+          const exitCode = m && m[1] != null ? Number(m[1]) : null;
+          oncommand?.({ command: scCmd, exitCode, startedAt: scStart, duration: Date.now() - scStart });
+        }
+        scActive = false;
+        scCmd = null;
+      }
+      return true;
+    });
+
     register?.(id, {
       getLines,
       find: findInTerm,
@@ -202,6 +229,7 @@
       cols: term.cols,
       rows: term.rows,
       runCommand: runCommand ?? null,
+      shellIntegration: shellIntegration ?? false,
     });
 
     // Periodically snapshot the buffer so a hard window close still persists it.

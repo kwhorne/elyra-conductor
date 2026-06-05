@@ -1,8 +1,49 @@
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Emitter, State};
+
+// ── Shell integration (zsh) ────────────────────────────────────────────────
+// We point ZDOTDIR at a generated shim that sources the user's real zsh config
+// (so their prompt/env is untouched) and then installs precmd/preexec hooks
+// emitting OSC 133/633: command line, output-start, and exit code. The frontend
+// parses these to enrich the command timeline with real commands + exit codes.
+static ZSH_SHIM: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+
+fn zsh_shim_dir() -> Option<&'static std::path::PathBuf> {
+    ZSH_SHIM
+        .get_or_init(|| {
+            let dir = std::env::temp_dir().join("elyra-zsh-integration");
+            std::fs::create_dir_all(&dir).ok()?;
+            // .zshenv / .zprofile: source the user's versions (with ZDOTDIR
+            // temporarily restored) but keep our shim ZDOTDIR active so the rest
+            // of our startup files are read.
+            let pass = |name: &str| {
+                format!(
+                    "[[ -f \"$USER_ZDOTDIR/{name}\" ]] && ZDOTDIR=\"$USER_ZDOTDIR\" source \"$USER_ZDOTDIR/{name}\"\n"
+                )
+            };
+            std::fs::write(dir.join(".zshenv"), pass(".zshenv")).ok()?;
+            std::fs::write(dir.join(".zprofile"), pass(".zprofile")).ok()?;
+            // .zshrc: source the user's, then install the OSC hooks, then hand
+            // ZDOTDIR back so the interactive session looks normal.
+            let zshrc = concat!(
+                "[[ -f \"$USER_ZDOTDIR/.zshrc\" ]] && ZDOTDIR=\"$USER_ZDOTDIR\" source \"$USER_ZDOTDIR/.zshrc\"\n",
+                "if [[ -o interactive ]]; then\n",
+                "  __elyra_preexec() { print -rn -- $'\\e]633;E;'\"$1\"$'\\a\\e]133;C\\a'; }\n",
+                "  __elyra_precmd() { print -rn -- $'\\e]133;D;'\"$?\"$'\\a'; }\n",
+                "  autoload -Uz add-zsh-hook 2>/dev/null\n",
+                "  add-zsh-hook preexec __elyra_preexec 2>/dev/null\n",
+                "  add-zsh-hook precmd __elyra_precmd 2>/dev/null\n",
+                "fi\n",
+                "ZDOTDIR=\"$USER_ZDOTDIR\"\n",
+            );
+            std::fs::write(dir.join(".zshrc"), zshrc).ok()?;
+            Some(dir)
+        })
+        .as_ref()
+}
 
 struct PtySession {
     master: Box<dyn MasterPty + Send>,
@@ -24,6 +65,7 @@ pub fn pty_spawn(
     cols: u16,
     rows: u16,
     run_command: Option<String>,
+    shell_integration: Option<bool>,
 ) -> Result<(), String> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -60,6 +102,17 @@ pub fn pty_spawn(
         cmd.cwd(cwd);
     }
     cmd.env("TERM", "xterm-256color");
+
+    // Opt-in zsh shell integration: redirect ZDOTDIR to our shim, remembering
+    // the user's original so the shim can source it.
+    if shell_integration.unwrap_or(false) && shell.rsplit('/').next() == Some("zsh") {
+        if let Some(shim) = zsh_shim_dir() {
+            let user_zdotdir =
+                std::env::var("ZDOTDIR").unwrap_or_else(|_| std::env::var("HOME").unwrap_or_default());
+            cmd.env("USER_ZDOTDIR", user_zdotdir);
+            cmd.env("ZDOTDIR", shim);
+        }
+    }
 
     let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     let killer = child.clone_killer();

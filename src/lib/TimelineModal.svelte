@@ -46,9 +46,12 @@
             what ran, where, and how long it took.</div>
         {/if}
         {#each entries as e (e.id)}
-          <button class="row" onclick={() => onjump?.(e)} title="Jump to this pane">
+          <button class="row" onclick={() => onjump?.(e)} title={e.command || "Jump to this pane"}>
             <span class="clock">{clock(e.endedAt)}</span>
-            <span class="proc">{e.proc}</span>
+            {#if e.exitCode != null}
+              <span class="exit" class:ok={e.exitCode === 0} class:fail={e.exitCode !== 0}>{e.exitCode === 0 ? "✓" : "✗ " + e.exitCode}</span>
+            {/if}
+            <span class="proc">{e.command || e.proc}</span>
             <span class="dur">{dur(e.duration)}</span>
             <span class="where">{e.label}</span>
             <span class="ago">{ago(e.endedAt)}</span>
@@ -72,8 +75,11 @@
   .row { display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; background: transparent; border: none; color: var(--text); padding: 7px 10px; border-radius: 8px; cursor: pointer; }
   .row:hover { background: var(--accent-2); }
   .clock { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); flex: none; width: 46px; }
-  .proc { font-family: var(--font-mono); font-size: 12px; font-weight: 600; flex: none; min-width: 70px; }
+  .proc { font-family: var(--font-mono); font-size: 12px; font-weight: 600; flex: 1; min-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .exit { font-family: var(--font-mono); font-size: 11px; font-weight: 700; flex: none; width: 34px; }
+  .exit.ok { color: var(--green); }
+  .exit.fail { color: #e06c5a; }
   .dur { font-size: 11px; color: var(--accent); flex: none; width: 60px; }
-  .where { font-size: 12px; color: var(--text-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .where { font-size: 12px; color: var(--text-dim); flex: none; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ago { font-size: 11px; color: var(--text-dim); flex: none; }
 </style>

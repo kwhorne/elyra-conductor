@@ -346,6 +346,8 @@
   // to the shell, and fire a native notification. Uses the titles we already
   // poll — pure observation, no AI.
   let notifyOnFinish = $state(true);
+  // Opt-in zsh shell integration (real command lines + exit codes via OSC 133/633).
+  let shellIntegration = $state(false);
   let notifyPermission = false;
   let appFocused = true;
   let procRuns = {}; // termId -> { proc, since } for the current foreground command
@@ -357,22 +359,57 @@
   // Session-only (not persisted); newest first, capped.
   let commandLog = $state([]);
   let timelineOpen = $state(false);
+  // Terminals that have proven they have shell integration (emitted an OSC
+  // command record). For those we use the rich OSC data and suppress the
+  // title-based recorder to avoid duplicate entries.
+  const integratedTerms = new Set();
+  // Per-project last test result (from shell integration): { ok, at }.
+  let lastTest = $state({});
+  function pushCommand(entry) {
+    commandLog = [entry, ...commandLog].slice(0, 200);
+  }
   function recordCommand(termId, proc, since, now) {
     const tab = tabForTerm(termId);
-    commandLog = [
-      {
-        id: `cmd-${++idSeq}`,
-        termId,
-        tabId: tab?.id ?? null,
-        label: tab ? tab.title || baseOf(tab.projectPath || "") : "",
-        projectPath: tab?.projectPath ?? null,
-        proc,
-        startedAt: since,
-        endedAt: now,
-        duration: now - since,
-      },
-      ...commandLog,
-    ].slice(0, 200);
+    pushCommand({
+      id: `cmd-${++idSeq}`,
+      termId,
+      tabId: tab?.id ?? null,
+      label: tab ? tab.title || baseOf(tab.projectPath || "") : "",
+      projectPath: tab?.projectPath ?? null,
+      proc,
+      command: null,
+      exitCode: null,
+      startedAt: since,
+      endedAt: now,
+      duration: now - since,
+    });
+  }
+
+  const TEST_RE = /\b(pest|phpunit|vitest|jest|pytest|cargo test|go test|npm test|rspec|mocha|playwright|cypress)\b/i;
+  // A shell-integration command record from a terminal (real command + exit code).
+  function onShellCommand(termId, rec) {
+    integratedTerms.add(termId);
+    const tab = tabForTerm(termId);
+    const cmd = (rec.command || "").trim();
+    const proc = cmd ? cmd.split(/\s+/)[0].split("/").pop() : "command";
+    const now = rec.startedAt + rec.duration;
+    pushCommand({
+      id: `cmd-${++idSeq}`,
+      termId,
+      tabId: tab?.id ?? null,
+      label: tab ? tab.title || baseOf(tab.projectPath || "") : "",
+      projectPath: tab?.projectPath ?? null,
+      proc,
+      command: cmd || null,
+      exitCode: rec.exitCode,
+      startedAt: rec.startedAt,
+      endedAt: now,
+      duration: rec.duration,
+    });
+    // Track the last test run per project for the health strip.
+    if (cmd && TEST_RE.test(cmd) && tab?.projectPath && rec.exitCode != null) {
+      lastTest = { ...lastTest, [tab.projectPath]: { ok: rec.exitCode === 0, at: now } };
+    }
   }
   function jumpToCommand(entry) {
     const tab = tabs.find((t) => t.id === entry.tabId);
@@ -448,7 +485,7 @@
         const run = procRuns[id];
         delete procRuns[id];
         if (run) {
-          recordCommand(id, run.proc, run.since, now);
+          if (!integratedTerms.has(id)) recordCommand(id, run.proc, run.since, now);
           if (now - run.since >= NOTIFY_MIN_MS) notifyFinished(id, run.proc, now - run.since);
         }
       }
@@ -1209,6 +1246,7 @@
     list.push({ id: "act:toggle-hidden", title: showHidden ? "Hide node_modules/.git in tree" : "Show all files in tree", group: "action", icon: "\u{1F441}", action: () => (showHidden = !showHidden) });
     list.push({ id: "act:toggle-theme", title: theme === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "action", icon: theme === "dark" ? "\u2600" : "\u263D", action: () => (theme = theme === "dark" ? "light" : "dark") });
     list.push({ id: "act:toggle-notify", title: notifyOnFinish ? "Disable finished-command notifications" : "Notify when a background command finishes", group: "action", icon: "\u{1F514}", action: () => { notifyOnFinish = !notifyOnFinish; if (notifyOnFinish) ensureNotifyPermission(); } });
+    list.push({ id: "act:toggle-shellint", title: shellIntegration ? "Disable shell integration (zsh)" : "Enable shell integration (zsh) \u2014 real commands & exit codes", hint: "new terminals", group: "action", icon: "\u{1F517}", action: () => (shellIntegration = !shellIntegration) });
     list.push({ id: "act:toggle-broadcast", title: broadcast ? "Stop broadcasting input" : "Broadcast input to all panes", group: "action", icon: "\u2301", action: () => (broadcast = !broadcast) });
     list.push({ id: "act:quick-edit", title: "Quick edit file\u2026", group: "action", icon: "\u270E", action: quickEdit });
     list.push({ id: "act:change-root", title: "Change projects folder\u2026", group: "action", icon: "\u{1F4C2}", action: changeRoot });
@@ -1335,6 +1373,7 @@
       showEditor,
       editorPath,
       notifyOnFinish,
+      shellIntegration,
       activeTabIndex: tabs.findIndex((t) => t.id === activeTabId),
       tabs: tabs.filter((t) => t.kind !== "db").map((t) =>
         t.kind === "agent"
@@ -1405,6 +1444,7 @@
     showEditor = saved.showEditor ?? false;
     editorPath = saved.editorPath ?? null;
     notifyOnFinish = saved.notifyOnFinish ?? true;
+    shellIntegration = saved.shellIntegration ?? false;
 
     if (Array.isArray(saved.tabs) && saved.tabs.length) {
       tabs = saved.tabs.map((t) =>
@@ -1593,6 +1633,7 @@
     ports={projectPorts}
     containers={projectContainers}
     running={projectRunning}
+    lastTest={lastTest}
     onopenport={openLocalPort}
     elyra={!!elyraVersion}
     onagent={(p) => newElyraAgent(p.path, p.name)}
@@ -1724,7 +1765,7 @@
                   <button title="Split down (⇧⌘D)" onclick={() => splitPane(leaf.termId, "col")}>▤</button>
                   <button title="Close pane (⌘W)" onclick={() => closePane(leaf.termId)}>×</button>
                 </div>
-                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} persistKey={leaf.key} runCommand={leaf.runOnce ?? null} active={leaf.termId === activeTermId && tab.id === activeTabId} register={registerTerm} unregister={unregisterTerm} onactivity={() => markActivity(tab.id)} onuserinput={onPaneInput} />
+                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} persistKey={leaf.key} runCommand={leaf.runOnce ?? null} active={leaf.termId === activeTermId && tab.id === activeTabId} register={registerTerm} unregister={unregisterTerm} onactivity={() => markActivity(tab.id)} onuserinput={onPaneInput} shellIntegration={shellIntegration} oncommand={(rec) => onShellCommand(leaf.termId, rec)} />
               </div>
             {/each}
 

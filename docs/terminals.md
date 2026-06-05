@@ -77,6 +77,25 @@ foreground-process titles it already polls, so there's nothing to configure per 
 First use asks for macOS notification permission; you can also manage it later under
 System Settings → Notifications → Elyra Conductor.
 
+## Shell integration (zsh, opt-in)
+
+Enable **shell integration** from the command palette (`⌘K` → *Enable shell integration*)
+and **new** terminals start capturing the real **command line** and **exit code** of each
+command you run, via OSC 133/633 sequences.
+
+It's safe with your existing setup: Conductor points `ZDOTDIR` at a small shim that sources
+your own `.zshenv` / `.zprofile` / `.zshrc` (so your prompt — powerlevel10k, instant
+prompt, aliases — is untouched) and then adds `precmd`/`preexec` hooks.
+
+With it on:
+
+- The **command timeline** (🕘) shows the full command and a ✓ / ✗ exit-code badge.
+- The sidebar shows a per-project **✓ / ✗ test** badge from the last test run (pest,
+  phpunit, vitest, jest, pytest, cargo/go test, …).
+
+It's **off by default** and the choice persists. Only zsh is supported for now; other
+shells keep the lighter, process-name-based timeline.
+
 ## In-terminal search
 
 Press `⌘F` while a terminal is focused to open a find bar. Use `↵` / `⇧↵` to step
