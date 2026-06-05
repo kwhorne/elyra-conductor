@@ -89,6 +89,27 @@
       error = String(e);
     }
   }
+  // Resizable query editor (drag the handle below it). Height persists globally.
+  let editorH = $state(loadEditorH());
+  function loadEditorH() {
+    try { return Number(localStorage.getItem("conductor:dbEditorH")) || 160; } catch { return 160; }
+  }
+  let _drag = { on: false, y: 0, h: 0 };
+  function dragStart(e) {
+    _drag = { on: true, y: e.clientY, h: editorH };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function dragMove(e) {
+    if (!_drag.on) return;
+    editorH = Math.max(60, Math.min(700, _drag.h + (e.clientY - _drag.y)));
+  }
+  function dragEnd(e) {
+    if (!_drag.on) return;
+    _drag.on = false;
+    try { localStorage.setItem("conductor:dbEditorH", String(Math.round(editorH))); } catch {}
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+  }
+
   let saveDlgOpen = $state(false);
   function saveCurrentQuery() {
     if (!sql.trim() || !projectPath) return;
@@ -490,11 +511,21 @@
   {#if mode === "query"}
     <textarea
       class="sql"
+      style:height="{editorH}px"
       bind:value={sql}
       spellcheck="false"
       placeholder="SELECT * FROM …    (⌘↵ to run)"
       onkeydown={onSqlKey}
     ></textarea>
+    <div
+      class="sqldrag"
+      role="separator"
+      aria-orientation="horizontal"
+      title="Drag to resize the editor"
+      onpointerdown={dragStart}
+      onpointermove={dragMove}
+      onpointerup={dragEnd}
+    ></div>
   {/if}
 
   <div class="status">
@@ -655,10 +686,15 @@
   .saved:focus { border-color: var(--accent); }
   .pageinfo { color: var(--text-dim); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
   .sql {
-    height: 130px; resize: vertical; box-sizing: border-box;
-    background: var(--bg); color: var(--text); border: none; border-bottom: 1px solid var(--border);
+    resize: none; box-sizing: border-box; flex: none;
+    background: var(--bg); color: var(--text); border: none;
     padding: 10px 12px; font-family: var(--font-mono); font-size: 13px; outline: none; line-height: 1.5;
   }
+  .sqldrag {
+    height: 7px; flex: none; cursor: row-resize;
+    background: var(--bg-3); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  }
+  .sqldrag:hover { background: var(--accent-2); }
   .status { padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-dim); background: var(--bg-3); border-bottom: 1px solid var(--border); }
   .status .err { color: #f7768e; }
   .status .ok { color: var(--green); }

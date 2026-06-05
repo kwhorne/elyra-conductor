@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-06-05
+
+### Added
+
+- **Resizable query editor** — drag the handle between the SQL editor and the results to
+  make the editor taller or shorter (great for long queries). The height is remembered.
+
 ## [0.7.2] — 2026-06-05
 
 ### Added
@@ -595,7 +602,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.3...HEAD
+[0.7.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.6...v0.7.0
