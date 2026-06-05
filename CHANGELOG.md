@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] — 2026-06-05
+
+### Added
+
+- **About dialog** — a consistent in-app About (icon, version, and links to the website,
+  GitHub, and developer). The macOS menu **Elyra Conductor → About Elyra Conductor** now
+  opens this dialog instead of the native panel; also reachable from ⌘K.
+
+### Fixed
+
+- **“Run … (modal)” now reliably runs scripts.** A self-referential effect could remount
+  the modal's terminal twice and kill the pty before the command ran; the run is now
+  isolated so it behaves like the terminal-tab and external-terminal runners.
+
+### Internal
+
+- Release script auto-retries notarization: if Apple's notary queue stalls past ~12 min on
+  a submission, it resubmits a fresh job (which is typically accepted in under a minute).
+
 ## [0.6.3] — 2026-06-05
 
 ### Added
@@ -525,7 +544,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.0...v0.6.1

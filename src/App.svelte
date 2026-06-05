@@ -15,6 +15,8 @@
   import FileExplorer from "./lib/FileExplorer.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import InputDialog from "./lib/InputDialog.svelte";
+  import AboutModal from "./lib/AboutModal.svelte";
+  import { listen } from "@tauri-apps/api/event";
   import RunModal from "./lib/RunModal.svelte";
   import CommitDialog from "./lib/CommitDialog.svelte";
   import GitPanel from "./lib/GitPanel.svelte";
@@ -44,6 +46,7 @@
   let paletteOpen = $state(false);
   let finderOpen = $state(false);
   let helpOpen = $state(false);
+  let aboutOpen = $state(false);
 
   // ---------- auto-update ----------
   let update = $state(null);
@@ -1214,6 +1217,7 @@
       list.push({ id: "act:git", title: `Git: open panel for ${activeProject.name}`, group: "action", icon: "\u2387", action: openGitPanel });
     }
     list.push({ id: "act:help", title: "Keyboard shortcuts", hint: "\u2318/", group: "action", icon: "?", action: () => (helpOpen = true) });
+    list.push({ id: "act:about", title: "About Elyra Conductor", group: "action", icon: "\u2139", action: () => (aboutOpen = true) });
     list.push({ id: "act:check-update", title: "Check for updates\u2026", group: "action", icon: "\u21BB", action: () => checkForUpdate(true) });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
     list.push({ id: "act:save-workspace", title: "Save workspace\u2026", group: "action", icon: "\u{1F4BE}", action: saveWorkspacePrompt });
@@ -1510,6 +1514,7 @@
 
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
+    listen("menu://about", () => (aboutOpen = true));
     window.addEventListener("focus", onWindowFocus);
     window.addEventListener("blur", onWindowBlur);
     window.addEventListener("pagehide", flushState);
@@ -1854,6 +1859,8 @@
   />
 
   <ShortcutsModal open={helpOpen} onclose={() => (helpOpen = false)} />
+
+  <AboutModal open={aboutOpen} onclose={() => (aboutOpen = false)} />
 
   {#if update && !updateDismissed}
     <div class="update-toast">

@@ -7,6 +7,57 @@ mod pty;
 use agent::AgentManager;
 use db::DbManager;
 use pty::PtyManager;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::Emitter;
+
+// Build the macOS menu bar, replacing the standard "About" with a custom item so
+// it opens our own About dialog (consistent with the in-app one) instead of the
+// native panel. We keep Edit (copy/paste) and Window so those still work.
+fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let about = MenuItem::with_id(app, "about", "About Elyra Conductor", true, None::<&str>)?;
+    let app_menu = Submenu::with_items(
+        app,
+        "Elyra Conductor",
+        true,
+        &[
+            &about,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::services(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::hide(app, None)?,
+            &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::show_all(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::quit(app, None)?,
+        ],
+    )?;
+    let edit_menu = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ],
+    )?;
+    let window_menu = Submenu::with_items(
+        app,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::maximize(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::close_window(app, None)?,
+        ],
+    )?;
+    Menu::with_items(app, &[&app_menu, &edit_menu, &window_menu])
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,6 +69,17 @@ pub fn run() {
         .manage(PtyManager::default())
         .manage(AgentManager::default())
         .manage(DbManager::default())
+        .setup(|app| {
+            let handle = app.handle();
+            let menu = build_menu(handle)?;
+            app.set_menu(menu)?;
+            app.on_menu_event(|app, event| {
+                if event.id() == "about" {
+                    let _ = app.emit("menu://about", ());
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             pty::pty_spawn,
             pty::pty_write,

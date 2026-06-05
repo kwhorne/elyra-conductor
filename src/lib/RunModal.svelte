@@ -1,5 +1,6 @@
 <script>
   import Terminal from "./Terminal.svelte";
+  import { untrack } from "svelte";
 
   let { open = false, cwd = "", command = "", title = "", onclose } = $props();
 
@@ -11,9 +12,11 @@
   let autoCloseTimer = null;
   let seq = 0;
 
-  // The shell exits as soon as the command completes so the run terminates
-  // cleanly. `; exit` ensures the pane closes even for builtins.
-  let runCommand = $derived(cmd.trim() ? `${cmd}; exit` : "exit");
+  // The exact command the embedded terminal is spawned with. Kept as plain state
+  // (not a $derived of `cmd`) so the value is fixed at the moment we remount the
+  // Terminal — avoiding a race where the pty could spawn before `cmd` propagated
+  // and run nothing. `; exit` ends the shell once the command completes.
+  let activeRunCommand = $state("exit");
 
   function start() {
     if (!cmd.trim()) return;
@@ -21,6 +24,7 @@
     finished = false;
     exitCode = null;
     running = true;
+    activeRunCommand = `${cmd}; exit`;
     runId = `run-${++seq}`; // remount Terminal -> fresh shell runs the command
   }
 
@@ -36,18 +40,26 @@
 
   // (Re)initialise each time the modal opens, and auto-run the detected command
   // once. Editing the command + Run re-runs it.
+  // Track only `open` and `command`. The body reads/writes `cmd` and `runId`,
+  // so we untrack it — otherwise the effect re-runs on its own writes and
+  // remounts the Terminal twice, which could kill the pty before the command
+  // ran (the "modal doesn't run scripts" bug).
   $effect(() => {
-    if (open) {
-      cmd = command;
-      finished = false;
-      exitCode = null;
-      running = false;
-      start();
-    } else {
-      clearTimeout(autoCloseTimer);
-      running = false;
-      runId = null;
-    }
+    const isOpen = open;
+    const initial = command;
+    untrack(() => {
+      if (isOpen) {
+        cmd = initial;
+        finished = false;
+        exitCode = null;
+        running = false;
+        start();
+      } else {
+        clearTimeout(autoCloseTimer);
+        running = false;
+        runId = null;
+      }
+    });
   });
 
   function onKeydown(e) {
@@ -83,7 +95,7 @@
       <div class="term-host">
         {#key runId}
           {#if runId}
-            <Terminal id={runId} {cwd} {runCommand} onexit={handleExit} />
+            <Terminal id={runId} {cwd} runCommand={activeRunCommand} onexit={handleExit} />
           {/if}
         {/key}
       </div>

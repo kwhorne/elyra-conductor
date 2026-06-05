@@ -40,14 +40,45 @@ pnpm tauri build "$@"
 #     --apple-id <id> --team-id <team> --password <app-specific-password>
 NOTARY_PROFILE="${NOTARY_PROFILE:-elyra-notary}"
 DMG="$(ls -t src-tauri/target/release/bundle/dmg/*.dmg 2>/dev/null | head -1 || true)"
+APP_PATH="$(ls -d src-tauri/target/release/bundle/macos/*.app 2>/dev/null | head -1 || true)"
+
+# Submit to Apple's notary service and poll. Apple's queue occasionally gets
+# stuck for an hour+ on a submission (notarytool --wait can even crash). When a
+# submission stays "In Progress" past ~12 min we give up on it and resubmit a
+# fresh job — in practice the new one is accepted in under a minute.
+notarize_with_retry() {
+  local file="$1" attempt id status waited
+  for attempt in 1 2 3; do
+    echo "   submit (attempt $attempt)…"
+    id="$(xcrun notarytool submit "$file" --keychain-profile "$NOTARY_PROFILE" 2>/dev/null | awk '/id:/{print $2; exit}')"
+    if [ -z "$id" ]; then echo "   submit failed; retrying in 5s"; sleep 5; continue; fi
+    echo "   submission id: $id"
+    waited=0
+    while [ "$waited" -lt 720 ]; do
+      status="$(xcrun notarytool info "$id" --keychain-profile "$NOTARY_PROFILE" 2>/dev/null | awk '/status:/{print $2; exit}')"
+      case "$status" in
+        Accepted) echo "   accepted ✓"; return 0 ;;
+        Invalid|Rejected)
+          echo "   $status ✗"; xcrun notarytool log "$id" --keychain-profile "$NOTARY_PROFILE" 2>/dev/null | head -40; return 1 ;;
+      esac
+      sleep 20; waited=$((waited + 20))
+    done
+    echo "   still In Progress after ${waited}s — Apple queue stuck, resubmitting…"
+  done
+  echo "!! Notarization did not complete after retries"; return 1
+}
 
 if [ -n "$DMG" ] && xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
   echo "==> Notarizing $(basename "$DMG")"
-  xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
-  echo "==> Stapling notarization ticket"
-  xcrun stapler staple "$DMG"
-  echo "==> Gatekeeper assessment"
-  spctl -a -t open --context context:primary-signature -vv "$DMG" 2>&1 || true
+  if notarize_with_retry "$DMG"; then
+    echo "==> Stapling notarization ticket"
+    xcrun stapler staple "$DMG"
+    [ -n "$APP_PATH" ] && xcrun stapler staple "$APP_PATH"
+    echo "==> Gatekeeper assessment"
+    spctl -a -t open --context context:primary-signature -vv "$DMG" 2>&1 || true
+  else
+    echo "!! Notarization failed — the DMG is signed but not notarized."
+  fi
 else
   echo "!! Skipping notarization (no '$NOTARY_PROFILE' keychain profile, or no DMG)."
   echo "   The DMG is Developer-ID signed but NOT notarized; downloads will warn."
