@@ -901,6 +901,15 @@
     activeTermId = null;
   }
 
+  // New query via keyboard: use the active DB tab's connection, else the first
+  // connected one. (⌘Q is macOS Quit, so we use ⇧⌘N.)
+  function newDbQueryShortcut() {
+    let conn = null;
+    if (activeTab?.kind === "db" && activeTab.connId) conn = dbConns.find((c) => c.id === activeTab.connId);
+    if (!conn) conn = dbConns.find((c) => c.id);
+    if (conn) openDbQuery(conn);
+  }
+
   function openDbQuery(entry) {
     if (!entry.id) return;
     const tab = { id: nextId("tab"), kind: "db", title: "query", view: "query", table: null, connId: entry.id, engine: entry.config.engine, projectPath: dbProject };
@@ -1336,7 +1345,8 @@
       showDb = !showDb;
     } else if (k === "n") {
       e.preventDefault();
-      newTab(activeProject?.path ?? root, activeProject?.name);
+      if (e.shiftKey) newDbQueryShortcut();
+      else newTab(activeProject?.path ?? root, activeProject?.name);
     } else if (k === "b") {
       e.preventDefault();
       showFiles = !showFiles;

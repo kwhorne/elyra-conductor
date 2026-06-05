@@ -19,6 +19,7 @@
         ["Drag tab", "Reorder tabs"],
         ["Drag divider", "Resize panes"],
         ["⌘N · ＋", "New terminal tab"],
+        ["⇧⌘N", "New database query (active connection)"],
       ],
     },
     {

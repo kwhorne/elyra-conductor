@@ -2,6 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { untrack } from "svelte";
+  import InputDialog from "./InputDialog.svelte";
 
   let {
     connId,
@@ -88,9 +89,13 @@
       error = String(e);
     }
   }
+  let saveDlgOpen = $state(false);
   function saveCurrentQuery() {
     if (!sql.trim() || !projectPath) return;
-    const name = (window.prompt("Save query as:", selectedSaved || "") || "").trim();
+    saveDlgOpen = true;
+  }
+  function commitSaveQuery(name) {
+    name = (name || "").trim();
     if (!name) return;
     const i = saved.findIndex((q) => q.name === name);
     const item = { name, sql };
@@ -604,6 +609,18 @@
       </div>
     </div>
   {/if}
+
+  <InputDialog
+    open={saveDlgOpen}
+    title="Save query"
+    message="Give this query a name to reuse it later (private to this project)."
+    input={true}
+    value={selectedSaved || ""}
+    placeholder="e.g. Active subscriptions"
+    confirmLabel="Save"
+    onconfirm={(name) => commitSaveQuery(name)}
+    onclose={() => (saveDlgOpen = false)}
+  />
 </div>
 
 <style>

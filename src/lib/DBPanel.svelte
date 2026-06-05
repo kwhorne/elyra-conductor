@@ -174,7 +174,7 @@
           </button>
           <div class="conn-actions">
             {#if entry.id}
-              <button title="New query" onclick={() => onquery?.(entry)}>⌗</button>
+              <button title="New query (⇧⌘N)" onclick={() => onquery?.(entry)}>⌗</button>
               <button title="Refresh tables" onclick={() => onrefresh?.(entry)}>⟳</button>
               <button title="Disconnect" onclick={() => ondisconnect?.(entry)}>⏏</button>
             {/if}

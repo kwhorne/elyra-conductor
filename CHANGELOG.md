@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-06-05
+
+### Added
+
+- **⇧⌘N** opens a new database query against the active (or first connected) connection.
+
+### Fixed
+
+- **Naming a saved query now works.** “⭐ Save” used `window.prompt`, which the Tauri
+  webview ignores, so you couldn't enter a name. It now opens a proper dialog to name the
+  query (private, per project).
+
 ## [0.7.1] — 2026-06-05
 
 ### Added
@@ -583,7 +595,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.6...v0.7.0
 [0.6.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.5...v0.6.6
