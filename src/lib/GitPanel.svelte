@@ -133,6 +133,12 @@
           {:else}
             <button class="mini" title="New branch" onclick={() => (showNewBranch = true)}>＋ branch</button>
           {/if}
+          {#if !branches.current}
+            <span
+              class="detached"
+              title="Detached HEAD: you're on a specific commit, not a branch (common with pinned Docker/OrbStack checkouts). Looking around is safe, but commits made here aren't on any branch and can be lost. Pick a branch above, or ＋ branch, before committing."
+            >⚠ detached</span>
+          {/if}
         </div>
         <button class="mini" onclick={stashAll} disabled={busy || files.length === 0} title="Stash all changes">Stash</button>
         <button class="mini" onclick={reload} disabled={busy} title="Refresh">⟳</button>
@@ -209,6 +215,7 @@
   .top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
   .title { font-weight: 600; font-size: 13px; }
   .branchbox { display: flex; align-items: center; gap: 6px; margin-left: 8px; }
+  .detached { font-size: 11px; font-weight: 600; color: #e0af68; background: color-mix(in srgb, #e0af68 16%, transparent); border: 1px solid color-mix(in srgb, #e0af68 45%, transparent); border-radius: 6px; padding: 2px 7px; cursor: help; white-space: nowrap; }
   select, .nb { background: var(--bg-3); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-size: 12px; padding: 4px 8px; outline: none; }
   .nb:focus { border-color: var(--accent); }
   .mini { background: var(--bg-3); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-size: 11px; padding: 4px 9px; cursor: pointer; }

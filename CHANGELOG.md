@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] — 2026-06-05
+
+### Added
+
+- **Detached-HEAD indicator** in the Git panel — when HEAD points at a commit rather than a
+  branch (common with pinned Docker/OrbStack checkouts), a **⚠ detached** badge appears
+  next to the branch picker, with a hover explaining that commits made here aren't on any
+  branch and how to attach to one before committing.
+
 ## [0.6.5] — 2026-06-05
 
 ### Fixed
@@ -553,7 +562,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.6.2...v0.6.3
