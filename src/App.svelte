@@ -26,6 +26,7 @@
   import ShortcutsModal from "./lib/ShortcutsModal.svelte";
   import { check as checkUpdate } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
+  import { marked } from "marked";
   import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
   import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf, allLeaves } from "./lib/layout.js";
   import { dirOf, baseOf, detectRunCommand, isIdleProc, rankDevTasks, scoreDevTask } from "./lib/util.js";
@@ -54,6 +55,7 @@
   let updateProgress = $state(0);
   let updateError = $state("");
   let updateDismissed = $state(false);
+  let updateNotesOpen = $state(false);
 
   async function checkForUpdate(manual = false) {
     try {
@@ -410,6 +412,69 @@
     if (cmd && TEST_RE.test(cmd) && tab?.projectPath && rec.exitCode != null) {
       lastTest = { ...lastTest, [tab.projectPath]: { ok: rec.exitCode === 0, at: now } };
     }
+    // Feed the runbook recorder.
+    if (recording && cmd && cmd !== "clear") {
+      recordedCmds = [...recordedCmds, { command: cmd, exitCode: rec.exitCode }];
+    }
+  }
+
+  // ---------- runbook recorder ----------
+  // Capture the commands you run (via shell integration) and turn them into a
+  // reusable runbook. "Do it once, then share it."
+  let recording = $state(false);
+  let recordedCmds = $state([]);
+  let recordProject = null;
+  function startRecording() {
+    recording = true;
+    recordedCmds = [];
+    recordProject = activeProject?.path ?? root;
+    if (!shellIntegration) {
+      shellIntegration = true;
+      alertMsg(
+        "Recording — shell integration enabled",
+        "Open a NEW terminal tab (⌘N) and run your commands there; they'll be captured. Existing terminals won't record until reopened."
+      );
+    }
+  }
+  function stopRecording() {
+    recording = false;
+    if (recordedCmds.length === 0) {
+      alertMsg("Nothing recorded", "No commands were captured. Shell integration must be on and the commands run in a terminal opened after it was enabled.");
+      return;
+    }
+    fileDlg = {
+      open: true, title: "Save recording as runbook", message: `${recordedCmds.length} command(s) captured.`,
+      input: true, value: "", placeholder: "e.g. Deploy staging", confirmLabel: "Create runbook", danger: false,
+      onconfirm: (name) => generateRunbook(name),
+    };
+  }
+  function toggleRecording() {
+    if (recording) stopRecording();
+    else startRecording();
+  }
+  async function generateRunbook(name) {
+    const proj = recordProject || activeProject?.path || root;
+    const projName = projects.find((p) => p.path === proj)?.name || baseOf(proj || "");
+    const slug = name.toLowerCase().replace(/[^\w]+/g, "-").replace(/^-+|-+$/g, "") || "recording";
+    const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+    let md = `# ${name}\n\n_Recorded ${stamp} \u00b7 ${projName}_\n\n## Steps\n\n`;
+    for (const c of recordedCmds) {
+      md += "```bash\n" + c.command + "\n```\n";
+      if (c.exitCode != null && c.exitCode !== 0) md += `> \u26a0 exited ${c.exitCode}\n`;
+      md += "\n";
+    }
+    const file = `${proj}/.conductor/notes/${slug}.md`;
+    try {
+      await invoke("write_file", { path: file, content: md });
+    } catch (e) {
+      alertMsg("Couldn't save runbook", String(e));
+      return;
+    }
+    const tab = { id: nextId("tab"), kind: "runbook", title: name, projectPath: proj, file };
+    tabs = [...tabs, tab];
+    activeTabId = tab.id;
+    activeTermId = null;
+    recordedCmds = [];
   }
   function jumpToCommand(entry) {
     const tab = tabs.find((t) => t.id === entry.tabId);
@@ -1250,6 +1315,7 @@
     list.push({ id: "act:toggle-db", title: showDb ? "Hide database panel" : "Show database panel", hint: "\u2318T", group: "action", icon: "\u{1F5C4}", action: () => (showDb = !showDb) });
     list.push({ id: "act:ports", title: "Show listening ports", group: "action", icon: "\u26a1", action: () => (portsOpen = true) });
     list.push({ id: "act:timeline", title: "Command timeline", group: "action", icon: "\ud83d\udd58", action: () => (timelineOpen = true) });
+    list.push({ id: "act:record", title: recording ? "Stop recording \u2192 runbook" : "Record commands into a runbook", group: "action", icon: "\u23fa", action: toggleRecording });
     list.push({ id: "act:scrollback", title: "Search all terminals (scrollback)", hint: "\u21e7\u2318F", group: "action", icon: "\u{1F50E}", action: () => (scrollbackOpen = true) });
     list.push({ id: "act:zoom", title: zoomed ? "Unzoom pane" : "Zoom active pane", hint: "\u2318\u2325Z", group: "action", icon: "\u26f6", action: () => { if (activeTab?.kind === "term") zoomed = !zoomed; } });
     list.push({ id: "act:toggle-hidden", title: showHidden ? "Hide node_modules/.git in tree" : "Show all files in tree", group: "action", icon: "\u{1F441}", action: () => (showHidden = !showHidden) });
@@ -1668,6 +1734,7 @@
       <span class="tgroup">Tools</span>
       <button title="Listening ports" onclick={() => (portsOpen = true)}>⚡ Ports</button>
       <button title="Command timeline — what ran, where, how long" onclick={() => (timelineOpen = true)}>🕘 Timeline</button>
+      <button class:rec={recording} title={recording ? "Stop recording — turn captured commands into a runbook" : "Record commands into a runbook (needs shell integration)"} onclick={toggleRecording}>{recording ? `⏺ Rec ${recordedCmds.length}` : "⏺ Record"}</button>
       {#if projectTasks.length}<button title="Run a project task (npm/composer/make/just)" onclick={() => (tasksOpen = true)}>☰ Tasks</button>{/if}
       {#if activeProject}<button title="View & edit .env (masked)" onclick={() => (envOpen = true)}>🔑 Env</button>{/if}
       {#if activeProject?.is_git}<button title="Git: stage, diff, branch, stash, commit (⌘G)" onclick={openGitPanel}>⎇ Git</button>{/if}
@@ -1929,9 +1996,15 @@
         <span class="err">Update failed: {updateError}</span>
         <button onclick={() => (updateDismissed = true)}>Dismiss</button>
       {:else}
-        <span>⬆ Update available: <strong>v{update.version}</strong></span>
-        <button class="primary" onclick={installUpdate}>Install &amp; restart</button>
-        <button onclick={() => (updateDismissed = true)}>Later</button>
+        <div class="ut-row">
+          <span>⬆ Update available: <strong>v{update.version}</strong></span>
+          {#if update.body}<button class="link" onclick={() => (updateNotesOpen = !updateNotesOpen)}>{updateNotesOpen ? "Hide notes" : "What's new"}</button>{/if}
+          <button class="primary" onclick={installUpdate}>Install &amp; restart</button>
+          <button onclick={() => (updateDismissed = true)}>Later</button>
+        </div>
+        {#if updateNotesOpen && update.body}
+          <div class="ut-notes">{@html marked.parse(update.body)}</div>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -1947,6 +2020,8 @@
   }
   .toolbar button { background: var(--bg-3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 10px; font-size: 12px; flex: none; white-space: nowrap; }
   .toolbar button.on { border-color: var(--accent); color: var(--accent); }
+  .toolbar button.rec { border-color: #f7768e; color: #f7768e; animation: rec-blink 1.4s ease-in-out infinite; }
+  @keyframes rec-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
   .tsep { width: 1px; height: 20px; background: var(--border); flex: none; margin: 0 2px; }
   .tgroup { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; flex: none; }
   .tspacer { margin-left: auto; }
@@ -2002,8 +2077,10 @@
     right: 16px;
     z-index: 180;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     gap: 10px;
+    max-width: 420px;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -2011,6 +2088,14 @@
     font-size: 12px;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   }
+  .update-toast .ut-row { display: flex; align-items: center; gap: 10px; }
+  .update-toast .link { background: transparent; border: none; color: var(--accent); padding: 0; font-size: 12px; cursor: pointer; }
+  .update-toast .ut-notes { max-height: 240px; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; line-height: 1.5; }
+  .update-toast .ut-notes :global(h3) { font-size: 12px; margin: 8px 0 4px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+  .update-toast .ut-notes :global(ul) { margin: 4px 0; padding-left: 18px; }
+  .update-toast .ut-notes :global(li) { margin: 2px 0; }
+  .update-toast .ut-notes :global(code) { font-family: var(--font-mono); background: var(--bg-3); padding: 0 4px; border-radius: 4px; }
+  .update-toast .ut-notes :global(p) { margin: 4px 0; }
   .update-toast .err { color: var(--red); }
   .update-toast button {
     background: var(--bg-3);

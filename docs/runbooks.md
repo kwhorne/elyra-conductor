@@ -29,6 +29,14 @@ A runbook opens as its own tab (so `⌘1`–`⌘9` and drag-reordering work). Us
 in the toolbar to switch between runbooks, or **＋ New** to create one from a starter
 template.
 
+## Recording a runbook
+
+Instead of writing one by hand, you can **record** what you do. With
+[shell integration](terminals.md) on, click **⏺ Record** in the toolbar, open a new
+terminal (`⌘N`), and run your commands. Click **⏺ Rec** again to stop, give it a name,
+and Conductor writes a runbook draft — each command a runnable step, failed ones flagged
+with their exit code. Edit it freely afterwards. *Do it once, then share it.*
+
 ## Editing
 
 Toggle **✎ Edit** to edit the markdown, then **Save** (`⌘S`) writes it back to

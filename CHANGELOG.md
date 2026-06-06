@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] — 2026-06-05
+
+### Added
+
+- **Runbook recorder** — hit **⏺ Record**, run your commands in a (shell-integrated)
+  terminal, then stop to turn the captured sequence into a **runbook draft** — each command
+  a runnable step, failed ones flagged with their exit code. “Do it once, then share it.”
+  Saved to `.conductor/notes/` and opened for editing.
+- **Release notes in the update toast** — when an update is available, a **What's new**
+  toggle shows that version's changelog (the manifest now carries the real notes from
+  CHANGELOG.md).
+
 ## [0.7.3] — 2026-06-05
 
 ### Added
@@ -602,7 +614,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.0...v0.7.1
