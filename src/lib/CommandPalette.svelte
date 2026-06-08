@@ -4,6 +4,14 @@
   let query = $state("");
   let selected = $state(0);
   let inputEl;
+  let listEl;
+
+  // Keep the selected row visible as you arrow through a list taller than the
+  // palette — otherwise the highlight scrolls out of view and you'd have to use
+  // the mouse wheel.
+  function scrollSelectedIntoView() {
+    queueMicrotask(() => listEl?.querySelector(".result.active")?.scrollIntoView({ block: "nearest" }));
+  }
 
   let filtered = $derived(
     commands.filter((c) => {
@@ -21,7 +29,10 @@
     if (open) {
       query = "";
       selected = 0;
-      queueMicrotask(() => inputEl?.focus());
+      queueMicrotask(() => {
+        inputEl?.focus();
+        if (listEl) listEl.scrollTop = 0;
+      });
     }
   });
 
@@ -39,9 +50,11 @@
     if (e.key === "ArrowDown") {
       e.preventDefault();
       selected = Math.min(selected + 1, filtered.length - 1);
+      scrollSelectedIntoView();
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       selected = Math.max(selected - 1, 0);
+      scrollSelectedIntoView();
     } else if (e.key === "Enter") {
       e.preventDefault();
       run(filtered[selected]);
@@ -71,7 +84,7 @@
         placeholder="Search projects, terminals, actions…"
         spellcheck="false"
       />
-      <div class="results">
+      <div class="results" bind:this={listEl}>
         {#each filtered as cmd, i (cmd.id)}
           <button
             class="result"

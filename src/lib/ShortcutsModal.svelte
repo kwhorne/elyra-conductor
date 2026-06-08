@@ -6,6 +6,7 @@
       title: "General",
       items: [
         ["⌘K", "Command palette"],
+        ["⇧⌘P", "Search projects (sidebar)"],
         ["⌘/", "Show this help"],
         ["Esc", "Close dialog / palette / search"],
       ],

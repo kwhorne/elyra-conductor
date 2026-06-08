@@ -48,6 +48,7 @@
   let finderOpen = $state(false);
   let helpOpen = $state(false);
   let aboutOpen = $state(false);
+  let sidebarRef = $state(null);
 
   // ---------- auto-update ----------
   let update = $state(null);
@@ -404,6 +405,7 @@
       proc,
       command: cmd || null,
       exitCode: rec.exitCode,
+      output: rec.output || null,
       startedAt: rec.startedAt,
       endedAt: now,
       duration: rec.duration,
@@ -476,6 +478,25 @@
     activeTermId = null;
     recordedCmds = [];
   }
+  // Bundle a command's context (command, exit code, output tail, git branch) as
+  // plain text and hand it to an Elyra agent. Conductor formats and forwards;
+  // Elyra reasons.
+  function askElyraAboutCommand(entry) {
+    const proj = projects.find((p) => p.path === entry.projectPath) || pinned.find((p) => p.path === entry.projectPath);
+    const where = entry.label || (entry.projectPath ? baseOf(entry.projectPath) : "");
+    const failed = entry.exitCode != null && entry.exitCode !== 0;
+    let b = failed
+      ? `A command failed${where ? ` in ${where}` : ""}. Help me understand why:\n\n`
+      : `About this command${where ? ` in ${where}` : ""}:\n\n`;
+    b += "```bash\n" + (entry.command || entry.proc || "") + "\n```\n";
+    if (entry.exitCode != null) b += `\nExit code: ${entry.exitCode}`;
+    if (entry.duration != null) b += ` \u00b7 ran ${Math.round(entry.duration / 1000)}s`;
+    if (proj?.branch) b += `\nBranch: ${proj.branch}${proj.dirty ? " (uncommitted changes)" : ""}`;
+    if (entry.output) b += `\n\nOutput (tail):\n\`\`\`\n${entry.output}\n\`\`\``;
+    sendToElyra(entry.projectPath || activeProject?.path || root, b);
+    timelineOpen = false;
+  }
+
   function jumpToCommand(entry) {
     const tab = tabs.find((t) => t.id === entry.tabId);
     if (tab) {
@@ -721,15 +742,34 @@
           if (!c.working_dir) continue;
           for (const proj of all) {
             if (c.working_dir === proj.path || c.working_dir.startsWith(proj.path + "/")) {
-              const m = (map[proj.path] ??= { running: 0, total: 0 });
+              const m = (map[proj.path] ??= { running: 0, total: 0, list: [] });
               m.total++;
               if (c.state === "running") m.running++;
+              m.list.push({ name: c.name, state: c.state });
             }
           }
         }
         projectContainers = map;
       })
       .catch(() => { dockerAvailable = false; });
+  }
+
+  // Container actions menu (from the 🐳 badge in the sidebar).
+  let containerMenu = $state({ open: false, x: 0, y: 0, items: [] });
+  function openContainerMenu(p, x, y) {
+    const info = projectContainers[p.path];
+    if (!info || !info.list?.length) return;
+    const items = [];
+    for (const c of info.list) {
+      const q = c.name; // docker names are shell-safe
+      items.push({ label: `${c.name} \u00b7 ${c.state}`, disabled: true });
+      items.push({ label: "\u3000\ud83d\udda5 Shell into container", icon: "", action: () => newTab(p.path, `sh:${c.name}`, `docker exec -it ${q} sh -c 'exec bash 2>/dev/null || exec sh'`) });
+      items.push({ label: "\u3000\ud83d\udcdc Tail logs", icon: "", action: () => newTab(p.path, `logs:${c.name}`, `docker logs -f --tail 200 ${q}`) });
+      items.push({ label: "\u3000\u21bb Restart", icon: "", action: () => newTab(p.path, `restart:${c.name}`, `docker restart ${q}`) });
+      items.push({ separator: true });
+    }
+    items.pop();
+    containerMenu = { open: true, x, y, items };
   }
 
   // Which projects currently have a foreground command running in one of their
@@ -1300,6 +1340,7 @@
     for (const t of tabs)
       list.push({ id: `tab:${t.id}`, title: t.title, hint: t.projectPath, group: "tab", icon: "\u{1F5C2}", action: () => focusTab(t) });
     list.push({ id: "act:new-tab", title: "New terminal tab", hint: "\u2318N", group: "action", icon: "\u002B", action: () => newTab(activeProject?.path ?? root, activeProject?.name) });
+    list.push({ id: "act:find-project", title: "Search projects", hint: "\u21e7\u2318P", group: "action", icon: "\u{1F4C1}", action: () => sidebarRef?.focusSearch() });
     list.push({ id: "act:open-runbook", title: "Open project runbook", hint: "", group: "action", icon: "\u{1F4D3}", action: () => openRunbook(activeProject?.path ?? root, activeProject?.name) });
     if (activeProject || activeTab?.projectPath) {
       list.push({ id: "act:start-project", title: `Start project (dev)${activeProject ? ": " + activeProject.name : ""}`, hint: "\u2318R", group: "action", icon: "\u25B6", action: () => startProject(activeProject) });
@@ -1366,7 +1407,8 @@
         else showEditor = false;
       } else if (k === "p") {
         e.preventDefault();
-        finderOpen = !finderOpen;
+        if (e.shiftKey) sidebarRef?.focusSearch();
+        else finderOpen = !finderOpen;
       } else if (k === "n") {
         e.preventDefault();
         newTab(activeProject?.path ?? root, activeProject?.name);
@@ -1390,7 +1432,8 @@
       paletteOpen = !paletteOpen;
     } else if (k === "p") {
       e.preventDefault();
-      finderOpen = !finderOpen;
+      if (e.shiftKey) sidebarRef?.focusSearch();
+      else finderOpen = !finderOpen;
     } else if (k === "f" && e.shiftKey) {
       e.preventDefault();
       scrollbackOpen = true;
@@ -1701,6 +1744,7 @@
 
 <div class="app">
   <Sidebar
+    bind:this={sidebarRef}
     {projects}
     {pinned}
     {editors}
@@ -1716,6 +1760,7 @@
     containers={projectContainers}
     running={projectRunning}
     lastTest={lastTest}
+    oncontainers={(p, x, y) => openContainerMenu(p, x, y)}
     onopenport={openLocalPort}
     elyra={!!elyraVersion}
     onagent={(p) => newElyraAgent(p.path, p.name)}
@@ -1968,11 +2013,13 @@
 
   <ContextMenu open={wsMenu.open} x={wsMenu.x} y={wsMenu.y} items={wsItems} onclose={() => (wsMenu = { ...wsMenu, open: false })} />
 
+  <ContextMenu open={containerMenu.open} x={containerMenu.x} y={containerMenu.y} items={containerMenu.items} onclose={() => (containerMenu = { ...containerMenu, open: false })} />
+
   <TasksModal open={tasksOpen} tasks={projectTasks} projectName={activeProject?.name ?? ""} onrun={runTask} onclose={() => (tasksOpen = false)} />
 
   <EnvModal open={envOpen} path={activeProject?.path ?? ""} projectName={activeProject?.name ?? ""} onclose={() => (envOpen = false)} />
 
-  <TimelineModal open={timelineOpen} entries={commandLog} onjump={jumpToCommand} onclear={() => (commandLog = [])} onclose={() => (timelineOpen = false)} />
+  <TimelineModal open={timelineOpen} entries={commandLog} elyra={!!elyraVersion} onask={askElyraAboutCommand} onjump={jumpToCommand} onclear={() => (commandLog = [])} onclose={() => (timelineOpen = false)} />
 
   <CommitDialog
     open={commit.open}

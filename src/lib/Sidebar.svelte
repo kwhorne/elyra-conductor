@@ -15,12 +15,20 @@
     containers = {},
     running = {},
     lastTest = {},
+    oncontainers,
     onopenport,
     elyra = false,
     root = "",
   } = $props();
 
   let filter = $state("");
+  let searchEl;
+
+  // Called from a global shortcut to jump straight to the project search.
+  export function focusSearch() {
+    searchEl?.focus();
+    searchEl?.select?.();
+  }
 
   let pinnedPaths = $derived(new Set(pinned.map((p) => p.path)));
 
@@ -42,7 +50,7 @@
   </div>
   <div class="root-path" title={root}>{root || "No folder selected"}</div>
 
-  <input class="search" placeholder="Search projects…" bind:value={filter} />
+  <input class="search" placeholder="Search projects…" bind:value={filter} bind:this={searchEl} />
 
   {#snippet item(p)}
     <div
@@ -60,11 +68,12 @@
         <span class="name">{p.name}</span>
         <span class="spacer"></span>
         {#if containers[p.path]}
-          <span
+          <button
             class="ctr"
             class:up={containers[p.path].running > 0}
-            title={`${containers[p.path].running}/${containers[p.path].total} container(s) running`}
-          >🐳{containers[p.path].running}/{containers[p.path].total}</span>
+            title={`${containers[p.path].running}/${containers[p.path].total} container(s) — click for shell / logs / restart`}
+            onclick={(e) => { e.stopPropagation(); oncontainers?.(p, e.clientX, e.clientY); }}
+          >🐳{containers[p.path].running}/{containers[p.path].total}</button>
         {/if}
         {#if lastTest[p.path]}
           <span class="ltest" class:ok={lastTest[p.path].ok} title={`Last test run ${lastTest[p.path].ok ? "passed" : "failed"}`}>{lastTest[p.path].ok ? "✓ test" : "✗ test"}</span>
@@ -271,6 +280,12 @@
     border-radius: 4px;
     padding: 0 4px;
     flex: none;
+    cursor: pointer;
+    background: transparent;
+  }
+  .ctr:hover {
+    border-color: var(--accent);
+    color: var(--text);
   }
   .ctr.up {
     color: #4aa3df;

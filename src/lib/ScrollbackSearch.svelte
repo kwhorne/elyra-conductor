@@ -5,6 +5,7 @@
   let results = $state([]);
   let sel = $state(0);
   let input;
+  let listEl;
 
   function runSearch() {
     results = query.trim().length >= 2 ? (onsearch?.(query) ?? []) : [];
@@ -16,10 +17,13 @@
     onclose?.();
   }
 
+  function scrollSel() {
+    queueMicrotask(() => listEl?.querySelector(".row.sel")?.scrollIntoView({ block: "nearest" }));
+  }
   function onKey(e) {
     if (e.key === "Escape") { onclose?.(); return; }
-    if (e.key === "ArrowDown") { e.preventDefault(); sel = Math.min(sel + 1, results.length - 1); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); sel = Math.max(sel - 1, 0); }
+    if (e.key === "ArrowDown") { e.preventDefault(); sel = Math.min(sel + 1, results.length - 1); scrollSel(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); sel = Math.max(sel - 1, 0); scrollSel(); }
     else if (e.key === "Enter") { e.preventDefault(); if (results[sel]) jump(results[sel]); }
   }
 
@@ -48,7 +52,7 @@
         />
         <span class="hint">{results.length ? results.length + " panes" : ""}</span>
       </div>
-      <div class="results">
+      <div class="results" bind:this={listEl}>
         {#each results as r, i (r.termId)}
           <button class="row" class:sel={i === sel} onclick={() => jump(r)} onmouseenter={() => (sel = i)}>
             <span class="dot" style:background={r.color}></span>

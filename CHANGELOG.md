@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] — 2026-06-05
+
+### Added
+
+- **Ask Elyra about a command** — in the command timeline, each command (from a
+  shell-integrated terminal) gets a **🤖** button that hands a context bundle — the command,
+  exit code, git branch, and a tail of its **output** — to an Elyra agent. Great for
+  “why did this fail?”. Conductor formats and forwards plain text; Elyra reasons.
+- **Container-aware actions** — the 🐳 badge in the sidebar is now clickable: **shell into**
+  a container, **tail its logs**, or **restart** it, each in a new terminal tab.
+- **⇧⌘P** jumps to the project search in the sidebar.
+
+### Fixed
+
+- Arrow-key navigation in the command palette (⌘K) and scrollback search (⇧⌘F) now keeps
+  the selected row in view — you can arrow through the whole list without the mouse.
+
 ## [0.7.4] — 2026-06-05
 
 ### Added
@@ -614,7 +631,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.4...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.5...HEAD
+[0.7.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.1...v0.7.2

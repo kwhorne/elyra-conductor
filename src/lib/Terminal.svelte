@@ -113,6 +113,24 @@
     let scCmd = null;
     let scStart = 0;
     let scActive = false;
+    let scStartRow = 0;
+    // Read the rendered output of the command (between the C and D markers) from
+    // the terminal buffer — clean text, no ANSI. Capped so bundles stay small.
+    function captureOutput(endRow) {
+      try {
+        const buf = term.buffer.active;
+        const from = Math.max(0, scStartRow);
+        const to = Math.min(endRow, buf.length - 1);
+        const lines = [];
+        for (let r = Math.max(from, to - 200); r <= to; r++) {
+          const line = buf.getLine(r);
+          if (line) lines.push(line.translateToString(true));
+        }
+        return lines.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+|\n+$/g, "").slice(-4000);
+      } catch {
+        return "";
+      }
+    }
     term.parser.registerOscHandler(633, (data) => {
       if (data.startsWith("E;")) scCmd = data.slice(2);
       return true;
@@ -121,11 +139,15 @@
       if (data[0] === "C") {
         scStart = Date.now();
         scActive = true;
+        const buf = term.buffer.active;
+        scStartRow = buf.baseY + buf.cursorY;
       } else if (data[0] === "D") {
         if (scActive) {
           const m = data.match(/^D;?(\d+)?/);
           const exitCode = m && m[1] != null ? Number(m[1]) : null;
-          oncommand?.({ command: scCmd, exitCode, startedAt: scStart, duration: Date.now() - scStart });
+          const buf = term.buffer.active;
+          const output = captureOutput(buf.baseY + buf.cursorY);
+          oncommand?.({ command: scCmd, exitCode, startedAt: scStart, duration: Date.now() - scStart, output });
         }
         scActive = false;
         scCmd = null;
