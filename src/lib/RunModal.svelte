@@ -73,8 +73,8 @@
 <svelte:window onkeydown={onKeydown} />
 
 {#if open}
-  <div class="overlay" role="presentation" onclick={onclose}>
-    <div class="modal" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()}>
+  <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
+    <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <div class="bar">
         <span class="ttl">▶ {title}</span>
         <input

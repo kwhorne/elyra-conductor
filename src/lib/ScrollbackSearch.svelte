@@ -4,8 +4,8 @@
   let query = $state("");
   let results = $state([]);
   let sel = $state(0);
-  let input;
-  let listEl;
+  let input = $state();
+  let listEl = $state();
 
   function runSearch() {
     results = query.trim().length >= 2 ? (onsearch?.(query) ?? []) : [];
@@ -38,8 +38,8 @@
 </script>
 
 {#if open}
-  <div class="overlay" role="presentation" onclick={onclose}>
-    <div class="modal" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()}>
+  <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
+    <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <div class="bar">
         <span class="ico">🔎</span>
         <input

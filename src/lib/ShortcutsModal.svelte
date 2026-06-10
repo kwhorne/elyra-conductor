@@ -54,8 +54,8 @@
 <svelte:window onkeydown={(e) => open && e.key === "Escape" && onclose?.()} />
 
 {#if open}
-  <div class="overlay" role="presentation" onclick={onclose}>
-    <div class="modal" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()}>
+  <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
+    <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <div class="head">
         <span class="ttl">Keyboard shortcuts</span>
         <button class="x" title="Close (Esc)" onclick={onclose}>✕</button>

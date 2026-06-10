@@ -1808,6 +1808,7 @@
             class:drop-right={dragOver === tabs.length && i === tabs.length - 1}
             class:dragging={tabDrag && tabDrag.moved && tabDrag.fromIndex === i}
             style:border-left-color={projectColor(t.projectPath)}
+            role="presentation"
             onpointerdown={(e) => tabPointerDown(e, i)}
           >
             {#if proc}<span class="run-dot" title={`Running ${proc}`}></span>{:else if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}

@@ -622,8 +622,8 @@
   </div>
 
   {#if editing}
-    <div class="celled-overlay" role="presentation" onclick={cancelEdit}>
-      <div class="celled" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()}>
+    <div class="celled-overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && cancelEdit()}>
+      <div class="celled" role="dialog" aria-modal="true" tabindex="-1">
         <div class="celled-head">Edit <b>{editing.col}</b></div>
         <textarea
           class="celled-input"

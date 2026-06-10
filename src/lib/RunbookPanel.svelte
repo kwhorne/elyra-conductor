@@ -16,6 +16,7 @@
   } = $props();
 
   let files = $state([]); // { name, path }
+  // svelte-ignore state_referenced_locally -- initialFile is only the starting value by design
   let current = $state(initialFile); // path of the open runbook
   let content = $state("");
   let draft = $state("");

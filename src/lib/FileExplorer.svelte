@@ -69,7 +69,7 @@
       onclick={() => ontoggleall?.()}>{showAll ? "👁" : "⊘"}</button>
     <button class="refresh" title="Refresh" onclick={refresh}>⟳</button>
   </div>
-  <div class="list" class:dropping={rootDropping} ondragover={onRootDragOver} ondragleave={() => (rootDropping = false)} ondrop={onRootDrop} role="tree">
+  <div class="list" class:dropping={rootDropping} ondragover={onRootDragOver} ondragleave={() => (rootDropping = false)} ondrop={onRootDrop} role="tree" tabindex="-1">
     {#if !root}
       <div class="empty">No folder</div>
     {:else if error}

@@ -15,8 +15,8 @@
   } = $props();
 
   let draft = $state("");
-  let box; // input element
-  let okBtn; // confirm button (for confirm-only dialogs)
+  let box = $state(); // input element
+  let okBtn = $state(); // confirm button (for confirm-only dialogs)
 
   // Reset the draft each time the dialog opens, and focus the right control so
   // Enter works whether we're prompting or just confirming.
@@ -54,8 +54,8 @@
 </script>
 
 {#if open}
-  <div class="overlay" role="presentation" onclick={onclose}>
-    <div class="modal" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()}>
+  <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
+    <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <div class="title">{title}</div>
       {#if message}<div class="msg">{message}</div>{/if}
       {#if input}

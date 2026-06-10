@@ -12,7 +12,7 @@
   <div
     class="overlay"
     role="presentation"
-    onclick={onclose}
+    onclick={(e) => e.target === e.currentTarget && onclose?.()}
     oncontextmenu={(e) => {
       e.preventDefault();
       onclose?.();
@@ -24,7 +24,6 @@
       style:top="{y}px"
       role="menu"
       tabindex="-1"
-      onclick={(e) => e.stopPropagation()}
     >
       {#each items as it, i (i)}
         {#if it.separator}

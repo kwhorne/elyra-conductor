@@ -17,6 +17,7 @@
 
   // Scrollback persistence. A pty can't be revived across restarts, so we only
   // restore the *visual* history (read-only) and start a fresh shell beneath it.
+  // svelte-ignore state_referenced_locally -- persistKey is fixed for a pane's lifetime
   const SB_KEY = persistKey ? `conductor:sb:${persistKey}` : null;
   const SB_MAX = 60000; // cap stored bytes per pane to stay well under quota
   let serializeAddon;
@@ -47,7 +48,7 @@
 
   let searchOpen = $state(false);
   let searchTerm = $state("");
-  let searchInput;
+  let searchInput = $state();
 
   const SEARCH_OPTS = { decorations: { matchOverviewRuler: "#7aa2f7", activeMatchColorOverviewRuler: "#e0af68" } };
 

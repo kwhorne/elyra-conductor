@@ -3,8 +3,8 @@
 
   let query = $state("");
   let selected = $state(0);
-  let inputEl;
-  let listEl;
+  let inputEl = $state();
+  let listEl = $state();
 
   // Keep the selected row visible as you arrow through a list taller than the
   // palette — otherwise the highlight scrolls out of view and you'd have to use
@@ -69,13 +69,13 @@
   <div
     class="overlay"
     role="presentation"
-    onclick={onclose}
+    onclick={(e) => e.target === e.currentTarget && onclose()}
   >
     <div
       class="palette"
       role="dialog"
       aria-modal="true"
-      onclick={(e) => e.stopPropagation()}
+      tabindex="-1"
     >
       <input
         bind:this={inputEl}

@@ -15,8 +15,8 @@
 </script>
 
 {#if open}
-  <div class="overlay" role="presentation" onclick={onclose}>
-    <div class="modal" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()}>
+  <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
+    <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <div class="logo">
         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="56" height="56">
           <rect width="24" height="24" rx="5" fill="#0a0a0a" />

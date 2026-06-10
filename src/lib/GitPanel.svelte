@@ -119,8 +119,8 @@
 </script>
 
 {#if open}
-  <div class="overlay" role="presentation" onclick={onclose}>
-    <div class="panel" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()}>
+  <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
+    <div class="panel" role="dialog" aria-modal="true" tabindex="-1">
       <div class="top">
         <span class="title">Git — {projectName}</span>
         <div class="branchbox">

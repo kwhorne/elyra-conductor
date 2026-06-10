@@ -8,7 +8,7 @@
   let push = $state(false);
   let busy = $state(false);
   let error = $state("");
-  let messageEl;
+  let messageEl = $state();
 
   async function load() {
     error = "";
@@ -64,8 +64,8 @@
 <svelte:window onkeydown={(e) => open && onKeydown(e)} />
 
 {#if open}
-  <div class="overlay" role="presentation" onclick={onclose}>
-    <div class="dialog" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()}>
+  <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
+    <div class="dialog" role="dialog" aria-modal="true" tabindex="-1">
       <div class="head">
         <span class="ttl">⎇ Commit — {projectName}</span>
         <button class="x" title="Close (Esc)" onclick={onclose}>✕</button>

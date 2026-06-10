@@ -6,7 +6,7 @@
   let mode = $state("files"); // "files" | "text"
   let query = $state("");
   let selected = $state(0);
-  let inputEl;
+  let inputEl = $state();
 
   let allFiles = $state([]); // relative paths for the current root
   let filesRoot = null; // which root allFiles was loaded for
@@ -138,7 +138,7 @@
     }
   }
 
-  let listEl;
+  let listEl = $state();
   function scrollSelected() {
     queueMicrotask(() => {
       listEl?.querySelector(".row.sel")?.scrollIntoView({ block: "nearest" });
@@ -147,8 +147,8 @@
 </script>
 
 {#if open}
-  <div class="overlay" role="presentation" onclick={onclose}>
-    <div class="finder" role="dialog" aria-modal="true" onclick={(e) => e.stopPropagation()}>
+  <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
+    <div class="finder" role="dialog" aria-modal="true" tabindex="-1">
       <div class="tabs">
         <button class="tab" class:on={mode === "files"} onclick={() => setMode("files")}>Files</button>
         <button class="tab" class:on={mode === "text"} onclick={() => setMode("text")}>Text</button>
