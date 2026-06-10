@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.7] — 2026-06-10
+
+### Added
+
+- **⚡ Fix it — self-healing terminal.** When a command fails in a shell-integrated
+  terminal, a quiet toast offers a one-click handoff to an Elyra agent with the full
+  context — command, exit code, output tail, and git branch — and a fix-oriented prompt.
+  Interrupts (Ctrl+C & friends) are ignored, and the offer expires on its own; it never nags.
+- **🌅 Morning brief.** Open Conductor after a real break (4+ hours) and a welcome-back
+  card shows where you left off: last project with git state (branch, dirty, ahead/behind),
+  container health, and your last commands with failures flagged. One click to **resume
+  the project** or have **Elyra plan your day** from the same context.
+- **📖 Living runbooks.** Runbooks can now **verify themselves**: the new ✓ Verify button
+  runs every runnable step headless (login shell, 60s timeout per step) and flags the ones
+  that no longer work — per-step badges, failure output inline, and a freshness banner
+  (“Verified 2h ago — all 4 steps green”) that survives restarts. Failing steps get their
+  own ⚡ Fix button straight to Elyra. Mark always-on steps (dev servers) with
+  ```` ```bash no-verify ````.
+
 ## [0.7.6] — 2026-06-10
 
 ### Changed
@@ -655,7 +674,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.6...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.7...HEAD
+[0.7.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.3...v0.7.4
