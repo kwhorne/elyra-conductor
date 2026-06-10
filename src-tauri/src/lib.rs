@@ -118,6 +118,7 @@ pub fn run() {
             projects::detect_terminal,
             projects::run_in_external_terminal,
             projects::home_dir,
+            projects::run_step,
             fs::list_dir,
             fs::read_file,
             fs::write_file,

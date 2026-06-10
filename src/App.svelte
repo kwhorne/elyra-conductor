@@ -16,6 +16,7 @@
   import ContextMenu from "./lib/ContextMenu.svelte";
   import InputDialog from "./lib/InputDialog.svelte";
   import AboutModal from "./lib/AboutModal.svelte";
+  import MorningBrief from "./lib/MorningBrief.svelte";
   import { listen } from "@tauri-apps/api/event";
   import RunModal from "./lib/RunModal.svelte";
   import CommitDialog from "./lib/CommitDialog.svelte";
@@ -400,7 +401,7 @@
     const cmd = (rec.command || "").trim();
     const proc = cmd ? cmd.split(/\s+/)[0].split("/").pop() : "command";
     const now = rec.startedAt + rec.duration;
-    pushCommand({
+    const entry = {
       id: `cmd-${++idSeq}`,
       termId,
       tabId: tab?.id ?? null,
@@ -413,7 +414,9 @@
       startedAt: rec.startedAt,
       endedAt: now,
       duration: rec.duration,
-    });
+    };
+    pushCommand(entry);
+    offerFix(entry);
     // Track the last test run per project for the health strip.
     if (cmd && TEST_RE.test(cmd) && tab?.projectPath && rec.exitCode != null) {
       lastTest = { ...lastTest, [tab.projectPath]: { ok: rec.exitCode === 0, at: now } };
@@ -422,6 +425,38 @@
     if (recording && cmd && cmd !== "clear") {
       recordedCmds = [...recordedCmds, { command: cmd, exitCode: rec.exitCode }];
     }
+  }
+
+  // ---------- "Fix it" (self-healing terminal) ----------
+  // When a shell-integrated command fails, offer a one-click handoff to an
+  // Elyra agent with a fix-oriented prompt. Conductor only bundles context;
+  // Elyra reasons. The offer expires quietly — it should never nag.
+  let fixOffer = $state(null); // { entry } | null
+  let fixTimer;
+  const FIX_IGNORED_EXITS = new Set([0, 130, 141, 143, 146, 147, 148]); // ok, ctrl-c, sigpipe, sigterm, job control
+  function offerFix(entry) {
+    if (!elyraVersion || !entry.command || entry.command === "clear") return;
+    if (entry.exitCode == null || FIX_IGNORED_EXITS.has(entry.exitCode)) {
+      // A later success in the same pane clears a stale offer.
+      if (fixOffer && fixOffer.entry.termId === entry.termId) fixOffer = null;
+      return;
+    }
+    fixOffer = { entry };
+    clearTimeout(fixTimer);
+    fixTimer = setTimeout(() => (fixOffer = null), 18000);
+  }
+  function askElyraToFix(entry) {
+    fixOffer = null;
+    clearTimeout(fixTimer);
+    const proj = projects.find((p) => p.path === entry.projectPath) || pinned.find((p) => p.path === entry.projectPath);
+    const where = entry.label || (entry.projectPath ? baseOf(entry.projectPath) : "");
+    let b = `This command just failed${where ? ` in ${where}` : ""}. Diagnose the root cause and give me the exact command(s) to fix it — short and actionable. If a command should be re-run after the fix, include it:\n\n`;
+    b += "```bash\n" + entry.command + "\n```\n";
+    b += `\nExit code: ${entry.exitCode}`;
+    if (entry.duration != null) b += ` · ran ${Math.round(entry.duration / 1000)}s`;
+    if (proj?.branch) b += `\nBranch: ${proj.branch}${proj.dirty ? " (uncommitted changes)" : ""}`;
+    if (entry.output) b += `\n\nOutput (tail):\n\`\`\`\n${entry.output}\n\`\`\``;
+    sendToElyra(entry.projectPath || activeProject?.path || root, b);
   }
 
   // ---------- runbook recorder ----------
@@ -1555,6 +1590,73 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize()));
     } catch {}
+    saveSessionPulse();
+  }
+
+  // ---------- morning brief ("here's where you left off") ----------
+  // On quit we persist a tiny session pulse: when, which project, and the last
+  // few commands. Next launch — if a real break has passed — we cross-reference
+  // it with *fresh* git/container state and show a welcome-back card.
+  const SESSION_KEY = "conductor:session";
+  const BRIEF_MIN_GAP_MS = 4 * 3600e3; // only after a real break, never on quick restarts
+  let brief = $state(null);
+  function saveSessionPulse() {
+    try {
+      const projPath = activeTab?.projectPath ?? activeProject?.path ?? null;
+      localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          at: Date.now(),
+          projectPath: projPath,
+          commands: commandLog.slice(0, 4).map((c) => ({ command: c.command, proc: c.proc, exitCode: c.exitCode })),
+        }),
+      );
+    } catch {}
+  }
+  function buildBrief() {
+    let prev;
+    try {
+      prev = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null");
+    } catch {
+      return;
+    }
+    if (!prev?.at || Date.now() - prev.at < BRIEF_MIN_GAP_MS) return;
+    const proj = [...projects, ...pinned].find((p) => p.path === prev.projectPath);
+    const cont = prev.projectPath ? projectContainers[prev.projectPath] : null;
+    const commands = (prev.commands || []).filter((c) => c.command || c.proc);
+    if (!proj && !commands.length) return; // nothing worth saying
+    brief = {
+      lastAt: prev.at,
+      project: proj
+        ? { name: proj.name, path: proj.path, branch: proj.branch, dirty: proj.dirty, ahead: proj.ahead, behind: proj.behind, color: projectColor(proj.path) }
+        : null,
+      containers: cont ? { running: cont.running, total: cont.total } : null,
+      commands,
+    };
+  }
+  function briefResume(path) {
+    brief = null;
+    const tab = tabs.find((t) => t.kind === "term" && t.projectPath === path);
+    if (tab) focusTab(tab);
+    else newTab(path, baseOf(path));
+  }
+  function briefPlan() {
+    const b = brief;
+    brief = null;
+    let text = `Good morning. Help me plan my day in this project.\n\nWhere I left off (${new Date(b.lastAt).toLocaleString()}):`;
+    if (b.project) {
+      text += `\n- Project: ${b.project.name}`;
+      if (b.project.branch) text += ` on ${b.project.branch}${b.project.dirty ? " (uncommitted changes)" : ""}`;
+      if (b.project.ahead) text += `, ${b.project.ahead} commit(s) not pushed`;
+      if (b.project.behind) text += `, ${b.project.behind} commit(s) behind remote`;
+    }
+    if (b.containers) text += `\n- Containers: ${b.containers.running}/${b.containers.total} running`;
+    if (b.commands?.length) {
+      text += `\n- Last commands:`;
+      for (const c of b.commands) text += `\n  - ${c.command || c.proc}${c.exitCode ? ` (exit ${c.exitCode})` : ""}`;
+    }
+    text += `\n\nSuggest: what to pick up first, anything that looks unfinished or broken, and a short plan.`;
+    sendToElyra(b.project?.path ?? activeProject?.path ?? root, text);
   }
 
   // Apply a serialized snapshot (from auto-save or a named workspace) to the
@@ -1717,7 +1819,7 @@
     await loadProjects();
     loadDevCmds();
     restore();
-    loadGitStatus(); // enrich pinned items resolved during restore
+    loadGitStatus().then(() => buildBrief()); // enrich pinned items, then welcome back
     refreshProjectPorts();
     refreshContainers();
     loaded = true;
@@ -2039,6 +2141,18 @@
 
   <AboutModal open={aboutOpen} onclose={() => (aboutOpen = false)} />
 
+  {#if brief}
+    <MorningBrief {brief} elyra={!!elyraVersion} onresume={briefResume} onplan={briefPlan} onclose={() => (brief = null)} />
+  {/if}
+
+  {#if fixOffer}
+    <div class="fix-toast">
+      <span class="fx-info" title={fixOffer.entry.command}>✗ <code>{fixOffer.entry.command.length > 44 ? fixOffer.entry.command.slice(0, 44) + "…" : fixOffer.entry.command}</code> exited {fixOffer.entry.exitCode}</span>
+      <button class="fx-fix" onclick={() => askElyraToFix(fixOffer.entry)}>⚡ Fix with Elyra</button>
+      <button class="fx-x" title="Dismiss" onclick={() => (fixOffer = null)}>✕</button>
+    </div>
+  {/if}
+
   {#if update && !updateDismissed}
     <div class="update-toast">
       {#if updateStatus === "downloading"}
@@ -2124,6 +2238,40 @@
   .editor-area { width: 50%; min-width: 320px; border-left: 1px solid var(--border); }
   .placeholder { color: var(--text-dim); padding: 24px; }
   .editor-loading { color: var(--text-dim); padding: 16px; font-size: 12px; }
+  .fix-toast {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 185;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 560px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid #f7768e;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+  .fix-toast .fx-info { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fix-toast .fx-info code { color: var(--text); }
+  .fix-toast .fx-fix {
+    flex: none;
+    background: var(--accent-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .fix-toast .fx-fix:hover { border-color: var(--accent); }
+  .fix-toast .fx-x { flex: none; background: transparent; border: none; color: var(--text-dim); cursor: pointer; padding: 2px 4px; }
+  .fix-toast .fx-x:hover { color: var(--text); }
+
   .update-toast {
     position: fixed;
     bottom: 16px;

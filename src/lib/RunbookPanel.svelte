@@ -147,6 +147,7 @@ pnpm dev
     mode = "preview";
     loading = false;
     ontitle?.(titleOf(path));
+    loadVerify(path);
   }
 
   function titleOf(path) {
@@ -185,6 +186,88 @@ pnpm dev
   function run(code) {
     const cmd = code.trimEnd();
     if (cmd) onrun?.(cmd);
+  }
+
+  // ---------- living runbooks: verify ----------
+  // Documentation rots silently. "Verify" runs every runnable step headless
+  // (login shell, 60s timeout each) and flags the ones that no longer work —
+  // a runbook with an expiry alarm. Results persist in a sidecar JSON next to
+  // the markdown so the freshness banner survives restarts. Steps that are
+  // meant to run forever (dev servers) opt out with ```bash no-verify.
+  let verifying = $state(false);
+  let verifyResults = $state({}); // block index -> { status, code, output }
+  let lastVerify = $state(null); // { at, total, failed } | null
+  const VERIFY_TIMEOUT_S = 60;
+
+  function sidecarPath(p) {
+    return p ? p.replace(/\.md$/i, "") + ".verify.json" : null;
+  }
+  function verifiableSteps() {
+    return blocks
+      .map((b, i) => ({ b, i }))
+      .filter(({ b }) => b.type === "code" && b.runnable && !/\bno-verify\b/i.test(b.lang));
+  }
+  async function loadVerify(p) {
+    lastVerify = null;
+    verifyResults = {};
+    try {
+      const raw = await invoke("read_file", { path: sidecarPath(p) });
+      const v = JSON.parse(raw);
+      if (v?.at) {
+        lastVerify = v;
+        for (const s of v.steps || []) {
+          if (s.index != null) verifyResults[s.index] = { status: s.status, code: s.code };
+        }
+        verifyResults = { ...verifyResults };
+      }
+    } catch {}
+  }
+  async function verifyAll() {
+    if (verifying || !current) return;
+    const steps = verifiableSteps();
+    if (!steps.length) return;
+    if (!window.confirm(`Verify this runbook?\n\nRuns ${steps.length} step(s) in ${projectPath}.\nEach step times out after ${VERIFY_TIMEOUT_S}s — mark always-on steps (dev servers) with \u0060\u0060\u0060bash no-verify.`))
+      return;
+    verifying = true;
+    verifyResults = {};
+    let failed = 0;
+    const saved = [];
+    for (const { b, i } of steps) {
+      if (failed) {
+        verifyResults = { ...verifyResults, [i]: { status: "skipped" } };
+        saved.push({ index: i, command: b.code.split("\n")[0], status: "skipped" });
+        continue;
+      }
+      verifyResults = { ...verifyResults, [i]: { status: "running" } };
+      let r;
+      try {
+        r = await invoke("run_step", { cwd: projectPath, command: b.code, timeoutSecs: VERIFY_TIMEOUT_S });
+      } catch (e) {
+        r = { code: -1, output: String(e), timed_out: false };
+      }
+      const status = r.timed_out ? "timeout" : r.code === 0 ? "ok" : "fail";
+      if (status !== "ok") failed++;
+      verifyResults = { ...verifyResults, [i]: { status, code: r.code, output: r.output } };
+      saved.push({ index: i, command: b.code.split("\n")[0], status, code: r.code });
+    }
+    verifying = false;
+    lastVerify = { at: Date.now(), total: steps.length, failed, steps: saved };
+    try {
+      await invoke("write_file", { path: sidecarPath(current), content: JSON.stringify(lastVerify, null, 2) });
+    } catch {}
+  }
+  function fixStep(b, r) {
+    let text = `This runbook step fails when verified. Diagnose and propose a fix — either to the command or to the runbook:\n\n\`\`\`bash\n${b.code}\n\`\`\`\n\nExit code: ${r.code}`;
+    if (r.output) text += `\n\nOutput (tail):\n\`\`\`\n${r.output.slice(-2000)}\n\`\`\``;
+    onelyra?.(text);
+  }
+  function relTime(ts) {
+    const m = Math.round((Date.now() - ts) / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m} min ago`;
+    const h = Math.round(m / 60);
+    if (h < 36) return `${h}h ago`;
+    return `${Math.round(h / 24)}d ago`;
   }
 
   async function copy(code) {
@@ -232,6 +315,11 @@ pnpm dev
     <div class="spacer"></div>
     {#if current}
       {#if mode === "preview"}
+        {#if verifiableSteps().length}
+          <button class="btn" onclick={verifyAll} disabled={verifying} title="Run every step headless and flag the ones that no longer work">
+            {verifying ? "⏳ Verifying…" : "✓ Verify"}
+          </button>
+        {/if}
         <button class="btn" onclick={() => { draft = content; mode = "edit"; }}>✎ Edit</button>
       {:else}
         <button class="btn" onclick={() => { draft = content; mode = "preview"; }}>Cancel</button>
@@ -242,6 +330,16 @@ pnpm dev
 
   {#if error}
     <div class="err">{error}</div>
+  {/if}
+
+  {#if lastVerify && mode === "preview" && !verifying}
+    <div class="verify-banner" class:ok={lastVerify.failed === 0} class:bad={lastVerify.failed > 0}>
+      {#if lastVerify.failed === 0}
+        ✓ Verified {relTime(lastVerify.at)} — all {lastVerify.total} step{lastVerify.total === 1 ? "" : "s"} green
+      {:else}
+        ⚠ Verified {relTime(lastVerify.at)} — {lastVerify.failed} of {lastVerify.total} step{lastVerify.total === 1 ? "" : "s"} failing
+      {/if}
+    </div>
   {/if}
 
   <div class="body">
@@ -266,10 +364,19 @@ pnpm dev
       <div class="preview" role="presentation" onclick={onPreviewClick}>
         {#each blocks as b, i (i)}
           {#if b.type === "code"}
-            <div class="codeblock">
+            {@const vr = verifyResults[i]}
+            <div class="codeblock" class:v-fail={vr?.status === "fail" || vr?.status === "timeout"}>
               <div class="codebar">
                 {#if b.lang}<span class="lang">{b.lang}</span>{/if}
+                {#if vr}
+                  <span class="vbadge {vr.status}" title={vr.status === "timeout" ? `Timed out after ${VERIFY_TIMEOUT_S}s` : vr.code != null ? `Exit ${vr.code}` : ""}>
+                    {vr.status === "running" ? "⏳" : vr.status === "ok" ? "✓" : vr.status === "skipped" ? "⊘ skipped" : vr.status === "timeout" ? "⧖ timeout" : `✗ exit ${vr.code}`}
+                  </span>
+                {/if}
                 <div class="spacer"></div>
+                {#if elyra && (vr?.status === "fail" || vr?.status === "timeout") && vr.output != null}
+                  <button class="run" onclick={() => fixStep(b, vr)} title="Ask Elyra to fix this step">⚡ Fix</button>
+                {/if}
                 {#if b.runnable}
                   <button class="run" onclick={() => run(b.code)} title="Run in this project's terminal">▶ Run</button>
                 {/if}
@@ -279,6 +386,12 @@ pnpm dev
                 <button class="copy" onclick={() => copy(b.code)} title="Copy">⧉</button>
               </div>
               <pre><code>{b.code}</code></pre>
+              {#if (vr?.status === "fail" || vr?.status === "timeout") && vr.output}
+                <details class="vout">
+                  <summary>output</summary>
+                  <pre>{vr.output.slice(-2000)}</pre>
+                </details>
+              {/if}
             </div>
           {:else}
             <!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -291,6 +404,32 @@ pnpm dev
 </div>
 
 <style>
+  .verify-banner {
+    padding: 6px 14px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .verify-banner.ok { color: #9ece6a; }
+  .verify-banner.bad { color: #e0af68; }
+  .vbadge { font-size: 11px; margin-left: 8px; }
+  .vbadge.ok { color: #9ece6a; }
+  .vbadge.fail, .vbadge.timeout { color: #f7768e; }
+  .vbadge.skipped { color: var(--text-dim); }
+  .vbadge.running { color: var(--text-dim); }
+  :global(.codeblock.v-fail) { border-color: #f7768e55 !important; }
+  .vout { padding: 4px 10px 8px; }
+  .vout summary { font-size: 11px; color: var(--text-dim); cursor: pointer; }
+  .vout pre {
+    margin: 6px 0 0;
+    max-height: 160px;
+    overflow: auto;
+    font-size: 11px;
+    color: #f7768e;
+    background: var(--bg);
+    border-radius: 6px;
+    padding: 8px;
+  }
+
   .runbook {
     display: flex;
     flex-direction: column;

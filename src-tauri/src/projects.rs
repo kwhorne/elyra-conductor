@@ -657,3 +657,118 @@ pub fn list_containers() -> Vec<Container> {
         })
         .collect()
 }
+
+// ── Runbook verification ─────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct StepResult {
+    code: i32,
+    output: String,
+    timed_out: bool,
+}
+
+/// Run one runbook step headless in the user's login shell and capture its
+/// outcome. Used by "Verify runbook": each ```bash step runs sequentially so
+/// stale documentation is flagged instead of silently rotting. The child is
+/// killed after `timeout_secs` (long-running steps like dev servers should be
+/// marked `no-verify` in the fence instead).
+#[tauri::command]
+pub fn run_step(cwd: String, command: String, timeout_secs: Option<u64>) -> StepResult {
+    use std::io::Read;
+    use std::time::{Duration, Instant};
+
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let timeout = Duration::from_secs(timeout_secs.unwrap_or(60).clamp(1, 600));
+
+    let mut child = match std::process::Command::new(&shell)
+        .arg("-lc")
+        .arg(&command)
+        .current_dir(&cwd)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return StepResult { code: -1, output: format!("failed to spawn: {e}"), timed_out: false }
+        }
+    };
+
+    // Drain stdout/stderr on threads so a chatty child never blocks on a full
+    // pipe while we poll for exit.
+    let mut readers = Vec::new();
+    if let Some(mut out) = child.stdout.take() {
+        readers.push(std::thread::spawn(move || {
+            let mut s = String::new();
+            let _ = out.read_to_string(&mut s);
+            s
+        }));
+    }
+    if let Some(mut err) = child.stderr.take() {
+        readers.push(std::thread::spawn(move || {
+            let mut s = String::new();
+            let _ = err.read_to_string(&mut s);
+            s
+        }));
+    }
+
+    let started = Instant::now();
+    let (code, timed_out) = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break (status.code().unwrap_or(-1), false),
+            Ok(None) => {
+                if started.elapsed() > timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break (-1, true);
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(_) => break (-1, false),
+        }
+    };
+
+    let mut output: String = readers
+        .into_iter()
+        .filter_map(|t| t.join().ok())
+        .collect::<Vec<_>>()
+        .join("");
+    // Keep the tail — that's where the error usually is.
+    if output.len() > 8000 {
+        let cut = output.len() - 8000;
+        let cut = output.char_indices().map(|(i, _)| i).find(|&i| i >= cut).unwrap_or(cut);
+        output = output[cut..].to_string();
+    }
+
+    StepResult { code, output, timed_out }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_step_success() {
+        let r = run_step("/tmp".into(), "echo hello".into(), Some(10));
+        assert_eq!(r.code, 0);
+        assert!(!r.timed_out);
+        assert!(r.output.contains("hello"));
+    }
+
+    #[test]
+    fn run_step_failure_captures_exit_and_stderr() {
+        let r = run_step("/tmp".into(), "echo oops >&2; exit 3".into(), Some(10));
+        assert_eq!(r.code, 3);
+        assert!(!r.timed_out);
+        assert!(r.output.contains("oops"));
+    }
+
+    #[test]
+    fn run_step_times_out_and_kills() {
+        let t = std::time::Instant::now();
+        let r = run_step("/tmp".into(), "sleep 30".into(), Some(1));
+        assert!(r.timed_out);
+        assert!(t.elapsed() < std::time::Duration::from_secs(10));
+    }
+}
