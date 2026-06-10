@@ -294,10 +294,13 @@
     }
   }
 
+  /** @typedef {{ label?: string, icon?: string, action?: () => void, danger?: boolean, separator?: boolean }} MenuItem */
+
   let ctxItems = $derived.by(() => {
     const e = ctx.entry;
     if (!e) return [];
     if (e.is_dir) {
+      /** @type {MenuItem[]} */
       const items = [
         { label: "Start (dev)", icon: "\u25B6", action: () => startProject(e.path) },
         { label: "Set start command\u2026", icon: "\u2699", action: () => setStartCommand(e.path) },
@@ -320,6 +323,7 @@
       );
       return items;
     }
+    /** @type {MenuItem[]} */
     const items = [
       { label: "Open in editor", icon: "\u270E", action: () => openFile(e.path) },
     ];
@@ -1633,6 +1637,7 @@
     wsMenu = { open: true, x: r.left, y: r.bottom + 4 };
   }
   let wsItems = $derived.by(() => {
+    /** @type {MenuItem[]} */
     const items = [{ label: "Save current layout\u2026", icon: "\u{1F4BE}", action: saveWorkspacePrompt }];
     const names = Object.keys(workspaces);
     if (names.length) {

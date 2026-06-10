@@ -18,11 +18,11 @@
     if (from && root) onmove?.(from, root);
   }
 
-  let visible = $derived(filterEntries(entries, showAll));
-
   let entries = $state([]);
   let loadedRoot = $state(null);
   let error = $state("");
+
+  let visible = $derived(filterEntries(entries, showAll));
 
   async function load(r) {
     loadedRoot = r;
