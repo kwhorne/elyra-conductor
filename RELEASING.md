@@ -31,9 +31,10 @@ pnpm tauri signer generate -w ~/.tauri/elyra-conductor.key
    `src-tauri/Cargo.toml` (keep them in sync), then commit (changelog + bump
    together).
 
-3. **Build a signed bundle.** Use the helper script — it loads the signing key,
-   cleans stale DMG mounts, and sets `CI=true` so create-dmg skips the flaky
-   AppleScript window-styling step:
+3. **Build a signed bundle.** Use the helper script — it first runs the quality
+   gate (`pnpm check` — the build aborts on any svelte-check error or warning),
+   then loads the signing key, cleans stale DMG mounts, and sets `CI=true` so
+   create-dmg skips the flaky AppleScript window-styling step:
 
    ```bash
    ./scripts/release-build.sh

@@ -18,6 +18,9 @@ if [ ! -f "$KEY_FILE" ]; then
   exit 1
 fi
 
+echo "==> Quality gate: svelte-check (type + a11y)"
+pnpm check
+
 echo "==> Cleaning stale DMG artifacts / mounts"
 rm -f "src-tauri/target/release/bundle/macos/rw."*.dmg 2>/dev/null || true
 for v in /Volumes/Elyra\ Conductor*; do
