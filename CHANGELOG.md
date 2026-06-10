@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] — 2026-06-10
+
+### Changed
+
+- **Terminal engine upgraded to xterm.js 6** — the WebGL renderer is now built into the
+  core and used automatically, making heavy terminal output noticeably smoother.
+- **Editor upgraded to Monaco 0.55**; Svelte, Vite and marked refreshed to their latest
+  patch releases.
+
+### Fixed
+
+- File explorer: the visibility filter could read the entry list before it was
+  initialized.
+- **Dialogs & menus are more accessible** — every modal (command palette, file finder,
+  commit dialog, context menu, …) is now properly focusable per ARIA, and
+  close-on-outside-click no longer relies on event-propagation tricks.
+
+### Internal
+
+- Gradual TypeScript checking: `pnpm check` (svelte-check over plain JS/Svelte via
+  `jsconfig.json`) now runs as a **quality gate** at the start of every release build —
+  the build aborts on any type or accessibility finding. Codebase is at 0 errors,
+  0 warnings.
+
 ## [0.7.5] — 2026-06-05
 
 ### Added
@@ -631,7 +655,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.5...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.6...HEAD
+[0.7.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.2...v0.7.3
