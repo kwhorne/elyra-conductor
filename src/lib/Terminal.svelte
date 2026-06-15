@@ -5,7 +5,7 @@
   import { SearchAddon } from "@xterm/addon-search";
   import { SerializeAddon } from "@xterm/addon-serialize";
   import "@xterm/xterm/css/xterm.css";
-  import { invoke } from "@tauri-apps/api/core";
+  import { invoke, Channel } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
   let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark", active = false, register = null, unregister = null, shellIntegration = false, oncommand = null } = $props();
@@ -210,22 +210,29 @@
     } catch {}
     fit.fit();
 
-    const unData = await listen(`pty://data/${id}`, (e) => {
-      term.write(new Uint8Array(e.payload));
+    // PTY output streams over a binary Channel (raw ArrayBuffer) instead of a
+    // Tauri event. Events JSON-serialize the payload — a 3.6x size hit plus a
+    // JSON.parse per frame on the UI thread, which made repaint-heavy TUIs
+    // (e.g. the Elyra agent) feel sluggish. The Channel ships bytes directly,
+    // and `new Uint8Array(buffer)` is a zero-copy view.
+    /** @type {Channel<ArrayBuffer>} */
+    const onData = new Channel();
+    onData.onmessage = (msg) => {
+      term.write(new Uint8Array(msg));
       sbDirty = true; // mark scrollback for the next periodic save
       const now = Date.now();
       if (onactivity && now - lastActivity > 350) {
         lastActivity = now;
         onactivity();
       }
-    });
+    };
     const unExit = await listen(`pty://exit/${id}`, (e) => {
       const code = typeof e.payload === "number" ? e.payload : null;
       const tail = code != null && code >= 0 ? ` (code ${code})` : "";
       term.write(`\r\n\x1b[90m[process exited${tail}]\x1b[0m\r\n`);
       onexit?.(code);
     });
-    cleanup.push(unData, unExit);
+    cleanup.push(unExit);
 
     term.onData((d) => {
       invoke("pty_write", { id, data: d }).catch(() => {});
@@ -253,6 +260,7 @@
       rows: term.rows,
       runCommand: runCommand ?? null,
       shellIntegration: shellIntegration ?? false,
+      onData,
     });
 
     // Periodically snapshot the buffer so a hard window close still persists it.

@@ -2,6 +2,7 @@ use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, Pt
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Mutex, OnceLock};
+use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, Emitter, State};
 
 // ── Shell integration (zsh) ────────────────────────────────────────────────
@@ -66,6 +67,7 @@ pub fn pty_spawn(
     rows: u16,
     run_command: Option<String>,
     shell_integration: Option<bool>,
+    on_data: Channel<Response>,
 ) -> Result<(), String> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -123,12 +125,19 @@ pub fn pty_spawn(
 
     let id_for_thread = id.clone();
     std::thread::spawn(move || {
-        let mut buf = [0u8; 8192];
+        // Stream PTY output over a binary Channel rather than an event. Tauri
+        // serializes event payloads to JSON, which turns every byte into a
+        // number in a JSON array (~3.6x bloat) and forces a JSON.parse on the
+        // UI thread for every frame — catastrophic for repaint-heavy TUIs.
+        // A Channel<Response> ships raw bytes (ArrayBuffer) with no JSON step.
+        let mut buf = [0u8; 65536];
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    let _ = app.emit(&format!("pty://data/{id_for_thread}"), &buf[..n]);
+                    if on_data.send(Response::new(buf[..n].to_vec())).is_err() {
+                        break;
+                    }
                 }
                 Err(_) => break,
             }
