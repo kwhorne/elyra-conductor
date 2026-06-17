@@ -1,6 +1,36 @@
 <script>
   let { open = false, x = 0, y = 0, items = [], onclose } = $props();
 
+  // Keep the menu fully on-screen. A raw click near the right/bottom edge
+  // would otherwise push it past the viewport (see file context menu on the
+  // last row). We measure the rendered menu and clamp/flip it inward, and hide
+  // it for the single measuring frame to avoid a flash at the wrong spot.
+  let menuEl = $state();
+  let left = $state(0);
+  let top = $state(0);
+  let placed = $state(false);
+
+  $effect(() => {
+    if (!open) {
+      placed = false;
+      return;
+    }
+    // Re-measure whenever a new menu opens (coords or items change).
+    void x;
+    void y;
+    void items;
+    if (!menuEl) return;
+    const pad = 8;
+    const r = menuEl.getBoundingClientRect();
+    let l = x;
+    let t = y;
+    if (l + r.width > window.innerWidth - pad) l = Math.max(pad, window.innerWidth - r.width - pad);
+    if (t + r.height > window.innerHeight - pad) t = Math.max(pad, window.innerHeight - r.height - pad);
+    left = l;
+    top = t;
+    placed = true;
+  });
+
   function choose(item) {
     if (item.disabled) return;
     onclose?.();
@@ -20,8 +50,10 @@
   >
     <div
       class="menu"
-      style:left="{x}px"
-      style:top="{y}px"
+      bind:this={menuEl}
+      style:left="{placed ? left : x}px"
+      style:top="{placed ? top : y}px"
+      style:opacity={placed ? 1 : 0}
       role="menu"
       tabindex="-1"
     >
@@ -48,6 +80,8 @@
   .menu {
     position: fixed;
     min-width: 220px;
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 8px;
