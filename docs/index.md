@@ -45,6 +45,7 @@ or defines prompts/tools/models. See [Architecture & boundaries](architecture.md
 - [Runbooks](runbooks.md) — runnable, project-scoped markdown notes (▶ run, `[[file]]`, `[[task:name]]`).
 - [Files & editor](files-and-editor.md) — the file tree and inline Monaco quick-edit.
 - [Git](git.md) — status in the sidebar and the in-app commit dialog.
+- [Worktrees & parallel agents](worktrees.md) — isolated branches, the agent command center, and GitHub PR status.
 - [Database browser](database.md) — connect (MySQL/SQLite) from `.env`, browse tables, run queries, export to Excel.
 - [Command palette](command-palette.md) — the `⌘K` fuzzy launcher.
 - [Keyboard shortcuts](keybindings.md) — every shortcut, and how editor focus changes them.
@@ -52,6 +53,7 @@ or defines prompts/tools/models. See [Architecture & boundaries](architecture.md
 ## Elyra integration
 
 - [Elyra agent](elyra-agent.md) — host a native agent panel driven by `elyra --mode rpc`.
+- [Worktrees & parallel agents](worktrees.md) — run several agents at once, one isolated branch each, with PR status.
 
 ## Architecture
 

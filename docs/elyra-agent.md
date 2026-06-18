@@ -45,6 +45,23 @@ press. Think of it as a terminal emulator _for_ an agent.
 The agent panel also has a **Restart** button. The RPC child is given the login-shell
 `PATH` so its Node runtime is found in GUI launches.
 
+## Agent command center
+
+Conductor derives one coarse **presence** state per agent from the RPC stream it already
+processes, in priority order:
+
+| State | When |
+|-------|------|
+| `waiting` | the agent issued a `confirm` / `select` / `input` request — blocked on you |
+| `working` | between `agent_start` and `agent_end` |
+| `exited` | the agent process ended |
+| `idle` | ready, nothing pending |
+
+`waiting` wins because a blocked agent is wasted time. The state shows as a per-tab dot
+and a pill in the tab strip (how many agents are working vs waiting), and a notification
+fires when an agent starts waiting while you're focused elsewhere. Running several agents
+in parallel — one per branch — is covered in [Worktrees & parallel agents](worktrees.md).
+
 ## Levels recap
 
 - **Level 0 — launch only:** spawn `elyra` in a terminal tab (same spirit as "Open in

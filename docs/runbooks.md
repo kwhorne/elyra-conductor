@@ -110,6 +110,25 @@ pnpm install
 - [[README.md]]
 ````
 
+## Verify — living runbooks
+
+Documentation rots silently. The **✓ Verify** button runs every runnable step headless
+(in your login shell, with a per-step timeout) and flags the ones that no longer work —
+per-step badges (✓ / ✗ exit code / timeout), the failing step's output inline, and a
+freshness banner (*“Verified 2h ago — all 4 steps green”*) backed by a sidecar
+`.verify.json` next to the runbook, so it survives restarts.
+
+Steps that are meant to run forever (dev servers) opt out by tagging the fence:
+
+````markdown
+```bash no-verify
+pnpm dev
+```
+````
+
+A failing step gets its own **⚡ Fix** button that hands the command and output to an
+Elyra agent. Verification runs each step via the `run_step` Tauri command.
+
 ## Related
 
 - [Terminals & panes](terminals.md) — where Run sends its commands.

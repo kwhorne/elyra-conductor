@@ -49,6 +49,10 @@
           "path": "git.md"
         },
         {
+          "title": "Worktrees & parallel agents",
+          "path": "worktrees.md"
+        },
+        {
           "title": "Database browser",
           "path": "database.md"
         },

@@ -60,7 +60,14 @@ For rebases, interactive staging, history browsing, and the rest, use a terminal
 (`git …`) or open the project in your editor. Conductor intentionally keeps the built-in
 git surface small — commit + status are the high-frequency actions.
 
+## Worktrees
+
+For parallel branches — each an isolated checkout you can open as a terminal or an Elyra
+agent, with GitHub PR status per branch — see [Worktrees & parallel agents](worktrees.md).
+
 ## Related
 
 - [Projects & sidebar](projects.md) — where status is shown.
-- [Tauri commands](tauri-commands.md) — `git_status`, `git_changes`, `git_commit`.
+- [Worktrees & parallel agents](worktrees.md) — isolated branches and PR status.
+- [Tauri commands](tauri-commands.md) — `git_status`, `git_changes`, `git_commit`,
+  `git_worktree_*`.
