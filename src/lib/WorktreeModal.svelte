@@ -13,6 +13,8 @@
   let newBranch = $state("");
   let base = $state("");
   let inputEl = $state();
+  let prs = $state({}); // branch -> PR info (from gh)
+  let prsLoading = $state(false);
 
   function baseOf(p) {
     return p ? p.split("/").pop() : "";
@@ -20,7 +22,7 @@
 
   async function refresh() {
     if (!project) return;
-    loading = trees.length === 0;
+    loading = true;
     try {
       trees = await invoke("git_worktree_list", { path: project.path });
       error = null;
@@ -29,7 +31,34 @@
       trees = [];
     }
     loading = false;
+    loadPrs();
   }
+
+  // PRs load lazily and never block the worktree list. Needs an authenticated
+  // `gh`; if it's missing we just show no badges.
+  async function loadPrs() {
+    if (!project) return;
+    prsLoading = true;
+    try {
+      const list = await invoke("gh_pr_list", { repo: project.path });
+      const map = {};
+      for (const pr of list) map[pr.branch] = pr;
+      prs = map;
+    } catch {
+      prs = {};
+    }
+    prsLoading = false;
+  }
+
+  function openUrl(url) {
+    invoke("open_url", { url }).catch(() => {});
+  }
+
+  // Open PRs that don't yet have a worktree — offer to check them out.
+  let orphanPrs = $derived.by(() => {
+    const have = new Set(trees.map((t) => t.branch).filter(Boolean));
+    return Object.values(prs).filter((pr) => !have.has(pr.branch));
+  });
 
   async function create(openAs) {
     const branch = newBranch.trim();
@@ -79,11 +108,19 @@
     }
   }
 
+  // Load once per open (keyed on the repo path). Reading reactive state inside
+  // refresh() must not feed back into this effect, or it re-runs forever.
+  let loadedKey = null;
   $effect(() => {
-    if (open) {
+    const key = open ? project?.path : null;
+    if (key && key !== loadedKey) {
+      loadedKey = key;
       trees = [];
+      prs = {};
       refresh();
       queueMicrotask(() => inputEl?.focus());
+    } else if (!open) {
+      loadedKey = null;
     }
   });
 </script>
@@ -135,6 +172,21 @@
                   {#if t.is_main}<span class="badge">main</span>{/if}
                   {#if t.locked}<span class="badge lock">locked</span>{/if}
                   <span class="head">{t.head}</span>
+                  {#if t.branch && prs[t.branch]}
+                    {@const pr = prs[t.branch]}
+                    <button
+                      class="pr"
+                      class:draft={pr.is_draft}
+                      class:fail={pr.checks_failed > 0}
+                      class:pass={pr.checks_failed === 0 && pr.checks_pending === 0 && pr.checks_passed > 0}
+                      onclick={() => openUrl(pr.url)}
+                      title={`${pr.title}\n${pr.is_draft ? "Draft · " : ""}${pr.review_decision || "no review"} · open on GitHub`}
+                    >
+                      #{pr.number}
+                      {#if pr.checks_failed > 0}✗ {pr.checks_failed}{:else if pr.checks_pending > 0}○ {pr.checks_pending}{:else if pr.checks_passed > 0}✓{/if}
+                      {#if pr.review_decision === "APPROVED"} 🟢{:else if pr.review_decision === "CHANGES_REQUESTED"} 🔴{/if}
+                    </button>
+                  {/if}
                 </div>
                 <div class="path" title={t.path}>{t.path}</div>
               </div>
@@ -151,6 +203,36 @@
           {/each}
         {/if}
       </div>
+      {#if orphanPrs.length}
+        <div class="pr-section">
+          <div class="sec-lbl">Open PRs without a worktree</div>
+          {#each orphanPrs as pr (pr.number)}
+            <div class="pr-row">
+              <button
+                class="pr"
+                class:draft={pr.is_draft}
+                class:fail={pr.checks_failed > 0}
+                class:pass={pr.checks_failed === 0 && pr.checks_pending === 0 && pr.checks_passed > 0}
+                onclick={() => openUrl(pr.url)}
+                title="Open on GitHub"
+              >
+                #{pr.number}
+                {#if pr.checks_failed > 0}✗ {pr.checks_failed}{:else if pr.checks_pending > 0}○ {pr.checks_pending}{:else if pr.checks_passed > 0}✓{/if}
+                {#if pr.review_decision === "APPROVED"} 🟢{:else if pr.review_decision === "CHANGES_REQUESTED"} 🔴{/if}
+              </button>
+              <div class="pr-meta">
+                <div class="pr-title" title={pr.title}>{pr.title}</div>
+                <div class="pr-branch">{pr.branch}</div>
+              </div>
+              <button class="btn" onclick={() => { newBranch = pr.branch; create("terminal"); }} disabled={busy} title="Check out this PR as a worktree (terminal)">🖥</button>
+              {#if elyra}
+                <button class="btn" onclick={() => { newBranch = pr.branch; create("agent"); }} disabled={busy} title="Check out this PR as a worktree (Elyra agent)">🤖</button>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
+
       <div class="hint">Worktrees are created in <code>{baseOf(project?.path)}.worktrees/</code> next to the repo.</div>
     </div>
   </div>
@@ -178,6 +260,11 @@
   .badge { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
   .badge.lock { color: #e0af68; border-color: color-mix(in srgb, #e0af68 40%, var(--border)); }
   .head { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+  .pr { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-family: var(--font-mono); background: var(--bg); border: 1px solid var(--border); color: var(--text-dim); border-radius: 10px; padding: 1px 8px; cursor: pointer; }
+  .pr:hover { color: var(--text); border-color: var(--accent); }
+  .pr.pass { color: #9ece6a; border-color: color-mix(in srgb, #9ece6a 40%, var(--border)); }
+  .pr.fail { color: #f7768e; border-color: color-mix(in srgb, #f7768e 45%, var(--border)); }
+  .pr.draft { opacity: 0.7; }
   .path { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
   .actions { display: flex; gap: 4px; flex: none; }
   .btn { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 9px; font-size: 12px; cursor: pointer; }
@@ -186,6 +273,13 @@
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.agent { background: var(--accent-2); }
   .btn.danger:hover:not(:disabled) { border-color: #f7768e; color: #f7768e; }
+  .pr-section { border-top: 1px solid var(--border); padding: 8px; }
+  .sec-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); padding: 4px 6px 6px; }
+  .pr-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; }
+  .pr-row:hover { background: var(--bg-3); }
+  .pr-meta { flex: 1; min-width: 0; }
+  .pr-title { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pr-branch { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hint { padding: 8px 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-dim); }
   .hint code { font-family: var(--font-mono); }
 </style>

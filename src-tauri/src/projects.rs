@@ -909,9 +909,16 @@ pub fn git_worktree_add(repo: String, branch: String, base: Option<String>) -> R
     if let Some(parent) = dir.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let exists = git(&repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_some();
-    if exists {
+    let local = git(&repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_some();
+    let remote_ref = format!("refs/remotes/origin/{branch}");
+    let remote = git(&repo, &["rev-parse", "--verify", "--quiet", &remote_ref]).is_some();
+    if local {
+        // Existing local branch: just check it out into the new worktree.
         git_result(&repo, &["worktree", "add", &dir_str, &branch])?;
+    } else if remote {
+        // Branch exists on origin only (e.g. a PR branch): create a local branch
+        // that tracks it, so the worktree has the real PR contents.
+        git_result(&repo, &["worktree", "add", "--track", "-b", &branch, &dir_str, &format!("origin/{branch}")])?;
     } else {
         let base_ref = base.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("HEAD");
         git_result(&repo, &["worktree", "add", "-b", &branch, &dir_str, base_ref])?;
@@ -928,4 +935,99 @@ pub fn git_worktree_remove(repo: String, worktree_path: String, force: bool) -> 
     args.push(&worktree_path);
     git_result(&repo, &args)?;
     Ok(())
+}
+
+// ── GitHub PR status (via the `gh` CLI) ──────────────────────────────────────
+// Surfaces, per branch/worktree, the open PR and its check rollup so the
+// parallel-branches view shows not just "an agent is on this branch" but
+// "here's its PR and whether CI is green". Pure read-only; needs an
+// authenticated `gh`. Best-effort: returns empty/err, never blocks the UI.
+
+#[derive(serde::Serialize)]
+pub struct PrInfo {
+    branch: String,
+    number: u64,
+    title: String,
+    state: String,
+    is_draft: bool,
+    url: String,
+    review_decision: String,
+    checks_passed: u32,
+    checks_failed: u32,
+    checks_pending: u32,
+}
+
+#[tauri::command]
+pub fn detect_gh() -> bool {
+    let Some(bin) = find_bin("gh") else {
+        return false;
+    };
+    // Authenticated? `gh auth status` exits non-zero when not logged in.
+    std::process::Command::new(&bin)
+        .args(["auth", "status"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+pub fn gh_pr_list(repo: String) -> Result<Vec<PrInfo>, String> {
+    let bin = find_bin("gh").ok_or("gh (GitHub CLI) not found on PATH")?;
+    let out = std::process::Command::new(&bin)
+        .args([
+            "pr",
+            "list",
+            "--state",
+            "open",
+            "--limit",
+            "100",
+            "--json",
+            "number,headRefName,state,isDraft,title,url,reviewDecision,statusCheckRollup",
+        ])
+        .current_dir(&repo)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    let json: serde_json::Value =
+        serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?;
+    let mut res = Vec::new();
+    for pr in json.as_array().into_iter().flatten() {
+        let (mut passed, mut failed, mut pending) = (0u32, 0u32, 0u32);
+        if let Some(checks) = pr.get("statusCheckRollup").and_then(|v| v.as_array()) {
+            for c in checks {
+                // CheckRun carries status/conclusion; StatusContext carries state.
+                let conclusion = c.get("conclusion").and_then(|v| v.as_str()).unwrap_or("");
+                let status = c.get("status").and_then(|v| v.as_str()).unwrap_or("");
+                let state = c.get("state").and_then(|v| v.as_str()).unwrap_or("");
+                let ok = matches!(conclusion, "SUCCESS" | "NEUTRAL" | "SKIPPED")
+                    || matches!(state, "SUCCESS");
+                let bad = matches!(
+                    conclusion,
+                    "FAILURE" | "TIMED_OUT" | "CANCELLED" | "ACTION_REQUIRED" | "STARTUP_FAILURE"
+                ) || matches!(state, "FAILURE" | "ERROR");
+                if bad {
+                    failed += 1;
+                } else if ok {
+                    passed += 1;
+                } else if status == "COMPLETED" || state == "EXPECTED" || !state.is_empty() || !status.is_empty() {
+                    pending += 1;
+                }
+            }
+        }
+        res.push(PrInfo {
+            branch: pr.get("headRefName").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            number: pr.get("number").and_then(|v| v.as_u64()).unwrap_or(0),
+            title: pr.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            state: pr.get("state").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            is_draft: pr.get("isDraft").and_then(|v| v.as_bool()).unwrap_or(false),
+            url: pr.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            review_decision: pr.get("reviewDecision").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            checks_passed: passed,
+            checks_failed: failed,
+            checks_pending: pending,
+        });
+    }
+    Ok(res)
 }

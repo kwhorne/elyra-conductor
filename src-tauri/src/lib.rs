@@ -122,6 +122,8 @@ pub fn run() {
             projects::git_worktree_list,
             projects::git_worktree_add,
             projects::git_worktree_remove,
+            projects::detect_gh,
+            projects::gh_pr_list,
             fs::list_dir,
             fs::read_file,
             fs::write_file,
