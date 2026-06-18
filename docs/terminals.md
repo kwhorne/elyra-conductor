@@ -90,12 +90,13 @@ prompt, aliases — is untouched) and then adds `precmd`/`preexec` hooks.
 
 With it on:
 
-- The **command timeline** (🕘) shows the full command and a ✓ / ✗ exit-code badge.
+- The **command timeline** (🕘) shows the full command and a ✓ / ✗ exit-code badge, and
+  every command is saved to a searchable history — see
+  [Command history & insights](command-history.md).
 - The sidebar shows a per-project **✓ / ✗ test** badge from the last test run (pest,
   phpunit, vitest, jest, pytest, cargo/go test, …).
 
-It's **off by default** and the choice persists. Only zsh is supported for now; other
-shells keep the lighter, process-name-based timeline.
+Only zsh is supported for now; other shells keep the lighter, process-name-based timeline.
 
 ## In-terminal search
 

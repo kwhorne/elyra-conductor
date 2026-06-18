@@ -40,6 +40,7 @@ or defines prompts/tools/models. See [Architecture & boundaries](architecture.md
 
 - [Projects & sidebar](projects.md) — project switcher, git status, pinned projects.
 - [Terminals & panes](terminals.md) — PTY terminals, splitting, search, titles, rings.
+- [Command history & insights](command-history.md) — the timeline, searchable history, and flow metrics.
 - [Workspaces](workspaces.md) — save and restore named layouts.
 - [Tasks](tasks.md) — run `package.json` / `Makefile` / `justfile` / `composer.json` tasks.
 - [Runbooks](runbooks.md) — runnable, project-scoped markdown notes (▶ run, `[[file]]`, `[[task:name]]`).

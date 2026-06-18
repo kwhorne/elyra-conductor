@@ -140,9 +140,14 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
 - 🌅 **Morning brief** — open Conductor after a real break and a welcome-back card shows
   where you left off: last project with git state, container health, and your last
   commands (failures flagged). One click to resume or have Elyra plan your day.
-- 🕘 **Command timeline** — a session flight recorder of what ran, where, and how long
-  (real commands + exit codes via zsh shell integration, on by default). Jump back to any pane,
-  or hand a failed command's context to Elyra to ask "why did this fail?".
+- 🕘 **Command timeline & history** — a flight recorder of what ran, where, and how long
+  (real commands + exit codes via zsh shell integration, on by default). Jump back to any
+  pane, or hand a failed command's context to Elyra to ask "why did this fail?". Every
+  command is **persisted to a local SQLite store**, so you can **search across every
+  session** (“how did I fix this last time?” — matching the command *and* its output).
+- 📊 **Insights** — the timeline's Insights tab aggregates your history over Today / 7 days /
+  All time: how many commands ran, how many failed, total time spent waiting, and the
+  biggest time sinks per command (runs, average, failures). All local — no telemetry.
 
 ## Keyboard shortcuts
 
@@ -281,8 +286,11 @@ elyra-conductor/
     └── src/
         ├── main.rs               # entrypoint → lib::run()
         ├── lib.rs                # builder, plugins, command registry
-        ├── pty.rs                # PTY sessions
-        ├── projects.rs           # project scan + editor launch
+        ├── pty.rs                # PTY sessions (binary Channel streaming)
+        ├── projects.rs           # project scan, git (+ worktrees), gh PRs, editors
+        ├── agent.rs              # elyra --mode rpc JSONL bridge
+        ├── db.rs                 # database browser connections
+        ├── history.rs            # persistent command history & insights (SQLite)
         └── fs.rs                 # directory + file commands
 ```
 
@@ -299,6 +307,7 @@ elyra-conductor/
 | `git_worktree_list` / `git_worktree_add` / `git_worktree_remove` | Parallel isolated worktrees per branch |
 | `detect_gh` / `gh_pr_list` | GitHub PR + CI status per branch (via the `gh` CLI) |
 | `run_step` | Run one runbook step headless (login shell, timeout) for **Verify** |
+| `history_add` / `history_query` / `history_stats` / `history_clear` | Persistent command history, search & insights |
 | `detect_editors` / `open_in_editor` | Find and launch external editors |
 | `detect_terminal` / `run_in_external_terminal` | Run a file in iTerm2 / Terminal.app |
 | `home_dir` | Resolve `$HOME` for the default root |

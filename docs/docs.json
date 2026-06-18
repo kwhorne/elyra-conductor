@@ -29,6 +29,10 @@
           "path": "terminals.md"
         },
         {
+          "title": "Command history & insights",
+          "path": "command-history.md"
+        },
+        {
           "title": "Workspaces",
           "path": "workspaces.md"
         },

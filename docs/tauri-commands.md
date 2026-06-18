@@ -20,6 +20,10 @@ registered in `src-tauri/src/lib.rs`.
 | `git_status` | `projects.rs` | Per-project dirty / ahead / behind state. |
 | `git_changes` | `projects.rs` | List working-tree changes for the commit dialog. |
 | `git_commit` | `projects.rs` | Stage, commit, and optionally push. |
+| `git_worktree_list` / `git_worktree_add` / `git_worktree_remove` | `projects.rs` | Parallel isolated worktrees per branch. See [Worktrees](worktrees.md). |
+| `detect_gh` / `gh_pr_list` | `projects.rs` | GitHub PR + CI status per branch via the `gh` CLI. |
+| `run_step` | `projects.rs` | Run one runbook step headless (login shell, timeout) for [Verify](runbooks.md). |
+| `history_add` / `history_query` / `history_stats` / `history_clear` | `history.rs` | Persistent command history & insights. See [Command history](command-history.md). |
 | `detect_editors` | `projects.rs` | Find installed external editors (Zed / VS Code / Cursor). |
 | `open_in_editor` | `projects.rs` | Launch a project in a chosen editor. |
 | `detect_elyra` | `projects.rs` | Resolve the `elyra` binary via the login shell. |
@@ -42,8 +46,12 @@ registered in `src-tauri/src/lib.rs`.
 
 | Event | Payload | Meaning |
 |-------|---------|---------|
-| `pty://data/<id>` | bytes | Output from a PTY; written straight to xterm.js. |
 | `pty://exit/<id>` | exit code (number) | The PTY's child process exited. |
+| `agent://event/<id>` / `agent://exit/<id>` | JSON | Streamed agent output / exit. |
+
+PTY **output** is not an event: it streams over a binary `Channel<Response>` passed to
+`pty_spawn`, which ships raw bytes (an `ArrayBuffer`) straight to xterm.js — far cheaper
+than JSON-serializing every frame.
 
 ## `list_tasks`
 
