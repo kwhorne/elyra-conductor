@@ -136,6 +136,87 @@ pub fn history_query(
     Ok(rows)
 }
 
+#[derive(serde::Serialize)]
+pub struct ProcStat {
+    name: String,
+    runs: i64,
+    total_ms: i64,
+    fails: i64,
+}
+
+#[derive(serde::Serialize)]
+pub struct FlowStats {
+    total_runs: i64,
+    total_ms: i64,
+    failed: i64,
+    top: Vec<ProcStat>,
+}
+
+/// Aggregate flow metrics from the history: how many commands ran since `since`
+/// (epoch ms), how much wall-clock time they took, how many failed, and the
+/// biggest time sinks grouped by command. Optional project scope.
+#[tauri::command]
+pub fn history_stats(
+    store: State<HistoryStore>,
+    since: Option<i64>,
+    project: Option<String>,
+) -> Result<FlowStats, String> {
+    let conn = store.0.lock().map_err(|e| e.to_string())?;
+    let since = since.unwrap_or(0);
+    let proj = project.unwrap_or_default();
+    let (proj_clause, proj_param): (&str, Option<String>) = if proj.is_empty() {
+        ("", None)
+    } else {
+        (" AND project_path = ?2", Some(proj))
+    };
+
+    // Overall totals.
+    let totals_sql = format!(
+        "SELECT COUNT(*), COALESCE(SUM(duration),0), \
+         SUM(CASE WHEN exit_code IS NOT NULL AND exit_code != 0 THEN 1 ELSE 0 END) \
+         FROM commands WHERE ts >= ?1{proj_clause}"
+    );
+    let (total_runs, total_ms, failed): (i64, i64, i64) = {
+        let row = |params: &[&dyn rusqlite::ToSql]| {
+            conn.query_row(&totals_sql, params, |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, Option<i64>>(2)?.unwrap_or(0)))
+            })
+        };
+        match &proj_param {
+            Some(p) => row(&[&since, p]),
+            None => row(&[&since]),
+        }
+        .map_err(|e| e.to_string())?
+    };
+
+    // Top time sinks, grouped by the command line (falling back to the proc).
+    let top_sql = format!(
+        "SELECT COALESCE(command, proc, '?') AS name, COUNT(*) AS runs, \
+         COALESCE(SUM(duration),0) AS total_ms, \
+         SUM(CASE WHEN exit_code IS NOT NULL AND exit_code != 0 THEN 1 ELSE 0 END) AS fails \
+         FROM commands WHERE ts >= ?1{proj_clause} \
+         GROUP BY name ORDER BY total_ms DESC LIMIT 12"
+    );
+    let mut stmt = conn.prepare(&top_sql).map_err(|e| e.to_string())?;
+    let map_row = |r: &rusqlite::Row| {
+        Ok(ProcStat {
+            name: r.get(0)?,
+            runs: r.get(1)?,
+            total_ms: r.get(2)?,
+            fails: r.get::<_, Option<i64>>(3)?.unwrap_or(0),
+        })
+    };
+    let top: Vec<ProcStat> = match &proj_param {
+        Some(p) => stmt.query_map(&[&since as &dyn rusqlite::ToSql, p], map_row),
+        None => stmt.query_map(&[&since as &dyn rusqlite::ToSql], map_row),
+    }
+    .map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(|e| e.to_string())?;
+
+    Ok(FlowStats { total_runs, total_ms, failed, top })
+}
+
 /// Delete history, optionally only for one project.
 #[tauri::command]
 pub fn history_clear(store: State<HistoryStore>, project: Option<String>) -> Result<(), String> {

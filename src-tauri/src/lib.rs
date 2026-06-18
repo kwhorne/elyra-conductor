@@ -134,6 +134,7 @@ pub fn run() {
             projects::gh_pr_list,
             history::history_add,
             history::history_query,
+            history::history_stats,
             history::history_clear,
             fs::list_dir,
             fs::read_file,
