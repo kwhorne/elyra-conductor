@@ -18,6 +18,10 @@ Split the terminal into as many panes as you like, browse the project's files,
 quick-edit a file inline with Monaco, or launch the whole project in your real
 editor (Zed / VS Code / Cursor).
 
+Run several Elyra agents at once — each isolated in its own git worktree — and see
+at a glance which are working and which are waiting on you, with each branch's pull
+request and CI status right there.
+
 It is **not** a Ghostty wrapper or a native Swift app — it's cross-platform
 Rust + web, so the heavy lifting (PTYs, filesystem, process launching) lives in
 Rust while the UI uses battle-tested web components (`xterm.js`, Monaco).
@@ -99,7 +103,10 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   without leaving the app.
 - 📓 **Runbooks** — runnable, project-scoped markdown notes in `.conductor/notes/`:
   **▶ Run** shell blocks in the project terminal, `[[file]]` links open in the editor,
-  and `[[task:name]]` chips run discovered tasks. Local files, versionable with git.
+  and `[[task:name]]` chips run discovered tasks. Record a terminal session into a
+  runbook draft, or **✓ Verify** one — run every step headless and flag the ones that
+  no longer work, with a freshness banner (mark always-on steps ` ```bash no-verify `).
+  Local files, versionable with git.
 - 🗄️ **Database browser** — connect to a project's databases (MySQL / PostgreSQL /
   ClickHouse / SQLite), **several at once** (e.g. MySQL + ClickHouse). Browse tables,
   sort/order/filter (incl. per-column) and page a data grid, edit cells inline, inspect
@@ -114,6 +121,28 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   over JSON-RPC: stream replies, see tool activity, answer confirm/select/input
   prompts, and get a notification ring when the agent needs you. All AI stays in
   Elyra — Conductor is only the host UI (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+- 🌳 **Git worktrees — parallel branches, one agent each** — create isolated
+  worktrees (separate checkouts sharing the repo's `.git`) and open each as a
+  terminal or an Elyra agent, so several agents can work different branches at once
+  without colliding. Worktrees live in a sibling `<repo>.worktrees/<branch>` folder.
+- 🤖 **Agent command center** — each agent reports a coarse state, shown as a per-tab
+  dot (working / waiting on you / exited) and a pill in the tab strip counting how many
+  agents are **working** vs **waiting for your input**. Click to jump straight to one;
+  a notification fires when an agent starts waiting while you're looking elsewhere.
+- ✅ **GitHub PR status** — with an authenticated `gh`, each worktree shows its open
+  PR (number, CI check rollup, review state) linking to GitHub. Open PRs without a
+  worktree are listed too, so you can **check a PR out as a worktree** (terminal or
+  agent) in one click — PR branches are tracked from `origin` with their real contents.
+- ⚡ **"Fix it" — self-healing terminal** — when a command fails in a shell-integrated
+  terminal, a quiet toast offers a one-click handoff to an Elyra agent with the full
+  context (command, exit code, output tail, git branch) and a fix-oriented prompt. Never
+  nags: interrupts are ignored and the offer expires on its own.
+- 🌅 **Morning brief** — open Conductor after a real break and a welcome-back card shows
+  where you left off: last project with git state, container health, and your last
+  commands (failures flagged). One click to resume or have Elyra plan your day.
+- 🕘 **Command timeline** — a session flight recorder of what ran, where, and how long
+  (real commands + exit codes via opt-in zsh shell integration). Jump back to any pane,
+  or hand a failed command's context to Elyra to ask "why did this fail?".
 
 ## Keyboard shortcuts
 
@@ -267,6 +296,9 @@ elyra-conductor/
 | `list_projects` | Scan the root folder, return projects + git branch |
 | `git_status` | Per-project dirty / ahead / behind state |
 | `git_changes` / `git_commit` | List working-tree changes; stage, commit, optionally push |
+| `git_worktree_list` / `git_worktree_add` / `git_worktree_remove` | Parallel isolated worktrees per branch |
+| `detect_gh` / `gh_pr_list` | GitHub PR + CI status per branch (via the `gh` CLI) |
+| `run_step` | Run one runbook step headless (login shell, timeout) for **Verify** |
 | `detect_editors` / `open_in_editor` | Find and launch external editors |
 | `detect_terminal` / `run_in_external_terminal` | Run a file in iTerm2 / Terminal.app |
 | `home_dir` | Resolve `$HOME` for the default root |
@@ -280,6 +312,10 @@ elyra-conductor/
 - [x] Notification rings — pulse a tab when a background terminal has new output
 - [x] Hide `node_modules` / `.git` in the file tree (toggle, default hides noise)
 - [x] Tab/pane titles derived from the running process (e.g. `bun`, `vim`)
+- [x] Git worktrees — parallel branches, one agent each
+- [x] Agent command center — presence (working / waiting) across all agents
+- [x] GitHub PR status per branch (via `gh`)
+- [ ] Persisted command timeline (SQLite) — semantic recall, flow metrics, runbook suggestions
 - [ ] Persisted projects & favorites (SQLite via `tauri-plugin-sql`)
 
 ## Documentation
