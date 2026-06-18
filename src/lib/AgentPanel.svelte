@@ -5,7 +5,7 @@
 
   // Pure host UI for an external `elyra --mode rpc` process. No AI logic here —
   // we only render events and forward commands (see ARCHITECTURE.md).
-  let { id, cwd, initialPrompt = null, initialDraft = null, onactivity = null, ontitle = null } = $props();
+  let { id, cwd, initialPrompt = null, initialDraft = null, onactivity = null, ontitle = null, onpresence = null } = $props();
 
   let entries = $state([]); // { kind: 'user'|'assistant'|'tool'|'note', text, ... }
   let status = $state({}); // statusKey -> text (from setStatus)
@@ -218,6 +218,14 @@
   });
 
   let statusText = $derived(Object.values(status).filter(Boolean).join("  ·  "));
+
+  // Presence: a single coarse state the rest of the app can surface (sidebar/
+  // tab dots, "command center"). 'waiting' — the agent asked you something and
+  // is blocked on a reply — is the one that matters most, so it wins.
+  let presence = $derived(exited ? "exited" : pendingUI ? "waiting" : busy ? "working" : "idle");
+  $effect(() => {
+    onpresence?.(presence);
+  });
 </script>
 
 <div class="agent">

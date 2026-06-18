@@ -347,6 +347,48 @@
 
   let drag = null; // { ...divider, container } during resize
   let activity = $state({}); // tabId -> true when a background tab produced output
+
+  // ---------- agent presence (command center) ----------
+  // Each Elyra agent panel reports a coarse state; we aggregate it so a tab dot
+  // and a topbar pill can show, at a glance, which agents are working and — the
+  // signal that matters — which are waiting on *you*.
+  let agentPresence = $state({}); // tabId -> 'working'|'waiting'|'idle'|'exited'
+  function setAgentPresence(id, state) {
+    const prev = agentPresence[id];
+    if (prev === state) return;
+    agentPresence = { ...agentPresence, [id]: state };
+    // An agent just started waiting on you — nudge if you're looking elsewhere.
+    if (state === "waiting" && prev && prev !== "waiting" && notifyPermission) {
+      const tab = tabs.find((t) => t.id === id);
+      if (tab && !(appFocused && tab.id === activeTabId)) {
+        try {
+          sendNotification({ title: "🤖 Agent needs you", body: `${tab.title || "elyra"} is waiting for your input`, sound: "default" });
+        } catch {}
+      }
+    }
+  }
+  function clearAgentPresence(id) {
+    if (!(id in agentPresence)) return;
+    const next = { ...agentPresence };
+    delete next[id];
+    agentPresence = next;
+  }
+  const PRESENCE_LABEL = { working: "Agent working", waiting: "Waiting for you", idle: "Agent idle", exited: "Agent exited" };
+  let agentSummary = $derived.by(() => {
+    let working = 0,
+      waiting = 0;
+    for (const t of tabs) {
+      if (t.kind !== "agent") continue;
+      const s = agentPresence[t.id];
+      if (s === "working") working++;
+      else if (s === "waiting") waiting++;
+    }
+    return { working, waiting };
+  });
+  function jumpToAgent(state) {
+    const t = tabs.find((t) => t.kind === "agent" && agentPresence[t.id] === state);
+    if (t) focusTab(t);
+  }
   let titles = $state({}); // termId -> foreground process name (or null)
 
   // ---------- finished-command notifications ----------
@@ -1270,6 +1312,7 @@
 
   function closeTab(id) {
     tabs = tabs.filter((t) => t.id !== id);
+    clearAgentPresence(id);
     if (activeTabId === id) {
       const next = tabs.at(-1) ?? null;
       if (next) focusTab(next);
@@ -1913,7 +1956,9 @@
             role="presentation"
             onpointerdown={(e) => tabPointerDown(e, i)}
           >
-            {#if proc}<span class="run-dot" title={`Running ${proc}`}></span>{:else if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
+            {#if t.kind === "agent" && agentPresence[t.id] && agentPresence[t.id] !== "idle"}
+              <span class="agent-dot {agentPresence[t.id]}" title={PRESENCE_LABEL[agentPresence[t.id]]}></span>
+            {:else if proc}<span class="run-dot" title={`Running ${proc}`}></span>{:else if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
             <span
               class="tab-label"
               role="button"
@@ -1935,6 +1980,20 @@
         {/each}
         <button class="new-tab" title="New tab (⌘N)" onclick={() => newTab(activeProject?.path ?? root, activeProject?.name)}>＋</button>
       </div>
+      {#if agentSummary.waiting || agentSummary.working}
+        <div class="agent-center">
+          {#if agentSummary.waiting}
+            <button class="ac-pill waiting" onclick={() => jumpToAgent("waiting")} title="An agent is waiting for your input — click to jump">
+              <span class="ac-dot waiting"></span>{agentSummary.waiting} waiting
+            </button>
+          {/if}
+          {#if agentSummary.working}
+            <button class="ac-pill working" onclick={() => jumpToAgent("working")} title="Agents working — click to jump">
+              <span class="ac-dot working"></span>{agentSummary.working} working
+            </button>
+          {/if}
+        </div>
+      {/if}
     </div>
 
     <div class="panes">
@@ -1946,7 +2005,7 @@
         {#each tabs as tab (tab.id)}
           {#if tab.kind === "agent"}
             <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
-              <AgentPanel id={tab.id} cwd={tab.cwd} initialPrompt={tab.initialPrompt ?? null} initialDraft={tab.initialDraft ?? null} onactivity={() => markActivity(tab.id)} ontitle={(t) => (tab.title = t)} />
+              <AgentPanel id={tab.id} cwd={tab.cwd} initialPrompt={tab.initialPrompt ?? null} initialDraft={tab.initialDraft ?? null} onactivity={() => markActivity(tab.id)} ontitle={(t) => (tab.title = t)} onpresence={(s) => setAgentPresence(tab.id, s)} />
             </div>
           {:else if tab.kind === "db"}
             <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
@@ -2211,6 +2270,20 @@
   /* Running marker: a tab actively running a foreground command (npm run dev, etc). */
   .run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 6px; flex: none; animation: run-spin 1s ease-in-out infinite; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
   @keyframes run-spin { 0% { transform: scale(0.7); opacity: 0.6; } 50% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.7); opacity: 0.6; } }
+  /* Agent presence on a tab: working (accent, pulsing) / waiting on you (amber, attention) / exited (grey). */
+  .agent-dot { width: 7px; height: 7px; border-radius: 50%; margin-left: 6px; flex: none; }
+  .agent-dot.working { background: var(--accent); animation: run-spin 1s ease-in-out infinite; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+  .agent-dot.waiting { background: #e0af68; animation: wait-pulse 1.1s ease-in-out infinite; }
+  .agent-dot.exited { background: var(--text-dim); opacity: 0.6; }
+  @keyframes wait-pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(224, 175, 104, 0.6); } 50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(224, 175, 104, 0); } }
+  /* Command center: at-a-glance agent state, to the right of the tab strip. */
+  .agent-center { display: flex; align-items: center; gap: 6px; flex: none; margin-left: 8px; padding-left: 8px; border-left: 1px solid var(--border); }
+  .ac-pill { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-3); border: 1px solid var(--border); color: var(--text-dim); border-radius: 12px; padding: 2px 9px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+  .ac-pill:hover { color: var(--text); border-color: var(--accent); }
+  .ac-pill.waiting { color: #e0af68; border-color: color-mix(in srgb, #e0af68 45%, var(--border)); }
+  .ac-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .ac-dot.working { background: var(--accent); }
+  .ac-dot.waiting { background: #e0af68; animation: wait-pulse 1.1s ease-in-out infinite; }
   .tab-proc { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-left: 4px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
   .tab.running { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
   .tab-label { display: inline-block; background: transparent; border: none; color: var(--text); padding: 4px 6px; font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; -webkit-user-drag: none; user-select: none; }
