@@ -9,6 +9,7 @@
   import DBPanel from "./lib/DBPanel.svelte";
   import DBView from "./lib/DBView.svelte";
   import PortsModal from "./lib/PortsModal.svelte";
+  import WorktreeModal from "./lib/WorktreeModal.svelte";
   import ScrollbackSearch from "./lib/ScrollbackSearch.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
   import FileFinder from "./lib/FileFinder.svelte";
@@ -774,6 +775,12 @@
 
   let portsOpen = $state(false);
 
+  // ---------- worktrees ----------
+  let worktreeProject = $state(null); // { path, name } whose worktrees we're managing; null = closed
+  function openWorktrees(path, name) {
+    worktreeProject = { path, name: name ?? baseOf(path) };
+  }
+
   // A stable accent colour per project (derived from its path), so you can tell
   // at a glance which project a tab belongs to.
   function projectColor(path) {
@@ -1451,6 +1458,7 @@
     if (activeProject?.is_git) {
       list.push({ id: "act:commit", title: `Git: commit ${activeProject.name}\u2026`, group: "action", icon: "\u2387", action: openCommit });
       list.push({ id: "act:git", title: `Git: open panel for ${activeProject.name}`, group: "action", icon: "\u2387", action: openGitPanel });
+      list.push({ id: "act:worktrees", title: `Worktrees: parallel branches for ${activeProject.name}\u2026`, group: "action", icon: "\u{1F333}", action: () => openWorktrees(activeProject.path, activeProject.name) });
     }
     list.push({ id: "act:help", title: "Keyboard shortcuts", hint: "\u2318/", group: "action", icon: "?", action: () => (helpOpen = true) });
     list.push({ id: "act:about", title: "About Elyra Conductor", group: "action", icon: "\u2139", action: () => (aboutOpen = true) });
@@ -1933,6 +1941,7 @@
       {#if projectTasks.length}<button title="Run a project task (npm/composer/make/just)" onclick={() => (tasksOpen = true)}>☰ Tasks</button>{/if}
       {#if activeProject}<button title="View & edit .env (masked)" onclick={() => (envOpen = true)}>🔑 Env</button>{/if}
       {#if activeProject?.is_git}<button title="Git: stage, diff, branch, stash, commit (⌘G)" onclick={openGitPanel}>⎇ Git</button>{/if}
+      {#if activeProject?.is_git}<button title="Worktrees: parallel branches, one agent each" onclick={() => openWorktrees(activeProject.path, activeProject.name)}>🌳 Worktrees</button>{/if}
       <div class="tspacer"></div>
       <button class:on={broadcast} title="Broadcast input to all panes in this tab" onclick={() => (broadcast = !broadcast)}>⁁ Sync</button>
       <button title="Toggle theme" onclick={() => (theme = theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀" : "☽"}</button>
@@ -2131,6 +2140,15 @@
     onclose={() => (finderOpen = false)}
   />
   <PortsModal open={portsOpen} onclose={() => (portsOpen = false)} />
+
+  <WorktreeModal
+    open={!!worktreeProject}
+    project={worktreeProject}
+    elyra={!!elyraVersion}
+    onclose={() => (worktreeProject = null)}
+    onopenterminal={(path, branch) => newTab(path, branch)}
+    onopenagent={(path, branch) => newElyraAgent(path, branch)}
+  />
   <ScrollbackSearch open={scrollbackOpen} onsearch={searchScrollback} onjump={jumpToMatch} onclose={() => (scrollbackOpen = false)} />
 
   <ContextMenu

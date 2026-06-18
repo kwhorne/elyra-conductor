@@ -771,4 +771,161 @@ mod tests {
         assert!(r.timed_out);
         assert!(t.elapsed() < std::time::Duration::from_secs(10));
     }
+    #[test]
+    fn worktree_add_list_remove_roundtrip() {
+        let base = std::env::temp_dir().join(format!("conductor-wt-test-{}", std::process::id()));
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let r = repo.to_string_lossy().to_string();
+        let run = |args: &[&str]| {
+            std::process::Command::new("git").arg("-C").arg(&r).args(args).output().unwrap();
+        };
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "t@t.t"]);
+        run(&["config", "user.name", "t"]);
+        std::fs::write(repo.join("a.txt"), "hi").unwrap();
+        run(&["add", "-A"]);
+        run(&["commit", "-qm", "init"]);
+
+        let list = git_worktree_list(r.clone());
+        assert_eq!(list.len(), 1);
+        assert!(list[0].is_main);
+
+        let path = git_worktree_add(r.clone(), "feature/x".into(), None).expect("add");
+        assert!(std::path::Path::new(&path).is_dir());
+        let list = git_worktree_list(r.clone());
+        assert_eq!(list.len(), 2);
+        assert!(list.iter().any(|w| w.branch.as_deref() == Some("feature/x") && !w.is_main));
+
+        git_worktree_remove(r.clone(), path, false).expect("remove");
+        assert_eq!(git_worktree_list(r.clone()).len(), 1);
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+}
+
+// ── Git worktrees ───────────────────────────────────────────────────
+// Isolated checkouts that share one .git, so several agents can work different
+// branches in parallel without colliding. New worktrees live in a sibling
+// "<repo>.worktrees/<branch>" folder, keeping them out of the main working tree
+// but easy to find next to the repo.
+
+#[derive(serde::Serialize)]
+pub struct Worktree {
+    path: String,
+    branch: Option<String>,
+    head: String,
+    is_main: bool,
+    locked: bool,
+}
+
+fn git_result(repo: &str, args: &[&str]) -> Result<String, String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(args)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+fn worktree_location(repo: &str, branch: &str) -> std::path::PathBuf {
+    let repo_path = std::path::Path::new(repo);
+    let base = repo_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("repo");
+    let parent = repo_path.parent().unwrap_or_else(|| std::path::Path::new("/tmp"));
+    let safe: String = branch
+        .chars()
+        .map(|c| if c == '/' || c == ' ' { '-' } else { c })
+        .collect();
+    parent.join(format!("{base}.worktrees")).join(safe)
+}
+
+#[tauri::command]
+pub fn git_worktree_list(path: String) -> Vec<Worktree> {
+    let Some(out) = git(&path, &["worktree", "list", "--porcelain"]) else {
+        return vec![];
+    };
+    let mut res = Vec::new();
+    let (mut wt_path, mut head) = (String::new(), String::new());
+    let mut branch: Option<String> = None;
+    let (mut locked, mut have, mut first) = (false, false, true);
+    let flush = |res: &mut Vec<Worktree>,
+                 wt_path: &mut String,
+                 head: &mut String,
+                 branch: &mut Option<String>,
+                 locked: &mut bool,
+                 have: &mut bool,
+                 first: &mut bool| {
+        if *have {
+            res.push(Worktree {
+                path: std::mem::take(wt_path),
+                branch: branch.take(),
+                head: std::mem::take(head),
+                is_main: *first,
+                locked: *locked,
+            });
+            *first = false;
+            *locked = false;
+            *have = false;
+        }
+    };
+    for line in out.lines() {
+        if let Some(p) = line.strip_prefix("worktree ") {
+            wt_path = p.to_string();
+            have = true;
+        } else if let Some(h) = line.strip_prefix("HEAD ") {
+            head = h.chars().take(8).collect();
+        } else if let Some(b) = line.strip_prefix("branch ") {
+            branch = Some(b.strip_prefix("refs/heads/").unwrap_or(b).to_string());
+        } else if line.starts_with("locked") {
+            locked = true;
+        } else if line.trim().is_empty() {
+            flush(&mut res, &mut wt_path, &mut head, &mut branch, &mut locked, &mut have, &mut first);
+        }
+    }
+    flush(&mut res, &mut wt_path, &mut head, &mut branch, &mut locked, &mut have, &mut first);
+    res
+}
+
+#[tauri::command]
+pub fn git_worktree_add(repo: String, branch: String, base: Option<String>) -> Result<String, String> {
+    let branch = branch.trim().to_string();
+    if branch.is_empty() {
+        return Err("Branch name is required".into());
+    }
+    let dir = worktree_location(&repo, &branch);
+    let dir_str = dir.to_string_lossy().to_string();
+    if dir.exists() {
+        return Err(format!("{dir_str} already exists"));
+    }
+    if let Some(parent) = dir.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let exists = git(&repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_some();
+    if exists {
+        git_result(&repo, &["worktree", "add", &dir_str, &branch])?;
+    } else {
+        let base_ref = base.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("HEAD");
+        git_result(&repo, &["worktree", "add", "-b", &branch, &dir_str, base_ref])?;
+    }
+    Ok(dir_str)
+}
+
+#[tauri::command]
+pub fn git_worktree_remove(repo: String, worktree_path: String, force: bool) -> Result<(), String> {
+    let mut args: Vec<&str> = vec!["worktree", "remove"];
+    if force {
+        args.push("--force");
+    }
+    args.push(&worktree_path);
+    git_result(&repo, &args)?;
+    Ok(())
 }
