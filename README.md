@@ -141,7 +141,7 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   where you left off: last project with git state, container health, and your last
   commands (failures flagged). One click to resume or have Elyra plan your day.
 - 🕘 **Command timeline** — a session flight recorder of what ran, where, and how long
-  (real commands + exit codes via opt-in zsh shell integration). Jump back to any pane,
+  (real commands + exit codes via zsh shell integration, on by default). Jump back to any pane,
   or hand a failed command's context to Elyra to ask "why did this fail?".
 
 ## Keyboard shortcuts

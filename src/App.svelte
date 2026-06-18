@@ -398,7 +398,9 @@
   // poll — pure observation, no AI.
   let notifyOnFinish = $state(true);
   // Opt-in zsh shell integration (real command lines + exit codes via OSC 133/633).
-  let shellIntegration = $state(false);
+  // On by default: it powers the command timeline, persisted history, and
+  // "Fix it". Transparent (sources the user's real zsh config); zsh-only.
+  let shellIntegration = $state(true);
   let notifyPermission = false;
   let appFocused = true;
   let procRuns = {}; // termId -> { proc, since } for the current foreground command
@@ -1742,7 +1744,8 @@
     showEditor = saved.showEditor ?? false;
     editorPath = saved.editorPath ?? null;
     notifyOnFinish = saved.notifyOnFinish ?? true;
-    shellIntegration = saved.shellIntegration ?? false;
+    // Default on, but honour an explicit opt-out from a previous session.
+    shellIntegration = saved.shellIntegration ?? true;
 
     if (Array.isArray(saved.tabs) && saved.tabs.length) {
       tabs = saved.tabs.map((t) =>

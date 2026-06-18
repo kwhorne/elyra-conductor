@@ -77,11 +77,12 @@ foreground-process titles it already polls, so there's nothing to configure per 
 First use asks for macOS notification permission; you can also manage it later under
 System Settings → Notifications → Elyra Conductor.
 
-## Shell integration (zsh, opt-in)
+## Shell integration (zsh)
 
-Enable **shell integration** from the command palette (`⌘K` → *Enable shell integration*)
-and **new** terminals start capturing the real **command line** and **exit code** of each
-command you run, via OSC 133/633 sequences.
+**On by default**, shell integration makes **new** terminals capture the real **command
+line** and **exit code** of each command you run, via OSC 133/633 sequences. Toggle it from
+the command palette (`⌘K` → *Enable/Disable shell integration*); your choice is remembered.
+It powers the command timeline, the persisted history, and "Fix it".
 
 It's safe with your existing setup: Conductor points `ZDOTDIR` at a small shim that sources
 your own `.zshenv` / `.zprofile` / `.zshrc` (so your prompt — powerlevel10k, instant
