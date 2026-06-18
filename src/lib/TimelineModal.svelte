@@ -1,5 +1,77 @@
 <script>
+  import { invoke } from "@tauri-apps/api/core";
+
   let { open = false, entries = [], elyra = false, onask, onjump, onclear, onclose } = $props();
+
+  // Search the persisted history (across sessions). Empty query = the live
+  // session log passed in via `entries`; a query hits the SQLite flight recorder.
+  let q = $state("");
+  let results = $state([]);
+  let searching = $state(false);
+  let searchEl = $state();
+  let debounce;
+
+  const searchMode = $derived(q.trim().length > 0);
+
+  function runSearch() {
+    const query = q.trim();
+    if (!query) {
+      results = [];
+      return;
+    }
+    searching = true;
+    invoke("history_query", { query, limit: 300 })
+      .then((rows) => {
+        results = rows;
+      })
+      .catch(() => {
+        results = [];
+      })
+      .finally(() => {
+        searching = false;
+      });
+  }
+  $effect(() => {
+    void q;
+    clearTimeout(debounce);
+    debounce = setTimeout(runSearch, 180);
+    return () => clearTimeout(debounce);
+  });
+  $effect(() => {
+    if (open) queueMicrotask(() => searchEl?.focus());
+    else {
+      q = "";
+      results = [];
+    }
+  });
+
+  // Normalize a session entry (camelCase) or a history row (snake_case) into one
+  // display shape, so the same row markup renders both.
+  function norm(r) {
+    const session = r.endedAt != null;
+    return {
+      key: session ? r.id : `h${r.id}`,
+      command: r.command,
+      proc: r.proc,
+      exitCode: session ? r.exitCode ?? null : r.exit_code ?? null,
+      duration: r.duration ?? 0,
+      ts: session ? r.endedAt : r.ts,
+      label: r.label,
+      output: r.output,
+      projectPath: session ? r.projectPath : r.project_path,
+      session,
+      raw: r,
+    };
+  }
+  const items = $derived((searchMode ? results : entries).map(norm));
+
+  async function clearHistory() {
+    if (!window.confirm("Delete all persisted command history?")) return;
+    try {
+      await invoke("history_clear", {});
+    } catch {}
+    runSearch();
+  }
 
   // Re-tick relative timestamps while open.
   let nowTick = $state(Date.now());
@@ -36,29 +108,42 @@
     <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <div class="head">
         <span class="title">🕘 Command timeline</span>
-        <span class="sub">{entries.length} recorded · this session</span>
-        {#if entries.length}<button class="link" onclick={onclear}>Clear</button>{/if}
+        <span class="sub">
+          {#if searchMode}{searching ? "searching…" : `${items.length} match${items.length === 1 ? "" : "es"} · all history`}{:else}{entries.length} recorded · this session{/if}
+        </span>
+        {#if searchMode}<button class="link" onclick={clearHistory}>Clear history</button>{:else if entries.length}<button class="link" onclick={onclear}>Clear</button>{/if}
         <button class="x" onclick={onclose} title="Close">✕</button>
       </div>
+      <div class="search">
+        <input
+          bind:this={searchEl}
+          bind:value={q}
+          placeholder="Search all history — command or output (e.g. “notarization hung”)…"
+          spellcheck="false"
+        />
+        {#if searchMode}<button class="clearq" title="Clear search" onclick={() => (q = "")}>✕</button>{/if}
+      </div>
       <div class="list">
-        {#if entries.length === 0}
-          <div class="empty">Nothing yet. Run a command in a terminal and it'll show up here —
-            what ran, where, and how long it took.</div>
+        {#if items.length === 0}
+          <div class="empty">
+            {#if searchMode}No matches in your command history.{:else}Nothing yet. Run a command in a terminal and it'll show up here —
+            what ran, where, and how long it took. Type above to search across every session.{/if}
+          </div>
         {/if}
-        {#each entries as e (e.id)}
+        {#each items as e (e.key)}
           <div class="row" class:fail={e.exitCode != null && e.exitCode !== 0}>
-            <button class="jump" onclick={() => onjump?.(e)} title={e.command || "Jump to this pane"}>
-              <span class="clock">{clock(e.endedAt)}</span>
+            <button class="jump" onclick={() => e.session && onjump?.(e.raw)} title={e.session ? e.command || "Jump to this pane" : e.command || ""} class:nojump={!e.session}>
+              <span class="clock">{clock(e.ts)}</span>
               {#if e.exitCode != null}
                 <span class="exit" class:ok={e.exitCode === 0} class:efail={e.exitCode !== 0}>{e.exitCode === 0 ? "✓" : "✗ " + e.exitCode}</span>
               {/if}
               <span class="proc">{e.command || e.proc}</span>
               <span class="dur">{dur(e.duration)}</span>
               <span class="where">{e.label}</span>
-              <span class="ago">{ago(e.endedAt)}</span>
+              <span class="ago">{ago(e.ts)}</span>
             </button>
             {#if elyra && (e.command || e.output)}
-              <button class="ask" title="Send this command (and its output) to an Elyra agent" onclick={() => onask?.(e)}>🤖</button>
+              <button class="ask" title="Send this command (and its output) to an Elyra agent" onclick={() => onask?.({ command: e.command, proc: e.proc, exitCode: e.exitCode, duration: e.duration, projectPath: e.projectPath, output: e.output, label: e.label })}>🤖</button>
             {/if}
           </div>
         {/each}
@@ -70,6 +155,12 @@
 <style>
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 10vh; z-index: 1000; }
   .modal { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; width: 620px; max-width: 92vw; max-height: 72vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.5); }
+  .search { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
+  .search input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-size: 12px; padding: 7px 10px; outline: none; }
+  .search input:focus { border-color: var(--accent); }
+  .clearq { background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 12px; padding: 2px 6px; }
+  .clearq:hover { color: var(--text); }
+  .jump.nojump { cursor: default; }
   .head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
   .title { font-weight: 600; font-size: 13px; }
   .sub { font-size: 11px; color: var(--text-dim); }

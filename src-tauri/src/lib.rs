@@ -1,6 +1,7 @@
 mod agent;
 mod db;
 mod fs;
+mod history;
 mod projects;
 mod pty;
 
@@ -9,6 +10,7 @@ use db::DbManager;
 use pty::PtyManager;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::Emitter;
+use tauri::Manager;
 
 // Build the macOS menu bar, replacing the standard "About" with a custom item so
 // it opens our own About dialog (consistent with the in-app one) instead of the
@@ -73,6 +75,12 @@ pub fn run() {
             let handle = app.handle();
             let menu = build_menu(handle)?;
             app.set_menu(menu)?;
+            match history::HistoryStore::new(handle) {
+                Ok(store) => {
+                    app.manage(store);
+                }
+                Err(e) => eprintln!("history store init failed: {e}"),
+            }
             app.on_menu_event(|app, event| {
                 if event.id() == "about" {
                     let _ = app.emit("menu://about", ());
@@ -124,6 +132,9 @@ pub fn run() {
             projects::git_worktree_remove,
             projects::detect_gh,
             projects::gh_pr_list,
+            history::history_add,
+            history::history_query,
+            history::history_clear,
             fs::list_dir,
             fs::read_file,
             fs::write_file,

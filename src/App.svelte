@@ -460,6 +460,22 @@
     };
     pushCommand(entry);
     offerFix(entry);
+    // Persist real commands to the flight recorder (SQLite) for cross-session
+    // recall. Best-effort; skip trivial entries.
+    if (cmd && cmd !== "clear") {
+      invoke("history_add", {
+        entry: {
+          ts: now,
+          projectPath: tab?.projectPath ?? null,
+          label: entry.label || null,
+          proc,
+          command: cmd,
+          exitCode: rec.exitCode ?? null,
+          duration: rec.duration ?? null,
+          output: rec.output || null,
+        },
+      }).catch(() => {});
+    }
     // Track the last test run per project for the health strip.
     if (cmd && TEST_RE.test(cmd) && tab?.projectPath && rec.exitCode != null) {
       lastTest = { ...lastTest, [tab.projectPath]: { ok: rec.exitCode === 0, at: now } };
