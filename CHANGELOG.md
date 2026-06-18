@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-18
+
+### Added
+
+- **🌳 Git worktrees — parallel branches, one agent each.** A new **Worktrees** button
+  (and command palette entry) opens a panel to create isolated worktrees — separate
+  checkouts that share the repo's `.git` — and open each as a terminal or an Elyra
+  agent. Run several agents on different branches at once without collisions.
+- **🤖 Agent command center.** Each Elyra agent reports a coarse state, surfaced as a
+  per-tab dot (working / waiting on you / exited) and a pill in the tab strip showing,
+  at a glance, how many agents are working and — the signal that matters — how many are
+  **waiting for your input**. Click to jump straight to one; a notification fires when an
+  agent starts waiting while you're looking elsewhere.
+- **✅ GitHub PR status per branch.** With an authenticated `gh`, each worktree shows its
+  open PR — number, CI check rollup (pass/fail/pending) and review state — linking to
+  GitHub. Open PRs without a worktree are listed too, so you can **check a PR out as a
+  worktree** (terminal or agent) in one click; PR branches are tracked from `origin`
+  with their real contents.
+
+### Fixed
+
+- Context menus near the right/bottom edge of the screen now stay fully on-screen.
+- The git panel now closes on **Escape** like the other modals.
+
 ## [0.7.8] — 2026-06-15
 
 ### Changed
@@ -685,7 +709,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.8...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.8...v0.8.0
 [0.7.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.5...v0.7.6
