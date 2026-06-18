@@ -13,6 +13,27 @@
 
   const searchMode = $derived(q.trim().length > 0);
 
+  // Insights: aggregate flow metrics from the persisted history.
+  let view = $state("timeline"); // "timeline" | "insights"
+  let statsWindow = $state("today"); // "today" | "7d" | "all"
+  let stats = $state(null);
+  function windowSince() {
+    if (statsWindow === "all") return 0;
+    if (statsWindow === "7d") return Date.now() - 7 * 86400e3;
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+  function loadStats() {
+    invoke("history_stats", { since: windowSince() })
+      .then((s) => (stats = s))
+      .catch(() => (stats = null));
+  }
+  $effect(() => {
+    void statsWindow;
+    if (open && view === "insights") loadStats();
+  });
+
   function runSearch() {
     const query = q.trim();
     if (!query) {
@@ -98,6 +119,14 @@
     const m = Math.floor(s / 60);
     return `${m}m ${s % 60}s`;
   }
+  function durLong(ms) {
+    const s = Math.round(ms / 1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m`;
+  }
   function clock(ts) {
     return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
@@ -108,12 +137,45 @@
     <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <div class="head">
         <span class="title">🕘 Command timeline</span>
+        <div class="tabs">
+          <button class:on={view === "timeline"} onclick={() => (view = "timeline")}>Timeline</button>
+          <button class:on={view === "insights"} onclick={() => (view = "insights")}>Insights</button>
+        </div>
         <span class="sub">
           {#if searchMode}{searching ? "searching…" : `${items.length} match${items.length === 1 ? "" : "es"} · all history`}{:else}{entries.length} recorded · this session{/if}
         </span>
         {#if searchMode}<button class="link" onclick={clearHistory}>Clear history</button>{:else if entries.length}<button class="link" onclick={onclear}>Clear</button>{/if}
         <button class="x" onclick={onclose} title="Close">✕</button>
       </div>
+
+      {#if view === "insights"}
+        <div class="insights">
+          <div class="win">
+            <button class:on={statsWindow === "today"} onclick={() => (statsWindow = "today")}>Today</button>
+            <button class:on={statsWindow === "7d"} onclick={() => (statsWindow = "7d")}>7 days</button>
+            <button class:on={statsWindow === "all"} onclick={() => (statsWindow = "all")}>All time</button>
+          </div>
+          {#if !stats || stats.total_runs === 0}
+            <div class="empty">No commands recorded in this window yet. Run some (with shell integration on) and check back.</div>
+          {:else}
+            <div class="headline">
+              You ran <b>{stats.total_runs}</b> command{stats.total_runs === 1 ? "" : "s"}
+              {#if stats.failed > 0}· <span class="bad">{stats.failed} failed</span>{/if}
+              · spent <b>{durLong(stats.total_ms)}</b> waiting.
+            </div>
+            <div class="sec-lbl">Where the time went</div>
+            {#each stats.top as s (s.name)}
+              <div class="stat">
+                <span class="sname" title={s.name}>{s.name}</span>
+                <span class="sruns">{s.runs}×</span>
+                <span class="savg">avg {dur(s.runs ? s.total_ms / s.runs : 0)}</span>
+                {#if s.fails > 0}<span class="sfail">{s.fails} failed</span>{/if}
+                <span class="stotal">{durLong(s.total_ms)}</span>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {:else}
       <div class="search">
         <input
           bind:this={searchEl}
@@ -148,6 +210,7 @@
           </div>
         {/each}
       </div>
+      {/if}
     </div>
   </div>
 {/if}
@@ -182,4 +245,22 @@
   .dur { font-size: 11px; color: var(--accent); flex: none; width: 60px; }
   .where { font-size: 12px; color: var(--text-dim); flex: none; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ago { font-size: 11px; color: var(--text-dim); flex: none; }
+  .tabs { display: flex; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+  .tabs button { background: transparent; border: none; color: var(--text-dim); font-size: 11px; padding: 3px 10px; border-radius: 6px; cursor: pointer; }
+  .tabs button.on { background: var(--accent-2); color: var(--text); }
+  .insights { padding: 12px; overflow: auto; }
+  .win { display: flex; gap: 4px; margin-bottom: 12px; }
+  .win button { background: var(--bg); border: 1px solid var(--border); color: var(--text-dim); font-size: 11px; padding: 4px 10px; border-radius: 7px; cursor: pointer; }
+  .win button.on { border-color: var(--accent); color: var(--text); }
+  .headline { font-size: 14px; line-height: 1.5; margin-bottom: 14px; }
+  .headline b { color: var(--accent); }
+  .headline .bad { color: #e06c5a; }
+  .sec-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 6px; }
+  .stat { display: flex; align-items: baseline; gap: 10px; padding: 6px 8px; border-radius: 7px; }
+  .stat:hover { background: var(--accent-2); }
+  .sname { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sruns { font-size: 11px; color: var(--text-dim); flex: none; width: 36px; text-align: right; }
+  .savg { font-size: 11px; color: var(--text-dim); flex: none; width: 80px; }
+  .sfail { font-size: 11px; color: #e06c5a; flex: none; }
+  .stotal { font-size: 12px; color: var(--accent); flex: none; width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
 </style>
