@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-06-18
+
+### Added
+
+- **Persistent command history + cross-session search.** The command timeline is no longer
+  session-only — every shell-integrated command (command, exit code, output tail) is saved
+  to an app-internal SQLite store. The timeline modal gains a search box: type to find a
+  past command across **every session** (“how did I fix this last time?”), matching both the
+  command and its output.
+- **Insights — where your time went.** A new tab in the timeline aggregates the history over
+  Today / 7 days / All time: how many commands ran, how many failed, total time spent
+  waiting, and the biggest time sinks per command (runs, average, failures).
+
+### Changed
+
+- **Shell integration is now on by default.** It powers the timeline, the persistent
+  history, and “Fix it”, so new terminals capture real commands and exit codes out of the
+  box. An explicit opt-out from a previous session is still honoured.
+
 ## [0.8.0] — 2026-06-18
 
 ### Added
@@ -709,7 +728,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.8...v0.8.0
 [0.7.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.6...v0.7.7
