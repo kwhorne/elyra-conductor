@@ -118,6 +118,8 @@
   }
 </script>
 
+<svelte:window onkeydown={(e) => open && e.key === "Escape" && !showNewBranch && onclose?.()} />
+
 {#if open}
   <div class="overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
     <div class="panel" role="dialog" aria-modal="true" tabindex="-1">
@@ -129,7 +131,7 @@
             {#each branches.all as b (b)}<option value={b}>{b}</option>{/each}
           </select>
           {#if showNewBranch}
-            <input class="nb" bind:value={newBranch} placeholder="new-branch" onkeydown={(e) => { if (e.key === "Enter") createBranch(); if (e.key === "Escape") { showNewBranch = false; newBranch = ""; } }} />
+            <input class="nb" bind:value={newBranch} placeholder="new-branch" onkeydown={(e) => { if (e.key === "Enter") createBranch(); if (e.key === "Escape") { e.stopPropagation(); showNewBranch = false; newBranch = ""; } }} />
           {:else}
             <button class="mini" title="New branch" onclick={() => (showNewBranch = true)}>＋ branch</button>
           {/if}
