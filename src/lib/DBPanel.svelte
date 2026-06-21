@@ -21,7 +21,7 @@
   let filters = $state({}); // entry.key -> table filter text
   let collapsed = $state({}); // group name -> collapsed?
   let testState = $state(null); // null | "testing" | "ok" | error string
-  const blankForm = () => ({ engine: "mysql", host: "127.0.0.1", port: 3306, database: "", username: "root", password: "", path: "", tls: false, tls_insecure: false, group: "", use_ssh: false, ssh_host: "", ssh_port: 22, ssh_user: "", ssh_auth: "key", ssh_password: "", ssh_key_path: "", ssh_passphrase: "" });
+  const blankForm = () => ({ engine: "mysql", host: "127.0.0.1", port: 3306, database: "", username: "root", password: "", path: "", url: "", token: "", tls: false, tls_insecure: false, group: "", use_ssh: false, ssh_host: "", ssh_port: 22, ssh_user: "", ssh_auth: "key", ssh_password: "", ssh_key_path: "", ssh_passphrase: "" });
   let form = $state(blankForm());
 
   // Group connections for the tree: ungrouped first, then named groups.
@@ -46,14 +46,19 @@
     }
   }
 
-  const ENGINE_ICON = { mysql: "🐬", postgres: "🐘", clickhouse: "🟡", sqlite: "📦" };
+  const ENGINE_ICON = { mysql: "🐬", postgres: "🐘", clickhouse: "🟡", sqlite: "📦", sqlanywhere: "🪶" };
   function icon(e) { return ENGINE_ICON[e] ?? "🗄"; }
+  function hostOf(url) {
+    try { return new URL(url).host; } catch { return url; }
+  }
   function label(c) {
     if (c.engine === "sqlite") return c.path?.split("/").pop() ?? "sqlite";
+    if (c.engine === "sqlanywhere") return c.label || hostOf(c.url || "") || "sql-anywhere";
     return c.database || c.label || c.host || "db";
   }
   function sub(c) {
     if (c.engine === "sqlite") return c.path ?? "";
+    if (c.engine === "sqlanywhere") return hostOf(c.url || "");
     return `${c.username || ""}@${c.host || ""}${c.port ? ":" + c.port : ""}`;
   }
   function shown(entry) {
@@ -101,10 +106,14 @@
             <option value="postgres">PostgreSQL</option>
             <option value="clickhouse">ClickHouse</option>
             <option value="sqlite">SQLite</option>
+            <option value="sqlanywhere">SQL Anywhere (remote)</option>
           </select>
         </label>
         {#if form.engine === "sqlite"}
           <label>File path <input bind:value={form.path} placeholder="/path/to/db.sqlite" /></label>
+        {:else if form.engine === "sqlanywhere"}
+          <label>Server URL <input bind:value={form.url} placeholder="libsql://my-db.example.com  or  https://…" spellcheck="false" /></label>
+          <label>Auth token <input type="password" bind:value={form.token} placeholder="(if the server requires one)" /></label>
         {:else}
           <label>Host <input bind:value={form.host} /></label>
           <label>Port <input type="number" bind:value={form.port} /></label>

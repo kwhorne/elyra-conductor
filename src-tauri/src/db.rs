@@ -27,6 +27,12 @@ pub struct DbConfig {
     /// For sqlite: absolute path to the .db file.
     #[serde(default)]
     pub path: String,
+    /// For SQL Anywhere / libsql: remote server URL (libsql:// or https://).
+    #[serde(default)]
+    pub url: String,
+    /// For SQL Anywhere / libsql: auth token (sent as a bearer token).
+    #[serde(default)]
+    pub token: String,
     /// Friendly label (e.g. project name).
     #[serde(default)]
     pub label: String,
@@ -70,6 +76,18 @@ enum Conn {
     Sqlite(String), // file path; opened per query (cheap, avoids !Sync issues)
     Postgres(Mutex<postgres::Client>),
     Clickhouse(klickhouse::Client), // native TCP protocol (port 9000)
+    SqlAnywhere(libsql::Database), // remote SQL Anywhere / libsql (sqld) over HTTP
+}
+
+// SQL Anywhere is SQLite-compatible, so its values map like SQLite's.
+fn libsql_value_to_string(v: &libsql::Value) -> Option<String> {
+    match v {
+        libsql::Value::Null => None,
+        libsql::Value::Integer(n) => Some(n.to_string()),
+        libsql::Value::Real(f) => Some(f.to_string()),
+        libsql::Value::Text(t) => Some(t.clone()),
+        libsql::Value::Blob(b) => Some(format!("<{} bytes>", b.len())),
+    }
 }
 
 // A dynamic ClickHouse row: column name + value, no compile-time struct needed.
@@ -609,6 +627,24 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
                 .map_err(|e| e.to_string())?;
             Conn::Clickhouse(client)
         }
+        "sqlanywhere" | "libsql" | "turso" => {
+            let url = config.url.trim().to_string();
+            if url.is_empty() {
+                return Err("SQL Anywhere URL is required (libsql:// or https://)".into());
+            }
+            let token = config.token.clone();
+            let db = tauri::async_runtime::block_on(async move {
+                let db = libsql::Builder::new_remote(url, token)
+                    .build()
+                    .await
+                    .map_err(|e| e.to_string())?;
+                // Validate eagerly so errors surface at connect time.
+                let conn = db.connect().map_err(|e| e.to_string())?;
+                conn.query("SELECT 1", ()).await.map_err(|e| e.to_string())?;
+                Ok::<_, String>(db)
+            })?;
+            Conn::SqlAnywhere(db)
+        }
         other => return Err(format!("Unsupported engine: {other}")),
     })
 }
@@ -692,6 +728,23 @@ pub fn db_tables(state: State<DbManager>, id: String) -> Result<Vec<String>, Str
                 })
                 .collect())
         }
+        Conn::SqlAnywhere(db) => tauri::async_runtime::block_on(async {
+            let conn = db.connect().map_err(|e| e.to_string())?;
+            let mut rows = conn
+                .query(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+                    (),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            let mut out = Vec::new();
+            while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+                if let Some(s) = libsql_value_to_string(&row.get_value(0).map_err(|e| e.to_string())?) {
+                    out.push(s);
+                }
+            }
+            Ok(out)
+        }),
     }
 }
 
@@ -822,6 +875,28 @@ pub fn db_columns(
                 })
                 .collect())
         }
+        Conn::SqlAnywhere(db) => {
+            let q = format!("PRAGMA table_info(\"{}\")", table.replace('"', "\"\""));
+            tauri::async_runtime::block_on(async {
+                let conn = db.connect().map_err(|e| e.to_string())?;
+                let mut rows = conn.query(&q, ()).await.map_err(|e| e.to_string())?;
+                let mut out = Vec::new();
+                while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+                    // PRAGMA table_info: cid, name, type, notnull, dflt_value, pk
+                    let name = libsql_value_to_string(&row.get_value(1).map_err(|e| e.to_string())?).unwrap_or_default();
+                    let data_type = libsql_value_to_string(&row.get_value(2).map_err(|e| e.to_string())?).unwrap_or_default();
+                    let notnull = matches!(row.get_value(3), Ok(libsql::Value::Integer(n)) if n != 0);
+                    let pk = matches!(row.get_value(5), Ok(libsql::Value::Integer(n)) if n > 0);
+                    out.push(ColumnInfo {
+                        name,
+                        data_type,
+                        nullable: !notnull,
+                        key: if pk { "PRI".into() } else { String::new() },
+                    });
+                }
+                Ok(out)
+            })
+        }
     }
 }
 
@@ -922,6 +997,26 @@ pub fn db_table_info(
                 rows,
                 bytes,
                 approximate: true,
+            })
+        }
+        Conn::SqlAnywhere(db) => {
+            let q = format!("SELECT COUNT(*) FROM \"{}\"", table.replace('"', "\"\""));
+            let rows = tauri::async_runtime::block_on(async {
+                let conn = db.connect().map_err(|e| e.to_string())?;
+                let mut rs = conn.query(&q, ()).await.map_err(|e| e.to_string())?;
+                let n = match rs.next().await.map_err(|e| e.to_string())? {
+                    Some(row) => match row.get_value(0).map_err(|e| e.to_string())? {
+                        libsql::Value::Integer(n) => Some(n),
+                        _ => None,
+                    },
+                    None => None,
+                };
+                Ok::<_, String>(n)
+            })?;
+            Ok(TableInfo {
+                rows,
+                bytes: None,
+                approximate: false,
             })
         }
     }
@@ -1126,6 +1221,52 @@ pub fn db_query(
                     columns: vec![],
                     rows: vec![],
                     rows_affected: None,
+                    elapsed_ms: start.elapsed().as_millis() as u64,
+                    is_select: false,
+                    truncated: false,
+                })
+            }
+        }
+        Conn::SqlAnywhere(db) => {
+            if select {
+                let (columns, rows, truncated) = tauri::async_runtime::block_on(async {
+                    let conn = db.connect().map_err(|e| e.to_string())?;
+                    let mut rs = conn.query(&sql, ()).await.map_err(|e| e.to_string())?;
+                    let ncols = rs.column_count();
+                    let columns: Vec<String> = (0..ncols)
+                        .map(|i| rs.column_name(i).unwrap_or("").to_string())
+                        .collect();
+                    let mut rows: Vec<Vec<Option<String>>> = Vec::new();
+                    let mut truncated = false;
+                    while let Some(row) = rs.next().await.map_err(|e| e.to_string())? {
+                        if rows.len() >= max_rows {
+                            truncated = true;
+                            break;
+                        }
+                        let vals = (0..ncols)
+                            .map(|i| row.get_value(i).ok().and_then(|v| libsql_value_to_string(&v)))
+                            .collect();
+                        rows.push(vals);
+                    }
+                    Ok::<_, String>((columns, rows, truncated))
+                })?;
+                Ok(QueryResult {
+                    columns,
+                    rows,
+                    rows_affected: None,
+                    elapsed_ms: start.elapsed().as_millis() as u64,
+                    is_select: true,
+                    truncated,
+                })
+            } else {
+                let affected = tauri::async_runtime::block_on(async {
+                    let conn = db.connect().map_err(|e| e.to_string())?;
+                    conn.execute(&sql, ()).await.map_err(|e| e.to_string())
+                })?;
+                Ok(QueryResult {
+                    columns: vec![],
+                    rows: vec![],
+                    rows_affected: Some(affected),
                     elapsed_ms: start.elapsed().as_millis() as u64,
                     is_select: false,
                     truncated: false,

@@ -30,6 +30,8 @@ native-tls = "0.2"
 tokio-native-tls = "0.3"
 tokio = { version = "1", features = ["net", "io-util"] }
 klickhouse = "0.15.3"
+# Remote SQL Anywhere / libsql (sqld) over HTTP — thin Hrana client, no bundled SQLite.
+libsql = { version = "0.9", default-features = false, features = ["remote", "tls"] }
 keyring = { version = "3", features = ["apple-native"] }
 trash = "5"
 
