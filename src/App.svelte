@@ -1037,7 +1037,7 @@
     try {
       const cfg = await invoke("db_from_env", { project: path });
       if (!cfg) {
-        dbError = "No supported DB_CONNECTION (mysql/pgsql/clickhouse/sqlite) in .env";
+        dbError = "No supported DB_CONNECTION (mysql/pgsql/clickhouse/sqlite/sqlanywhere) in .env";
         return;
       }
       await dbAddConnection(cfg);

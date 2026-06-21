@@ -400,6 +400,11 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
 
+    // First non-empty value among a list of candidate env keys.
+    let first = |keys: &[&str]| -> String {
+        keys.iter().find_map(|k| env.get(*k).cloned()).unwrap_or_default()
+    };
+
     match engine.as_str() {
         "mysql" | "mariadb" => Some(DbConfig {
             engine: "mysql".into(),
@@ -464,6 +469,19 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             label,
             ..Default::default()
         }),
+        "libsql" | "sqlanywhere" => {
+            let url = first(&["DB_URL", "SQLANYWHERE_URL", "LIBSQL_URL", "DATABASE_URL"]);
+            if url.is_empty() {
+                return None;
+            }
+            Some(DbConfig {
+                engine: "sqlanywhere".into(),
+                url,
+                token: first(&["DB_AUTH_TOKEN", "SQLANYWHERE_AUTH_TOKEN", "LIBSQL_AUTH_TOKEN", "DB_TOKEN"]),
+                label,
+                ..Default::default()
+            })
+        }
         "sqlite" => {
             let raw = env.get("DB_DATABASE").cloned().unwrap_or_default();
             let path = if raw.is_empty() {
@@ -483,7 +501,27 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
                 ..Default::default()
             })
         }
-        _ => None,
+        _ => {
+            // SQL Anywhere even without DB_CONNECTION set: unambiguous vars, or
+            // any libsql:// URL.
+            let mut url = first(&["SQLANYWHERE_URL", "LIBSQL_URL"]);
+            if url.is_empty() {
+                let d = first(&["DATABASE_URL", "DB_URL"]);
+                if d.starts_with("libsql://") {
+                    url = d;
+                }
+            }
+            if url.is_empty() {
+                return None;
+            }
+            Some(DbConfig {
+                engine: "sqlanywhere".into(),
+                url,
+                token: first(&["SQLANYWHERE_AUTH_TOKEN", "LIBSQL_AUTH_TOKEN", "DB_AUTH_TOKEN", "DB_TOKEN"]),
+                label,
+                ..Default::default()
+            })
+        }
     }
 }
 
@@ -627,7 +665,7 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
                 .map_err(|e| e.to_string())?;
             Conn::Clickhouse(client)
         }
-        "sqlanywhere" | "libsql" | "turso" => {
+        "sqlanywhere" | "libsql" => {
             let url = config.url.trim().to_string();
             if url.is_empty() {
                 return Err("SQL Anywhere URL is required (libsql:// or https://)".into());
@@ -1273,5 +1311,45 @@ pub fn db_query(
                 })
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_env(contents: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("conductor-dbenv-{}-{}", std::process::id(), contents.len()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(".env"), contents).unwrap();
+        dir
+    }
+
+    #[test]
+    fn from_env_sqlanywhere_explicit() {
+        let dir = write_env("DB_CONNECTION=libsql\nDB_URL=libsql://app.example.com\nDB_AUTH_TOKEN=secret\n");
+        let cfg = db_from_env(dir.to_string_lossy().to_string()).expect("config");
+        assert_eq!(cfg.engine, "sqlanywhere");
+        assert_eq!(cfg.url, "libsql://app.example.com");
+        assert_eq!(cfg.token, "secret");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn from_env_sqlanywhere_inferred_without_connection() {
+        let dir = write_env("SQLANYWHERE_URL=libsql://bi.example.com\nSQLANYWHERE_AUTH_TOKEN=tok\n");
+        let cfg = db_from_env(dir.to_string_lossy().to_string()).expect("config");
+        assert_eq!(cfg.engine, "sqlanywhere");
+        assert_eq!(cfg.url, "libsql://bi.example.com");
+        assert_eq!(cfg.token, "tok");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn from_env_plain_postgres_url_is_not_sqlanywhere() {
+        let dir = write_env("DATABASE_URL=postgres://u:p@host/db\n");
+        // A bare postgres DATABASE_URL must not be misread as SQL Anywhere.
+        assert!(db_from_env(dir.to_string_lossy().to_string()).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
