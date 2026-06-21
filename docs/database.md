@@ -3,7 +3,8 @@
 Conductor includes a lightweight database browser so you can connect to a project's
 database, look around the schema, and run queries without leaving the cockpit.
 
-> Supports **MySQL/MariaDB**, **PostgreSQL**, **ClickHouse**, and **SQLite**. Conductor
+> Supports **MySQL/MariaDB**, **PostgreSQL**, **ClickHouse**, **SQLite**, and remote
+> **SQL Anywhere / libsql** (a `sqld` server over HTTP). Conductor
 > stays secret-free: it reads the connection details from the project's existing `.env`,
 > or you supply them for the session. Nothing new is persisted, and it never calls a
 > model — it's a tool, not an agent. See [Architecture & boundaries](architecture.md).
@@ -78,6 +79,20 @@ connections — the SSH channel is the encryption.
 
 - **Manual connection** — pick the engine and fill in the details yourself. Manual
   credentials are kept in memory for the session only; they are not written anywhere.
+
+### SQL Anywhere (remote)
+
+SQL Anywhere is a replication-ready, SQLite-compatible engine; Conductor connects to a
+remote `sqld` server over HTTP via the thin libsql client (no second bundled SQLite).
+
+- **Manual:** pick **SQL Anywhere (remote)** and enter the **Server URL**
+  (`libsql://host` or `https://…`) and an optional **auth token** (sent as a bearer
+  token). The token is stored in the OS keychain like any other secret.
+- **From `.env`:** detected via `DB_CONNECTION=libsql` (or `sqlanywhere`) reading
+  `DB_URL` / `SQLANYWHERE_URL` / `LIBSQL_URL` / `DATABASE_URL` and a matching
+  `*_AUTH_TOKEN`; also inferred from an unambiguous `SQLANYWHERE_URL` / `LIBSQL_URL` or a
+  `libsql://` URL even without `DB_CONNECTION`. Schema and queries use the SQLite-
+  compatible surface (`sqlite_master`, `PRAGMA table_info`).
 
 ## Browsing tables
 

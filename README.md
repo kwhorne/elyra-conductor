@@ -108,7 +108,8 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   no longer work, with a freshness banner (mark always-on steps ` ```bash no-verify `).
   Local files, versionable with git.
 - 🗄️ **Database browser** — connect to a project's databases (MySQL / PostgreSQL /
-  ClickHouse / SQLite), **several at once** (e.g. MySQL + ClickHouse). Browse tables,
+  ClickHouse / SQLite, plus **remote SQL Anywhere / libsql** over HTTP), **several at
+  once** (e.g. MySQL + ClickHouse). Browse tables,
   sort/order/filter (incl. per-column) and page a data grid, edit cells inline, inspect
   structure, run SQL, and **export to Excel**. Connections are saved securely in the OS
   keychain (never committed); saved queries are private per project. ClickHouse uses its
