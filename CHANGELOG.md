@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-06-21
+
+### Added
+
+- **Remote SQL Anywhere / libsql in the database browser.** Alongside MySQL, PostgreSQL,
+  ClickHouse and SQLite, you can now connect to a remote **SQL Anywhere** (`sqld`) server
+  over HTTP — enter a `libsql://` / `https://` **Server URL** and an optional **auth
+  token**, or let Conductor pick it up from the project's `.env` (`DB_CONNECTION=libsql`,
+  or an unambiguous `SQLANYWHERE_URL` / `LIBSQL_URL` / `libsql://` URL). Browse tables,
+  run queries, edit cells, and export — just like the other engines. Tokens are stored in
+  the OS keychain; nothing is written into the project.
+
 ## [0.8.1] — 2026-06-18
 
 ### Added
@@ -728,7 +740,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.8...v0.8.0
 [0.7.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.7...v0.7.8
