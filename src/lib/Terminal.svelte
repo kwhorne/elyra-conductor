@@ -4,6 +4,7 @@
   import { FitAddon } from "@xterm/addon-fit";
   import { SearchAddon } from "@xterm/addon-search";
   import { SerializeAddon } from "@xterm/addon-serialize";
+  import { WebglAddon } from "@xterm/addon-webgl";
   import "@xterm/xterm/css/xterm.css";
   import { invoke, Channel } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
@@ -108,6 +109,17 @@
     term.loadAddon(serializeAddon);
     term.open(el);
 
+    // GPU-accelerated rendering. The DOM renderer (xterm's default) buckles when
+    // several repaint-heavy TUIs (e.g. the Elyra CLI) stream at once, which made
+    // the whole window sluggish. WebGL offloads it to the GPU. If the context is
+    // lost (e.g. too many live contexts), dispose and fall back to the DOM
+    // renderer for this pane.
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      term.loadAddon(webgl);
+    } catch {}
+
     // Shell-integration OSC sequences (emitted by the zsh shim): 633;E;<cmdline>,
     // 133;C (output start), 133;D[;exit] (done). We turn these into command
     // records with the real command line and exit code.
@@ -164,6 +176,10 @@
       // the surrounding layout changes (editor/files/db panels open or close),
       // where ResizeObserver doesn't always fire reliably in WebKit.
       fit: () => {
+        // Never fit a hidden pane: a display:none element measures 0×0, which
+        // would shrink the terminal (and its pty) to a sliver and garble the
+        // TUI. Only the visible pane re-fits; hidden panes keep their size.
+        if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
         try {
           fit?.fit();
           invoke("pty_resize", { id, cols: term.cols, rows: term.rows }).catch(() => {});
@@ -217,8 +233,29 @@
     // and `new Uint8Array(buffer)` is a zero-copy view.
     /** @type {Channel<ArrayBuffer>} */
     const onData = new Channel();
+    // Coalesce PTY output into one write per animation frame. A fast TUI emits
+    // many small chunks; writing each one separately multiplies xterm's parse/
+    // render work. Batching caps that to ~60/s per pane, which keeps the UI
+    // responsive even with several agents streaming at once.
+    let pending = [];
+    let rafId = 0;
+    const flush = () => {
+      rafId = 0;
+      if (!term || pending.length === 0) return;
+      let total = 0;
+      for (const c of pending) total += c.length;
+      const buf = new Uint8Array(total);
+      let off = 0;
+      for (const c of pending) {
+        buf.set(c, off);
+        off += c.length;
+      }
+      pending = [];
+      term.write(buf);
+    };
     onData.onmessage = (msg) => {
-      term.write(new Uint8Array(msg));
+      pending.push(new Uint8Array(msg));
+      if (!rafId) rafId = requestAnimationFrame(flush);
       sbDirty = true; // mark scrollback for the next periodic save
       const now = Date.now();
       if (onactivity && now - lastActivity > 350) {
@@ -226,9 +263,13 @@
         onactivity();
       }
     };
+    cleanup.push(() => {
+      if (rafId) cancelAnimationFrame(rafId);
+    });
     const unExit = await listen(`pty://exit/${id}`, (e) => {
       const code = typeof e.payload === "number" ? e.payload : null;
       const tail = code != null && code >= 0 ? ` (code ${code})` : "";
+      flush(); // drain any queued output before the exit notice
       term.write(`\r\n\x1b[90m[process exited${tail}]\x1b[0m\r\n`);
       onexit?.(code);
     });
@@ -273,6 +314,7 @@
 
 
     const ro = new ResizeObserver(() => {
+      if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
       fit.fit();
       invoke("pty_resize", { id, cols: term.cols, rows: term.rows }).catch(() => {});
     });
