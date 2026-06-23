@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-06-21
+
+### Changed
+
+- **Much smoother terminals with multiple agents.** Terminal rendering now uses the GPU
+  (WebGL), and PTY output is coalesced into one write per animation frame. Running several
+  repaint-heavy TUIs at once (e.g. multiple Elyra agents) no longer makes the window
+  sluggish. Falls back to the DOM renderer if a GPU context is unavailable.
+
+### Fixed
+
+- Closing a terminal tab no longer garbles the remaining terminal. Hidden panes are no
+  longer measured at 0×0 and shrunk — they keep their size and re-fit only when visible.
+
 ## [0.8.2] — 2026-06-21
 
 ### Added
@@ -740,7 +754,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.3...HEAD
+[0.8.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.7.8...v0.8.0
