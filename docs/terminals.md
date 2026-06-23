@@ -129,3 +129,18 @@ limits are in [State & persistence](persistence.md).
 
 Tabs opened for a [task](tasks.md) (or a file run) start a shell and then run the chosen
 command once. This is the same mechanism behind **Run: …** in the command palette.
+
+## Rendering & performance
+
+Terminals are tuned to stay smooth even with several repaint-heavy TUIs (e.g. multiple
+[Elyra agents](elyra-agent.md)) streaming at once:
+
+- **GPU rendering** — xterm renders via WebGL, offloading the work from the main thread.
+  If a GPU context is unavailable (or lost when many are live), the affected pane falls
+  back to the DOM renderer automatically.
+- **Batched output** — PTY output is coalesced into one write per animation frame, so a
+  fast stream of small chunks doesn't multiply parse/render work.
+- **Binary streaming** — PTY bytes reach the webview over a binary channel (an
+  `ArrayBuffer`), not a JSON event, avoiding a ~3.6× size hit and a `JSON.parse` per frame.
+- **Hidden panes keep their size** — an inactive (hidden) pane is never measured at 0×0,
+  so switching or closing tabs doesn't shrink or garble the terminal you land on.

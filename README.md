@@ -53,7 +53,9 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
 - 🪟 **Split panes** — split any terminal horizontally or vertically, nest freely,
   and drag the dividers to resize. Panes never lose their session on relayout.
 - 🖥️ **Real terminals** — one PTY per pane, powered by `portable-pty` and rendered
-  with `xterm.js`. Full resize handling and your login shell.
+  with `xterm.js` on the **GPU (WebGL)**. Output streams over a binary channel and is
+  batched per frame, so several repaint-heavy agents stay smooth. Full resize handling
+  and your login shell.
 - 🔍 **Command palette (⌘K)** — jump between projects, tabs, and actions from one
   fuzzy-searchable list.
 - 🗂️ **File sidebar (⌘B)** — a lazy-loaded recursive file tree of the active
@@ -252,8 +254,9 @@ would have killed and respawned shells on every relayout.
 ```
 
 **Terminal flow:** Rust spawns a PTY per pane and reads it on a dedicated thread,
-emitting bytes as `pty://data/<id>` events. The frontend writes them straight to
-`xterm.js`. Input and resize travel back via `invoke('pty_write' | 'pty_resize')`.
+streaming raw bytes to the frontend over a binary `Channel` (an `ArrayBuffer`, not a JSON
+event). The frontend batches them per animation frame and writes to `xterm.js` (WebGL).
+Input and resize travel back via `invoke('pty_write' | 'pty_resize')`.
 
 ## Project structure
 
@@ -271,7 +274,7 @@ elyra-conductor/
 │   ├── main.js
 │   └── lib/
 │       ├── Sidebar.svelte        # project list + search + "open in editor"
-│       ├── Terminal.svelte       # xterm.js wrapper ↔ pty:// events
+│       ├── Terminal.svelte       # xterm.js (WebGL) ↔ PTY binary channel
 │       ├── Editor.svelte         # Monaco quick-edit
 │       ├── FileExplorer.svelte   # right sidebar root + header
 │       ├── FileTree.svelte       # recursive, lazy-loaded file node
