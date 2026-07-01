@@ -113,9 +113,11 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   ClickHouse / SQLite, plus **remote SQL Anywhere / libsql** over HTTP), **several at
   once** (e.g. MySQL + ClickHouse). Browse tables,
   sort/order/filter (incl. per-column) and page a data grid, edit cells inline, inspect
-  structure, run SQL, and **export to Excel**. Connections are saved securely in the OS
-  keychain (never committed); saved queries are private per project. ClickHouse uses its
-  native protocol. Just a tool — no model calls.
+  structure, run SQL, and **export to Excel**. **Tools ▸ Data Transfer** copies whole
+  tables (structure and/or data) from one saved connection to another, with a checkbox
+  list to pick individual tables or select them all. Connections are saved securely in
+  the OS keychain (never committed); saved queries are private per project. ClickHouse
+  uses its native protocol. Just a tool — no model calls.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
   project in Zed, VS Code, or Cursor.
 - 🤖 **Elyra agent** — if the [Elyra](https://elyracode.com) coding agent CLI is

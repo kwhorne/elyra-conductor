@@ -17,6 +17,7 @@
   import ContextMenu from "./lib/ContextMenu.svelte";
   import InputDialog from "./lib/InputDialog.svelte";
   import AboutModal from "./lib/AboutModal.svelte";
+  import DataTransferDialog from "./lib/DataTransferDialog.svelte";
   import MorningBrief from "./lib/MorningBrief.svelte";
   import { listen } from "@tauri-apps/api/event";
   import RunModal from "./lib/RunModal.svelte";
@@ -50,6 +51,7 @@
   let finderOpen = $state(false);
   let helpOpen = $state(false);
   let aboutOpen = $state(false);
+  let dataTransferOpen = $state(false);
   let sidebarRef = $state(null);
 
   // ---------- auto-update ----------
@@ -1480,6 +1482,7 @@
     }
     list.push({ id: "act:help", title: "Keyboard shortcuts", hint: "\u2318/", group: "action", icon: "?", action: () => (helpOpen = true) });
     list.push({ id: "act:about", title: "About Elyra Conductor", group: "action", icon: "\u2139", action: () => (aboutOpen = true) });
+    list.push({ id: "act:data-transfer", title: "Tools: Data Transfer…", group: "action", icon: "⇄", action: () => (dataTransferOpen = true) });
     list.push({ id: "act:check-update", title: "Check for updates\u2026", group: "action", icon: "\u21BB", action: () => checkForUpdate(true) });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
     list.push({ id: "act:save-workspace", title: "Save workspace\u2026", group: "action", icon: "\u{1F4BE}", action: saveWorkspacePrompt });
@@ -1857,6 +1860,7 @@
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
     listen("menu://about", () => (aboutOpen = true));
+    listen("menu://data-transfer", () => (dataTransferOpen = true));
     window.addEventListener("focus", onWindowFocus);
     window.addEventListener("blur", onWindowBlur);
     window.addEventListener("pagehide", flushState);
@@ -2236,6 +2240,7 @@
   <ShortcutsModal open={helpOpen} onclose={() => (helpOpen = false)} />
 
   <AboutModal open={aboutOpen} onclose={() => (aboutOpen = false)} />
+  <DataTransferDialog open={dataTransferOpen} conns={dbConns} onconnect={dbConnectEntry} onclose={() => (dataTransferOpen = false)} />
 
   {#if brief}
     <MorningBrief {brief} elyra={!!elyraVersion} onresume={briefResume} onplan={briefPlan} onclose={() => (brief = null)} />

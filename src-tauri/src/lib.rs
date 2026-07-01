@@ -58,7 +58,9 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::close_window(app, None)?,
         ],
     )?;
-    Menu::with_items(app, &[&app_menu, &edit_menu, &window_menu])
+    let data_transfer = MenuItem::with_id(app, "data-transfer", "Data Transfer…", true, None::<&str>)?;
+    let tools_menu = Submenu::with_items(app, "Tools", true, &[&data_transfer])?;
+    Menu::with_items(app, &[&app_menu, &edit_menu, &window_menu, &tools_menu])
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -84,6 +86,8 @@ pub fn run() {
             app.on_menu_event(|app, event| {
                 if event.id() == "about" {
                     let _ = app.emit("menu://about", ());
+                } else if event.id() == "data-transfer" {
+                    let _ = app.emit("menu://data-transfer", ());
                 }
             });
             Ok(())
@@ -162,6 +166,7 @@ pub fn run() {
             db::db_columns,
             db::db_table_info,
             db::db_query,
+            db::db_transfer_tables,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

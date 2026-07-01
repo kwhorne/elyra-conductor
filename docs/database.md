@@ -148,6 +148,32 @@ question) — Conductor only formats and sends text; the reasoning happens in El
 - **Per row** — hover a row and click the small 🤖 in the **#** column to send that single
   row as a `column | value` table. Good for “explain this row”.
 
+## Data Transfer (copy a database, or just some tables)
+
+**Tools ▸ Data Transfer…** in the menu bar (also in the command palette) opens a dialog
+to copy tables from one saved connection straight to another — e.g. cloning a whole
+database from a remote host down to `localhost`, or moving a handful of tables between a
+MySQL and a PostgreSQL connection.
+
+1. Pick a **Source** and a **Target** from the project's saved connections (each is
+   connected on demand if it isn't already).
+2. The source's tables load with checkboxes — **tick individual tables, or use "Select
+   all"**.
+3. Choose what to copy:
+   - **Create/replace table structure** — recreates the table on the target from the
+     source's columns (same-engine transfers reuse the exact column types; cross-engine
+     transfers use a best-effort type mapping).
+   - **Copy data** — copies rows in batches.
+   - **Drop existing table on target first** (when recreating structure), or **Empty
+ target table before copying** (when not).
+4. **Start Transfer** runs table by table with a live progress readout (rows copied so
+   far) and a final ✓/✗ per table when it's done.
+
+Works across engines (MySQL, PostgreSQL, ClickHouse, SQLite, SQL Anywhere) because rows
+round-trip as quoted SQL text, which every supported engine coerces to the destination
+column's real type on `INSERT`. Same-engine transfers (the common case) get full-fidelity
+structure via the source's own column definitions.
+
 ## Saved queries (private, per project)
 
 In a query tab you can **⭐ Save** the current SQL under a name and reload it later from

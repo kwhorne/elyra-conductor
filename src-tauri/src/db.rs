@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::Instant;
+use tauri::Emitter;
 use tauri::State;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1312,6 +1313,306 @@ pub fn db_query(
             }
         }
     }
+}
+
+// ── data transfer (Tools ▸ Data Transfer) ───────────────────────
+// Copies one or more tables from an already-open source connection to an
+// already-open target connection: optionally (re)creating the table on the
+// target from the source's column list, then copying rows in batches. Works
+// across engines by round-tripping every value through db_query as quoted SQL
+// text — MySQL/Postgres/SQLite/ClickHouse/SQL Anywhere all coerce untyped text
+// literals to the destination column's real type on INSERT.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferOptions {
+    /// (Re)create the table on the target from the source's columns.
+    pub structure: bool,
+    /// Copy rows.
+    pub data: bool,
+    /// DROP TABLE IF EXISTS on the target before creating it.
+    pub drop_existing: bool,
+    /// If not recreating the structure, empty the target table before copying rows.
+    pub truncate_existing: bool,
+    pub batch_size: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TransferTableResult {
+    pub table: String,
+    pub rows_copied: u64,
+    pub ok: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TransferProgress {
+    pub table: String,
+    pub index: usize,
+    pub total: usize,
+    pub rows_copied: u64,
+    pub done: bool,
+    pub error: Option<String>,
+}
+
+/// Quote an identifier only if it isn't already a plain, unambiguous name —
+/// keeps generated SQL portable across engines when possible.
+fn quote_ident(engine: &str, name: &str) -> String {
+    let plain = !name.is_empty()
+        && name
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_alphabetic() || c == '_')
+            .unwrap_or(false)
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if plain {
+        return name.to_string();
+    }
+    match engine {
+        "mysql" => format!("`{}`", name.replace('`', "``")),
+        _ => format!("\"{}\"", name.replace('"', "\"\"")),
+    }
+}
+
+/// Escape a value for use as a quoted SQL text literal. `None` becomes NULL.
+fn quote_literal(value: &Option<String>) -> String {
+    match value {
+        None => "NULL".to_string(),
+        Some(v) => format!("'{}'", v.replace('\'', "''")),
+    }
+}
+
+/// Best-effort column-type mapping when source and target engines differ. When
+/// they're the same engine, the source's native type string is reused as-is
+/// (full fidelity). Cross-engine, we fall back to a handful of broad buckets.
+fn map_column_type(target_engine: &str, source_engine: &str, data_type: &str) -> String {
+    if target_engine == source_engine {
+        return data_type.to_string();
+    }
+    let dt = data_type.to_lowercase();
+    let bucket = if dt.contains("int") {
+        "int"
+    } else if dt.contains("bool") {
+        "bool"
+    } else if dt.contains("double") || dt.contains("float") || dt.contains("real") {
+        "float"
+    } else if dt.contains("decimal") || dt.contains("numeric") {
+        "decimal"
+    } else if dt.contains("datetime") || dt.contains("timestamp") {
+        "datetime"
+    } else if dt.contains("date") {
+        "date"
+    } else if dt.contains("blob") || dt.contains("binary") || dt.contains("bytea") {
+        "blob"
+    } else {
+        "text"
+    };
+    match (target_engine, bucket) {
+        ("mysql", "int") => "BIGINT".into(),
+        ("mysql", "bool") => "TINYINT(1)".into(),
+        ("mysql", "float") => "DOUBLE".into(),
+        ("mysql", "decimal") => "DECIMAL(38,10)".into(),
+        ("mysql", "datetime") => "DATETIME".into(),
+        ("mysql", "date") => "DATE".into(),
+        ("mysql", "blob") => "LONGBLOB".into(),
+        ("mysql", _) => "LONGTEXT".into(),
+        ("postgres", "int") => "BIGINT".into(),
+        ("postgres", "bool") => "BOOLEAN".into(),
+        ("postgres", "float") => "DOUBLE PRECISION".into(),
+        ("postgres", "decimal") => "NUMERIC".into(),
+        ("postgres", "datetime") => "TIMESTAMP".into(),
+        ("postgres", "date") => "DATE".into(),
+        ("postgres", "blob") => "BYTEA".into(),
+        ("postgres", _) => "TEXT".into(),
+        ("clickhouse", "int") => "Nullable(Int64)".into(),
+        ("clickhouse", "bool") => "Nullable(UInt8)".into(),
+        ("clickhouse", "float") => "Nullable(Float64)".into(),
+        ("clickhouse", "decimal") => "Nullable(Decimal(38, 10))".into(),
+        ("clickhouse", "datetime") => "Nullable(DateTime)".into(),
+        ("clickhouse", "date") => "Nullable(Date)".into(),
+        ("clickhouse", _) => "Nullable(String)".into(),
+        // SQLite / SQL Anywhere are dynamically typed — any type name works.
+        (_, "int") => "INTEGER".into(),
+        (_, "float") | (_, "decimal") => "REAL".into(),
+        (_, "blob") => "BLOB".into(),
+        _ => "TEXT".into(),
+    }
+}
+
+fn build_create_table(
+    table: &str,
+    cols: &[ColumnInfo],
+    target_engine: &str,
+    source_engine: &str,
+) -> Result<String, String> {
+    if cols.is_empty() {
+        return Err(format!("Table {table} has no columns"));
+    }
+    let pk: Vec<&ColumnInfo> = cols.iter().filter(|c| c.key == "PRI").collect();
+    let mut defs: Vec<String> = cols
+        .iter()
+        .map(|c| {
+            let ty = map_column_type(target_engine, source_engine, &c.data_type);
+            let ident = quote_ident(target_engine, &c.name);
+            if target_engine == "clickhouse" {
+                // ClickHouse columns are Nullable(...) already when needed; don't
+                // append NOT NULL/NULL clauses.
+                format!("{ident} {ty}")
+            } else if !c.nullable {
+                format!("{ident} {ty} NOT NULL")
+            } else {
+                format!("{ident} {ty}")
+            }
+        })
+        .collect();
+    if target_engine != "clickhouse" && !pk.is_empty() {
+        let pk_list = pk
+            .iter()
+            .map(|c| quote_ident(target_engine, &c.name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        defs.push(format!("PRIMARY KEY ({pk_list})"));
+    }
+    let ident = quote_ident(target_engine, table);
+    let mut ddl = format!("CREATE TABLE {ident} ({})", defs.join(", "));
+    if target_engine == "clickhouse" {
+        let order = if pk.is_empty() {
+            "tuple()".to_string()
+        } else {
+            pk.iter()
+                .map(|c| quote_ident(target_engine, &c.name))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        ddl.push_str(&format!(" ENGINE = MergeTree() ORDER BY ({order})"));
+    }
+    Ok(ddl)
+}
+
+fn build_insert(table: &str, columns: &[String], rows: &[Vec<Option<String>>], target_engine: &str) -> String {
+    let ident = quote_ident(target_engine, table);
+    let col_list = columns
+        .iter()
+        .map(|c| quote_ident(target_engine, c))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let values = rows
+        .iter()
+        .map(|row| {
+            let cells = row.iter().map(quote_literal).collect::<Vec<_>>().join(", ");
+            format!("({cells})")
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("INSERT INTO {ident} ({col_list}) VALUES {values}")
+}
+
+/// Copy one or more tables from `source_id` to `target_id` (both must already
+/// be open connections). Emits `db-transfer-progress` events as it goes so the
+/// UI can show a live progress bar while the command itself runs to completion
+/// and returns a full summary.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn db_transfer_tables(
+    app: tauri::AppHandle,
+    state: State<DbManager>,
+    source_id: String,
+    target_id: String,
+    source_engine: String,
+    target_engine: String,
+    tables: Vec<String>,
+    options: TransferOptions,
+) -> Result<Vec<TransferTableResult>, String> {
+    let batch = options.batch_size.max(1);
+    let total = tables.len();
+    let mut results = Vec::with_capacity(total);
+
+    for (index, table) in tables.iter().enumerate() {
+        let outcome: Result<u64, String> = (|| {
+            let mut copied: u64 = 0;
+
+            let cols = db_columns(state.clone(), source_id.clone(), table.clone())?;
+            if cols.is_empty() {
+                return Err(format!("No columns found for {table} on the source"));
+            }
+
+            if options.structure {
+                if options.drop_existing {
+                    let drop_sql = format!("DROP TABLE IF EXISTS {}", quote_ident(&target_engine, table));
+                    let _ = db_query(state.clone(), target_id.clone(), drop_sql, Some(1));
+                }
+                let ddl = build_create_table(table, &cols, &target_engine, &source_engine)?;
+                db_query(state.clone(), target_id.clone(), ddl, Some(1))?;
+            } else if options.truncate_existing {
+                let del_sql = format!("DELETE FROM {}", quote_ident(&target_engine, table));
+                db_query(state.clone(), target_id.clone(), del_sql, Some(1))?;
+            }
+
+            if options.data {
+                let col_names: Vec<String> = cols.iter().map(|c| c.name.clone()).collect();
+                let select_cols = col_names
+                    .iter()
+                    .map(|c| quote_ident(&source_engine, c))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let mut offset = 0usize;
+                loop {
+                    let select_sql = format!(
+                        "SELECT {select_cols} FROM {} LIMIT {batch} OFFSET {offset}",
+                        quote_ident(&source_engine, table)
+                    );
+                    let page = db_query(state.clone(), source_id.clone(), select_sql, Some(batch))?;
+                    let n = page.rows.len();
+                    if n == 0 {
+                        break;
+                    }
+                    let insert_sql = build_insert(table, &col_names, &page.rows, &target_engine);
+                    db_query(state.clone(), target_id.clone(), insert_sql, Some(1))?;
+                    copied += n as u64;
+                    offset += n;
+                    let _ = app.emit(
+                        "db-transfer-progress",
+                        TransferProgress {
+                            table: table.clone(),
+                            index,
+                            total,
+                            rows_copied: copied,
+                            done: false,
+                            error: None,
+                        },
+                    );
+                    if n < batch {
+                        break;
+                    }
+                }
+            }
+
+            Ok(copied)
+        })();
+
+        let (ok, rows_copied, error) = match outcome {
+            Ok(n) => (true, n, None),
+            Err(e) => (false, 0, Some(e)),
+        };
+        let _ = app.emit(
+            "db-transfer-progress",
+            TransferProgress {
+                table: table.clone(),
+                index,
+                total,
+                rows_copied,
+                done: true,
+                error: error.clone(),
+            },
+        );
+        results.push(TransferTableResult {
+            table: table.clone(),
+            rows_copied,
+            ok,
+            error,
+        });
+    }
+
+    Ok(results)
 }
 
 #[cfg(test)]

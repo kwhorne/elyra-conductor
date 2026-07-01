@@ -41,6 +41,7 @@ registered in `src-tauri/src/lib.rs`.
 | `db_connect` / `db_disconnect` | `db.rs` | Open / close a MySQL or SQLite connection. |
 | `db_tables` / `db_columns` | `db.rs` | Schema: list tables / a table's columns. |
 | `db_query` | `db.rs` | Run SQL; returns columns + rows (or rows affected). Backs the [database browser](database.md). |
+| `db_transfer_tables` | `db.rs` | Copy one or more tables from one open connection to another (structure and/or data); emits `db-transfer-progress` events. Backs [Tools ▸ Data Transfer](database.md#data-transfer-copy-a-database-or-just-some-tables). |
 
 ## Events
 
@@ -48,6 +49,7 @@ registered in `src-tauri/src/lib.rs`.
 |-------|---------|---------|
 | `pty://exit/<id>` | exit code (number) | The PTY's child process exited. |
 | `agent://event/<id>` / `agent://exit/<id>` | JSON | Streamed agent output / exit. |
+| `db-transfer-progress` | `{ table, index, total, rows_copied, done, error }` | Live progress while `db_transfer_tables` runs. |
 
 PTY **output** is not an event: it streams over a binary `Channel<Response>` passed to
 `pty_spawn`, which ships raw bytes (an `ArrayBuffer`) straight to xterm.js — far cheaper

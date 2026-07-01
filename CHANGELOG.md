@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.4] — 2026-07-01
+
+### Added
+
+- **Tools ▸ Data Transfer.** A new menu bar entry (also in the command palette) opens a
+  dialog to copy tables from one saved connection straight to another — e.g. a full copy
+  of a database from a remote host to `localhost`, or between two engines (MySQL,
+  PostgreSQL, ClickHouse, SQLite, SQL Anywhere). Pick a **Source** and **Target**
+  connection, then **tick individual tables or Select all**; options let you
+  (re)create the table structure, copy the data, and drop or empty the target first.
+  Runs with a live per-table progress readout and a final ✓/✗ summary per table.
+  Uses the same saved connections as the database panel — nothing new to configure.
+
 ## [0.8.3] — 2026-06-21
 
 ### Changed
@@ -754,7 +767,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.3...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.4...HEAD
+[0.8.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.0...v0.8.1
