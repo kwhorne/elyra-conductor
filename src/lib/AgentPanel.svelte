@@ -5,7 +5,7 @@
 
   // Pure host UI for an external `elyra --mode rpc` process. No AI logic here —
   // we only render events and forward commands (see ARCHITECTURE.md).
-  let { id, cwd, initialPrompt = null, initialDraft = null, onactivity = null, ontitle = null, onpresence = null } = $props();
+  let { id, cwd, initialPrompt = null, initialDraft = null, onactivity = null, ontitle = null, onpresence = null, onstatus = null } = $props();
 
   let entries = $state([]); // { kind: 'user'|'assistant'|'tool'|'note', text, ... }
   let status = $state({}); // statusKey -> text (from setStatus)
@@ -225,6 +225,11 @@
   let presence = $derived(exited ? "exited" : pendingUI ? "waiting" : busy ? "working" : "idle");
   $effect(() => {
     onpresence?.(presence);
+  });
+  // Bubble the current status line up too, so a cross-project dashboard can
+  // show "what is each agent doing right now" without re-parsing every event.
+  $effect(() => {
+    onstatus?.(statusText);
   });
 </script>
 

@@ -22,6 +22,7 @@ registered in `src-tauri/src/lib.rs`.
 | `git_commit` | `projects.rs` | Stage, commit, and optionally push. |
 | `git_worktree_list` / `git_worktree_add` / `git_worktree_remove` | `projects.rs` | Parallel isolated worktrees per branch. See [Worktrees](worktrees.md). |
 | `detect_gh` / `gh_pr_list` | `projects.rs` | GitHub PR + CI status per branch via the `gh` CLI. |
+| `gh_pr_merge` | `projects.rs` | Squash/rebase/merge + delete-branch for a PR (auto-merge queue). See [Worktrees](worktrees.md#agent-dashboard-multi-agent-cockpit--auto-merge-queue). |
 | `run_step` | `projects.rs` | Run one runbook step headless (login shell, timeout) for [Verify](runbooks.md). |
 | `history_add` / `history_query` / `history_stats` / `history_clear` | `history.rs` | Persistent command history & insights. See [Command history](command-history.md). |
 | `detect_editors` | `projects.rs` | Find installed external editors (Zed / VS Code / Cursor). |

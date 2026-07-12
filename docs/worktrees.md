@@ -56,6 +56,32 @@ When an agent starts waiting while you're looking at another tab or app, you get
 notification (*Agent needs you*). See [Elyra agent](elyra-agent.md#agent-command-center)
 for how the state is derived.
 
+## Agent dashboard (multi-agent cockpit + auto-merge queue)
+
+With several agents running across different worktrees, the tab strip's presence pill
+only tells you *how many* are working/waiting. Click **🎛 Dashboard** next to it (shown
+whenever at least one agent tab is open; also in the command palette — *Agent
+dashboard…*) for the full cockpit:
+
+- **Agents** — every open agent tab, across every project and worktree, in one list:
+  presence dot (working / waiting for you / idle / exited), its owning project, the
+  latest **status line**, and **last activity** ("2m ago"). Click a row to jump straight
+  to that tab. Sorted so **waiting** agents float to the top — the ones costing you time.
+- **Ready to merge** — an auto-merge queue: for every project behind an open agent,
+  Conductor checks its open PRs and lists the ones that are **not a draft** and have
+  **all checks passing** (no failing/pending checks). Each row shows the PR number/title,
+  branch, check + review summary, and a **Squash & merge** button. Merging:
+  1. Runs `gh pr merge --squash --delete-branch` (deletes the remote branch).
+  2. Closes any agent tab(s) still open on that branch.
+  3. Removes the local worktree, if there was one.
+
+  Confirms before merging; a failed merge (e.g. a new commit landed, or a required
+  check reappeared) shows an inline error and leaves the row in the queue.
+
+Both panels are read-only observation plus explicit clicks — no AI, no background
+auto-merging without a click. Requires an authenticated [`gh`](https://cli.github.com/)
+for the merge queue; the agents list works regardless.
+
 ## GitHub PR status
 
 With an authenticated [`gh`](https://cli.github.com/) CLI, the worktree panel shows each
@@ -79,4 +105,4 @@ worktree panel still works.
 - [Elyra agent](elyra-agent.md) — the agent panel and the command center state model.
 - [Git](git.md) — status in the sidebar and the in-app commit dialog.
 - [Tauri commands](tauri-commands.md) — `git_worktree_list` / `git_worktree_add` /
-  `git_worktree_remove`, `detect_gh` / `gh_pr_list`.
+  `git_worktree_remove`, `detect_gh` / `gh_pr_list` / `gh_pr_merge`.

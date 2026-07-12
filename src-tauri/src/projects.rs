@@ -361,8 +361,52 @@ pub fn git_commit_index(path: String, message: String, push: bool) -> Result<Str
     Ok(log)
 }
 
-/// Known CLI launchers for supported editors.
-const EDITORS: &[(&str, &str)] = &[("zed", "zed"), ("vscode", "code"), ("cursor", "cursor")];
+/// How a supported editor is launched: a CLI on PATH (`zed`, `code`, …), or a
+/// macOS `.app` bundle with no CLI shim (launched via `open -a`).
+enum EditorLauncher {
+    Cli(&'static str),
+    App {
+        /// `.app` bundle name (without the extension), e.g. "e" for `e.app`.
+        app_name: &'static str,
+        /// `CFBundleIdentifier`, used as a fallback lookup via `mdfind`/Spotlight
+        /// when the app isn't in one of the common install locations.
+        bundle_id: &'static str,
+    },
+}
+
+/// Known launchers for supported editors, keyed by the id `detect_editors` /
+/// `open_in_editor` use on the frontend.
+const EDITORS: &[(&str, EditorLauncher)] = &[
+    ("zed", EditorLauncher::Cli("zed")),
+    ("vscode", EditorLauncher::Cli("code")),
+    ("cursor", EditorLauncher::Cli("cursor")),
+    ("e", EditorLauncher::App { app_name: "e", bundle_id: "dev.e.editor" }),
+];
+
+/// Resolve a `.app` bundle to a path: common install locations first, then
+/// Spotlight (`mdfind kMDItemCFBundleIdentifier == '<id>'`) as a fallback for
+/// apps installed elsewhere.
+fn find_app(app_name: &str, bundle_id: &str) -> Option<PathBuf> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let candidates = [
+        format!("/Applications/{app_name}.app"),
+        format!("{home}/Applications/{app_name}.app"),
+    ];
+    for c in candidates {
+        let p = PathBuf::from(&c);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    let out = std::process::Command::new("mdfind")
+        .arg(format!("kMDItemCFBundleIdentifier == '{bundle_id}'"))
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| PathBuf::from(l.trim()))
+        .find(|p| p.exists())
+}
 
 pub fn find_bin(bin: &str) -> Option<String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -421,7 +465,10 @@ fn resolve_via_login_shell(bin: &str) -> Option<String> {
 pub fn detect_editors() -> Vec<String> {
     EDITORS
         .iter()
-        .filter(|(_, bin)| find_bin(bin).is_some())
+        .filter(|(_, launcher)| match launcher {
+            EditorLauncher::Cli(bin) => find_bin(bin).is_some(),
+            EditorLauncher::App { app_name, bundle_id } => find_app(app_name, bundle_id).is_some(),
+        })
         .map(|(name, _)| name.to_string())
         .collect()
 }
@@ -499,18 +546,30 @@ pub fn run_in_external_terminal(path: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn open_in_editor(editor: String, path: String) -> Result<(), String> {
-    let bin = EDITORS
+    let launcher = EDITORS
         .iter()
         .find(|(name, _)| *name == editor)
-        .map(|(_, bin)| *bin)
+        .map(|(_, launcher)| launcher)
         .ok_or_else(|| format!("unknown editor: {editor}"))?;
 
-    let resolved = find_bin(bin).ok_or_else(|| format!("{bin} not found on PATH"))?;
-
-    std::process::Command::new(resolved)
-        .arg(&path)
-        .spawn()
-        .map_err(|e| format!("failed to launch {editor}: {e}"))?;
+    match launcher {
+        EditorLauncher::Cli(bin) => {
+            let resolved = find_bin(bin).ok_or_else(|| format!("{bin} not found on PATH"))?;
+            std::process::Command::new(resolved)
+                .arg(&path)
+                .spawn()
+                .map_err(|e| format!("failed to launch {editor}: {e}"))?;
+        }
+        EditorLauncher::App { app_name, bundle_id } => {
+            let app = find_app(app_name, bundle_id).ok_or_else(|| format!("{app_name}.app not found in /Applications"))?;
+            std::process::Command::new("open")
+                .arg("-a")
+                .arg(app)
+                .arg(&path)
+                .spawn()
+                .map_err(|e| format!("failed to launch {editor}: {e}"))?;
+        }
+    }
 
     Ok(())
 }
@@ -803,6 +862,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
     }
 
+    #[test]
+    fn finds_e_app_in_applications() {
+        // Only meaningful on a machine with e.app installed; skip gracefully otherwise.
+        if !std::path::Path::new("/Applications/e.app").exists() {
+            return;
+        }
+        assert!(find_app("e", "dev.e.editor").is_some());
+    }
 }
 
 // ── Git worktrees ───────────────────────────────────────────────────
@@ -1030,4 +1097,28 @@ pub fn gh_pr_list(repo: String) -> Result<Vec<PrInfo>, String> {
         });
     }
     Ok(res)
+}
+
+/// Merge an open PR (auto-merge queue: "CI is green, ship it"). `method` is
+/// "squash" | "rebase" | "merge" (defaults to squash). Deletes the remote
+/// branch on merge — the local worktree (if any) is left for the caller to
+/// remove separately via `git_worktree_remove`.
+#[tauri::command]
+pub fn gh_pr_merge(repo: String, number: u64, method: Option<String>) -> Result<(), String> {
+    let bin = find_bin("gh").ok_or("gh (GitHub CLI) not found on PATH")?;
+    let flag = match method.as_deref() {
+        Some("rebase") => "--rebase",
+        Some("merge") => "--merge",
+        _ => "--squash",
+    };
+    let out = std::process::Command::new(&bin)
+        .args(["pr", "merge", &number.to_string(), flag, "--delete-branch"])
+        .current_dir(&repo)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        let msg = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        return Err(if msg.is_empty() { "gh pr merge failed".to_string() } else { msg });
+    }
+    Ok(())
 }

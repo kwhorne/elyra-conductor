@@ -136,6 +136,7 @@ pub fn run() {
             projects::git_worktree_remove,
             projects::detect_gh,
             projects::gh_pr_list,
+            projects::gh_pr_merge,
             history::history_add,
             history::history_query,
             history::history_stats,

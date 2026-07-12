@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.5] — 2026-07-12
+
+### Added
+
+- **Editor support: `e`.** [`e`](https://e.dev) (the local `e.app`) is now detected and
+  launchable like Zed/VS Code/Cursor — from the sidebar's per-project editor buttons and
+  the command palette ("Open … in e"). Detected as an installed `.app` bundle rather than
+  a PATH binary, so no CLI shim is required.
+- **🎛 Agent dashboard — a cockpit for parallel agents, plus an auto-merge queue.** A new
+  **Dashboard** pill (shown whenever an agent tab is open; also in the command palette)
+  opens a single view of every running Elyra agent across every project and worktree —
+  presence, live status line, and last activity — sorted so agents **waiting on you**
+  float to the top. Below it, a **Ready to merge** queue lists open PRs behind those
+  agents whose checks are all green and not a draft; **Squash & merge** runs `gh pr
+  merge`, closes the matching agent tab(s), and removes the worktree in one click.
+
 ## [0.8.4] — 2026-07-01
 
 ### Added
@@ -767,7 +783,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.4...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.5...HEAD
+[0.8.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.4...v0.8.5
 [0.8.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.1...v0.8.2

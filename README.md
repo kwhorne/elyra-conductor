@@ -119,7 +119,7 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   the OS keychain (never committed); saved queries are private per project. ClickHouse
   uses its native protocol. Just a tool — no model calls.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
-  project in Zed, VS Code, or Cursor.
+  project in Zed, VS Code, Cursor, or [e](https://e.dev).
 - 🤖 **Elyra agent** — if the [Elyra](https://elyracode.com) coding agent CLI is
   installed, open a **native agent panel** in a tab (sidebar button, palette, or
   right-click → "Ask Elyra about this file"). Conductor drives `elyra --mode rpc`
@@ -134,6 +134,11 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   dot (working / waiting on you / exited) and a pill in the tab strip counting how many
   agents are **working** vs **waiting for your input**. Click to jump straight to one;
   a notification fires when an agent starts waiting while you're looking elsewhere.
+- 🎛 **Agent dashboard + auto-merge queue** — one view of every open agent across every
+  project and worktree (status, last activity, jump-to), sorted so agents **waiting on
+  you** float to the top. A **Ready to merge** queue lists PRs behind those agents whose
+  checks are all green; **Squash & merge** runs `gh pr merge`, closes the agent tab, and
+  removes the worktree in one click.
 - ✅ **GitHub PR status** — with an authenticated `gh`, each worktree shows its open
   PR (number, CI check rollup, review state) linking to GitHub. Open PRs without a
   worktree are listed too, so you can **check a PR out as a worktree** (terminal or

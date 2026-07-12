@@ -18,6 +18,7 @@
   import InputDialog from "./lib/InputDialog.svelte";
   import AboutModal from "./lib/AboutModal.svelte";
   import DataTransferDialog from "./lib/DataTransferDialog.svelte";
+  import AgentDashboard from "./lib/AgentDashboard.svelte";
   import MorningBrief from "./lib/MorningBrief.svelte";
   import { listen } from "@tauri-apps/api/event";
   import RunModal from "./lib/RunModal.svelte";
@@ -375,6 +376,33 @@
     const next = { ...agentPresence };
     delete next[id];
     agentPresence = next;
+  }
+
+  // Per-agent status line and last-activity timestamp, so the dashboard (see
+  // below) can show "what is each agent doing, and when did it last move"
+  // across every project/worktree at a glance.
+  let agentStatusText = $state({}); // tabId -> latest setStatus text
+  let agentLastActive = $state({}); // tabId -> epoch ms
+  function setAgentStatus(id, text) {
+    if (agentStatusText[id] === text) return;
+    agentStatusText = { ...agentStatusText, [id]: text };
+  }
+  function markAgentActive(id) {
+    agentLastActive = { ...agentLastActive, [id]: Date.now() };
+  }
+
+  // ---------- agent dashboard (multi-agent cockpit + auto-merge queue) ----------
+  let agentDashboardOpen = $state(false);
+  // Which project "owns" a given cwd: the project itself, or one of its
+  // worktrees (a sibling "<repo>.worktrees/<branch>" folder — see projects.rs).
+  function ownerProject(cwd) {
+    if (!cwd) return null;
+    const all = [...projects, ...pinned];
+    return (
+      all.find((p) => cwd === p.path) ??
+      all.find((p) => cwd.startsWith(p.path + ".worktrees/") || cwd.startsWith(p.path + "/")) ??
+      null
+    );
   }
   const PRESENCE_LABEL = { working: "Agent working", waiting: "Waiting for you", idle: "Agent idle", exited: "Agent exited" };
   let agentSummary = $derived.by(() => {
@@ -1483,6 +1511,7 @@
     list.push({ id: "act:help", title: "Keyboard shortcuts", hint: "\u2318/", group: "action", icon: "?", action: () => (helpOpen = true) });
     list.push({ id: "act:about", title: "About Elyra Conductor", group: "action", icon: "\u2139", action: () => (aboutOpen = true) });
     list.push({ id: "act:data-transfer", title: "Tools: Data Transfer…", group: "action", icon: "⇄", action: () => (dataTransferOpen = true) });
+    if (tabs.some((t) => t.kind === "agent")) list.push({ id: "act:agent-dashboard", title: "Agent dashboard…", group: "action", icon: "🎛", action: () => (agentDashboardOpen = true) });
     list.push({ id: "act:check-update", title: "Check for updates\u2026", group: "action", icon: "\u21BB", action: () => checkForUpdate(true) });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
     list.push({ id: "act:save-workspace", title: "Save workspace\u2026", group: "action", icon: "\u{1F4BE}", action: saveWorkspacePrompt });
@@ -2012,7 +2041,7 @@
         {/each}
         <button class="new-tab" title="New tab (⌘N)" onclick={() => newTab(activeProject?.path ?? root, activeProject?.name)}>＋</button>
       </div>
-      {#if agentSummary.waiting || agentSummary.working}
+      {#if tabs.some((t) => t.kind === "agent")}
         <div class="agent-center">
           {#if agentSummary.waiting}
             <button class="ac-pill waiting" onclick={() => jumpToAgent("waiting")} title="An agent is waiting for your input — click to jump">
@@ -2024,6 +2053,9 @@
               <span class="ac-dot working"></span>{agentSummary.working} working
             </button>
           {/if}
+          <button class="ac-pill" onclick={() => (agentDashboardOpen = true)} title="Agent dashboard — every agent, plus an auto-merge queue for green PRs">
+            🎛 Dashboard
+          </button>
         </div>
       {/if}
     </div>
@@ -2037,7 +2069,7 @@
         {#each tabs as tab (tab.id)}
           {#if tab.kind === "agent"}
             <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
-              <AgentPanel id={tab.id} cwd={tab.cwd} initialPrompt={tab.initialPrompt ?? null} initialDraft={tab.initialDraft ?? null} onactivity={() => markActivity(tab.id)} ontitle={(t) => (tab.title = t)} onpresence={(s) => setAgentPresence(tab.id, s)} />
+              <AgentPanel id={tab.id} cwd={tab.cwd} initialPrompt={tab.initialPrompt ?? null} initialDraft={tab.initialDraft ?? null} onactivity={() => { markActivity(tab.id); markAgentActive(tab.id); }} ontitle={(t) => (tab.title = t)} onpresence={(s) => setAgentPresence(tab.id, s)} onstatus={(s) => setAgentStatus(tab.id, s)} />
             </div>
           {:else if tab.kind === "db"}
             <div class="term-area" style:display={tab.id === activeTabId ? "block" : "none"}>
@@ -2241,6 +2273,18 @@
 
   <AboutModal open={aboutOpen} onclose={() => (aboutOpen = false)} />
   <DataTransferDialog open={dataTransferOpen} conns={dbConns} onconnect={dbConnectEntry} onclose={() => (dataTransferOpen = false)} />
+  <AgentDashboard
+    open={agentDashboardOpen}
+    {tabs}
+    {projects}
+    {pinned}
+    {agentPresence}
+    {agentStatusText}
+    {agentLastActive}
+    onjump={(tab) => { focusTab(tab); agentDashboardOpen = false; }}
+    onclosetab={(id) => closeTab(id)}
+    onclose={() => (agentDashboardOpen = false)}
+  />
 
   {#if brief}
     <MorningBrief {brief} elyra={!!elyraVersion} onresume={briefResume} onplan={briefPlan} onclose={() => (brief = null)} />
