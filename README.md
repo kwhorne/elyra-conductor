@@ -115,9 +115,12 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   sort/order/filter (incl. per-column) and page a data grid, edit cells inline, inspect
   structure, run SQL, and **export to Excel**. **Tools ▸ Data Transfer** copies whole
   tables (structure and/or data) from one saved connection to another, with a checkbox
-  list to pick individual tables or select them all. Connections are saved securely in
-  the OS keychain (never committed); saved queries are private per project. ClickHouse
-  uses its native protocol. Just a tool — no model calls.
+  list to pick individual tables or select them all, and **per-column data masking**
+  (NULL / fixed value / hash / redact) for safe prod→dev copies. **Tools ▸ Compare
+  Schemas** diffs two connections table-by-table and generates a best-effort migration
+  script. Connections are saved securely in the OS keychain (never committed); saved
+  queries are private per project. ClickHouse uses its native protocol. Just a tool —
+  no model calls.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
   project in Zed, VS Code, Cursor, or [e](https://e.dev).
 - 🤖 **Elyra agent** — if the [Elyra](https://elyracode.com) coding agent CLI is
@@ -129,7 +132,10 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
 - 🌳 **Git worktrees — parallel branches, one agent each** — create isolated
   worktrees (separate checkouts sharing the repo's `.git`) and open each as a
   terminal or an Elyra agent, so several agents can work different branches at once
-  without colliding. Worktrees live in a sibling `<repo>.worktrees/<branch>` folder.
+  without colliding. Worktrees live in a sibling `<repo>.worktrees/<branch>` folder. A
+  best-effort **conflict warning** flags files with uncommitted changes in more than one
+  worktree at once, and a small **PR-status dot right on the tab** (🟢/🔴/🟡) shows CI
+  state without opening any panel.
 - 🤖 **Agent command center** — each agent reports a coarse state, shown as a per-tab
   dot (working / waiting on you / exited) and a pill in the tab strip counting how many
   agents are **working** vs **waiting for your input**. Click to jump straight to one;

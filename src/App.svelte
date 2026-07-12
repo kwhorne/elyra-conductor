@@ -18,6 +18,7 @@
   import InputDialog from "./lib/InputDialog.svelte";
   import AboutModal from "./lib/AboutModal.svelte";
   import DataTransferDialog from "./lib/DataTransferDialog.svelte";
+  import SchemaDiffDialog from "./lib/SchemaDiffDialog.svelte";
   import AgentDashboard from "./lib/AgentDashboard.svelte";
   import MorningBrief from "./lib/MorningBrief.svelte";
   import { listen } from "@tauri-apps/api/event";
@@ -53,6 +54,7 @@
   let helpOpen = $state(false);
   let aboutOpen = $state(false);
   let dataTransferOpen = $state(false);
+  let schemaDiffOpen = $state(false);
   let sidebarRef = $state(null);
 
   // ---------- auto-update ----------
@@ -404,6 +406,48 @@
       null
     );
   }
+  // ---------- PR status badge on the tab itself ----------
+  // A small colored dot per tab (term or agent) whose cwd is a worktree with an
+  // open PR: green = checks passing, red = a check failed, yellow = pending.
+  // Best-effort and read-only; needs an authenticated `gh` (silently no-ops
+  // otherwise, same as the Worktrees panel).
+  let tabPrStatus = $state({}); // tabId -> { cls: 'green'|'red'|'yellow', title }
+  let prTimer = null;
+  async function refreshTabPrStatus() {
+    const relevant = tabs.filter((t) => (t.kind === "agent" || t.kind === "term") && t.cwd);
+    if (relevant.length === 0) {
+      if (Object.keys(tabPrStatus).length) tabPrStatus = {};
+      return;
+    }
+    const byProjectPath = new Map();
+    for (const t of relevant) {
+      const proj = ownerProject(t.cwd);
+      if (proj) byProjectPath.set(proj.path, proj);
+    }
+    const map = {};
+    for (const proj of byProjectPath.values()) {
+      let trees, prs;
+      try {
+        [trees, prs] = await Promise.all([invoke("git_worktree_list", { path: proj.path }), invoke("gh_pr_list", { repo: proj.path })]);
+      } catch {
+        continue;
+      }
+      const prByBranch = new Map(prs.map((p) => [p.branch, p]));
+      for (const t of relevant) {
+        if (ownerProject(t.cwd)?.path !== proj.path) continue;
+        const wt = trees.find((w) => w.path === t.cwd);
+        const pr = wt?.branch ? prByBranch.get(wt.branch) : null;
+        if (!pr) continue;
+        let cls = "yellow";
+        if (pr.checks_failed > 0) cls = "red";
+        else if (pr.checks_pending === 0 && pr.checks_passed > 0) cls = "green";
+        const state = cls === "green" ? "checks passing" : cls === "red" ? "a check failed" : "checks pending";
+        map[t.id] = { cls, title: `PR #${pr.number}: ${pr.title} — ${state}` };
+      }
+    }
+    tabPrStatus = map;
+  }
+
   const PRESENCE_LABEL = { working: "Agent working", waiting: "Waiting for you", idle: "Agent idle", exited: "Agent exited" };
   let agentSummary = $derived.by(() => {
     let working = 0,
@@ -1511,6 +1555,7 @@
     list.push({ id: "act:help", title: "Keyboard shortcuts", hint: "\u2318/", group: "action", icon: "?", action: () => (helpOpen = true) });
     list.push({ id: "act:about", title: "About Elyra Conductor", group: "action", icon: "\u2139", action: () => (aboutOpen = true) });
     list.push({ id: "act:data-transfer", title: "Tools: Data Transfer…", group: "action", icon: "⇄", action: () => (dataTransferOpen = true) });
+    list.push({ id: "act:compare-schemas", title: "Tools: Compare Schemas…", group: "action", icon: "⇄", action: () => (schemaDiffOpen = true) });
     if (tabs.some((t) => t.kind === "agent")) list.push({ id: "act:agent-dashboard", title: "Agent dashboard…", group: "action", icon: "🎛", action: () => (agentDashboardOpen = true) });
     list.push({ id: "act:check-update", title: "Check for updates\u2026", group: "action", icon: "\u21BB", action: () => checkForUpdate(true) });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
@@ -1890,12 +1935,15 @@
     window.addEventListener("keydown", onGlobalKey);
     listen("menu://about", () => (aboutOpen = true));
     listen("menu://data-transfer", () => (dataTransferOpen = true));
+    listen("menu://compare-schemas", () => (schemaDiffOpen = true));
     window.addEventListener("focus", onWindowFocus);
     window.addEventListener("blur", onWindowBlur);
     window.addEventListener("pagehide", flushState);
     window.addEventListener("beforeunload", flushState);
     titleTimer = setInterval(pollTitles, 1800);
     portsTimer = setInterval(() => { if (!document.hidden) { refreshProjectPorts(); refreshContainers(); } }, 5000);
+    prTimer = setInterval(() => { if (!document.hidden) refreshTabPrStatus(); }, 45000);
+    refreshTabPrStatus();
     ensureNotifyPermission();
     editors = await invoke("detect_editors");
     terminalName = await invoke("detect_terminal");
@@ -1949,6 +1997,7 @@
     flushState();
     clearInterval(titleTimer);
     clearInterval(portsTimer);
+    clearInterval(prTimer);
   });
 </script>
 
@@ -2017,6 +2066,9 @@
             role="presentation"
             onpointerdown={(e) => tabPointerDown(e, i)}
           >
+            {#if tabPrStatus[t.id]}
+              <span class="pr-dot {tabPrStatus[t.id].cls}" title={tabPrStatus[t.id].title}></span>
+            {/if}
             {#if t.kind === "agent" && agentPresence[t.id] && agentPresence[t.id] !== "idle"}
               <span class="agent-dot {agentPresence[t.id]}" title={PRESENCE_LABEL[agentPresence[t.id]]}></span>
             {:else if proc}<span class="run-dot" title={`Running ${proc}`}></span>{:else if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
@@ -2273,6 +2325,7 @@
 
   <AboutModal open={aboutOpen} onclose={() => (aboutOpen = false)} />
   <DataTransferDialog open={dataTransferOpen} conns={dbConns} onconnect={dbConnectEntry} onclose={() => (dataTransferOpen = false)} />
+  <SchemaDiffDialog open={schemaDiffOpen} conns={dbConns} onconnect={dbConnectEntry} onclose={() => (schemaDiffOpen = false)} />
   <AgentDashboard
     open={agentDashboardOpen}
     {tabs}
@@ -2357,6 +2410,10 @@
   .run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 6px; flex: none; animation: run-spin 1s ease-in-out infinite; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
   @keyframes run-spin { 0% { transform: scale(0.7); opacity: 0.6; } 50% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.7); opacity: 0.6; } }
   /* Agent presence on a tab: working (accent, pulsing) / waiting on you (amber, attention) / exited (grey). */
+  .pr-dot { width: 7px; height: 7px; border-radius: 50%; margin-left: 6px; flex: none; }
+  .pr-dot.green { background: var(--green, #9ece6a); }
+  .pr-dot.red { background: #f7768e; }
+  .pr-dot.yellow { background: #e0af68; }
   .agent-dot { width: 7px; height: 7px; border-radius: 50%; margin-left: 6px; flex: none; }
   .agent-dot.working { background: var(--accent); animation: run-spin 1s ease-in-out infinite; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
   .agent-dot.waiting { background: #e0af68; animation: wait-pulse 1.1s ease-in-out infinite; }

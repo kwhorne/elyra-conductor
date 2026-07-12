@@ -174,6 +174,45 @@ round-trip as quoted SQL text, which every supported engine coerces to the desti
 column's real type on `INSERT`. Same-engine transfers (the common case) get full-fidelity
 structure via the source's own column definitions.
 
+### Data masking (safe prod → dev copies)
+
+When **Copy data** is on, each table row in the list gets a **🔒** button — click it to load
+that table's columns and choose a masking rule per column:
+
+- **Don't mask** — copy the value as-is (default).
+- **Set to NULL** — the column is always written as `NULL` on the target.
+- **Fixed value** — every row gets the same literal (e.g. `redacted@example.com`).
+- **Hash (irreversible)** — a stable digest of the original value. The same input always
+  hashes to the same output *within one transfer run*, so joins/grouping on the masked
+  column still work on the target — but the original value can't be recovered.
+- **Redact (keep length)** — replaces each non-whitespace character with `*`, so the
+  shape of the data (e.g. a phone number's length) is preserved without exposing it.
+
+Masking only changes what gets **written to the target** — the source is never touched.
+A small **🔒 N columns will be masked** note appears above the table list once any rule is
+set, and the 🔒 button glows on tables with active rules so it's obvious before you hit
+**Start Transfer**.
+
+## Compare Schemas (schema diff + migration script)
+
+**Tools ▸ Compare Schemas…** (also in the command palette) diffs two saved connections
+table-by-table and column-by-column — handy for "did staging's schema drift from prod?"
+or "what does this environment need before I can copy data into it?".
+
+1. Pick two connections and click **Compare**.
+2. Each table is marked **same**, **columns differ**, **missing on target**, or **missing
+   on source**; tick **Only show differences** (on by default) to skip the noise.
+   Differing tables list the columns that don't match, with the source and target type
+   side by side.
+3. A **suggested migration** script is generated underneath — `CREATE TABLE` for tables
+   missing on the target, `ALTER TABLE … ADD COLUMN` for missing columns (using the
+   source's exact type when both connections are the same engine, or a best-effort
+   mapping across engines). **Copy SQL** puts it on the clipboard.
+
+It's read-only and never runs anything — review the script yourself before applying it.
+Type mismatches are reported but intentionally **not** auto-fixed (changing an existing
+column's type can lose data, so that stays a manual, deliberate decision).
+
 ## Saved queries (private, per project)
 
 In a query tab you can **⭐ Save** the current SQL under a name and reload it later from

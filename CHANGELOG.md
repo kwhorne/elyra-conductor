@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.6] — 2026-07-12
+
+### Added
+
+- **Tools ▸ Compare Schemas.** Diff two saved connections table-by-table and
+  column-by-column — each table is marked same / differs / missing on either side, with
+  a **suggested migration script** (`CREATE TABLE`/`ALTER TABLE … ADD COLUMN`) generated
+  underneath. Read-only: it never runs anything, and type mismatches are reported but
+  never auto-fixed.
+- **Data masking in Data Transfer.** Each table row gets a 🔒 button to set a per-column
+  masking rule — NULL, a fixed value, an irreversible hash, or length-preserving redact
+  — applied only to what's written on the target, for safe prod→dev copies.
+- **Worktree conflict warning.** The Worktrees panel now flags files with uncommitted
+  changes in more than one worktree at once — an early heads-up before two agents (or
+  you and an agent) step on each other's edits.
+- **PR status badge on the tab itself.** A small 🟢/🔴/🟡 dot appears directly on any
+  terminal/agent tab whose folder is a worktree with an open PR, so CI state is visible
+  without opening the Worktrees panel or the Agent dashboard.
+
 ## [0.8.5] — 2026-07-12
 
 ### Added
@@ -783,7 +802,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.5...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.6...HEAD
+[0.8.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.4...v0.8.5
 [0.8.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.2...v0.8.3

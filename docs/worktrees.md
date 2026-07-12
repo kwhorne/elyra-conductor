@@ -42,6 +42,16 @@ Each row offers **🖥 Terminal** and **🤖 Agent** to open that worktree, and 
 for non-main worktrees. Removal keeps the branch — only the working copy goes. If the
 worktree has uncommitted changes, Conductor offers a forced remove.
 
+### Conflict warning — two worktrees touching the same file
+
+Each refresh, the panel does a cheap check across every worktree of the repo: any file
+with **uncommitted changes in more than one worktree right now** shows up as a warning
+banner — `⚠️ 2 files with uncommitted changes in more than one worktree` — listing the
+file and which branches are touching it. It's an early heads-up for exactly the situation
+worktrees are meant to avoid: two agents (or you and an agent) about to step on each
+other's edits before either side has committed. Read-only and best-effort — it only looks
+at working-tree status, not history, and never blocks anything.
+
 ## Agent command center
 
 With several agents running, you need to know — at a glance — which one needs you. Each
@@ -100,9 +110,20 @@ out as a worktree (terminal or agent) in a single click. The full loop:
 PR status is best-effort: if `gh` is missing or unauthenticated, no badges show and the
 worktree panel still works.
 
+### PR status on the tab itself
+
+You don't have to open the Worktrees panel or the Agent dashboard to see CI status — a
+small colored dot appears directly on any terminal or agent **tab** whose folder is a
+worktree with an open PR: 🟢 green (all checks passing), 🔴 red (a check failed), 🟡
+yellow (checks still pending). Hover it for the PR number/title. It refreshes in the
+background every 45s — same best-effort, read-only `gh` lookup as the panels above.
+
 ## Related
 
 - [Elyra agent](elyra-agent.md) — the agent panel and the command center state model.
 - [Git](git.md) — status in the sidebar and the in-app commit dialog.
 - [Tauri commands](tauri-commands.md) — `git_worktree_list` / `git_worktree_add` /
-  `git_worktree_remove`, `detect_gh` / `gh_pr_list` / `gh_pr_merge`.
+  `git_worktree_remove` / `git_worktree_conflicts`, `detect_gh` / `gh_pr_list` /
+  `gh_pr_merge`.
+- [Database browser](database.md#compare-schemas-schema-diff--migration-script) —
+  Compare Schemas, the same "diff two connections" idea applied to table structure.

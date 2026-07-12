@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::Instant;
@@ -1334,6 +1335,40 @@ pub struct TransferOptions {
     /// If not recreating the structure, empty the target table before copying rows.
     pub truncate_existing: bool,
     pub batch_size: usize,
+    /// Data-masking rules applied to values as they're written to the target —
+    /// e.g. redact `users.email` when copying prod data down to a dev database.
+    /// Never touches the source; only what gets inserted on the target side.
+    #[serde(default)]
+    pub masks: Vec<MaskRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MaskRule {
+    /// `"<table>.<column>"`, e.g. `"users.email"`.
+    pub column: String,
+    /// "null" | "fixed" | "hash" | "redact".
+    pub kind: String,
+    /// The literal to use when `kind == "fixed"`.
+    #[serde(default)]
+    pub value: Option<String>,
+}
+
+/// Apply one masking rule to a single cell. `hash` is a stable, irreversible
+/// digest (consistent within a run, so joins on the masked column still work);
+/// `redact` keeps the value's length but blanks its content.
+fn mask_value(kind: &str, fixed: Option<&str>, value: Option<String>) -> Option<String> {
+    match kind {
+        "null" => None,
+        "fixed" => Some(fixed.unwrap_or("").to_string()),
+        "hash" => value.map(|v| {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            v.hash(&mut h);
+            format!("{:016x}", h.finish())
+        }),
+        "redact" => value.map(|v| v.chars().map(|c| if c.is_whitespace() { c } else { '*' }).collect()),
+        _ => value,
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1554,6 +1589,13 @@ pub fn db_transfer_tables(
                     .map(|c| quote_ident(&source_engine, c))
                     .collect::<Vec<_>>()
                     .join(", ");
+                // Column name -> mask rule for this table, keyed by "<table>.<column>".
+                let table_prefix = format!("{table}.");
+                let masks_by_col: HashMap<&str, &MaskRule> = options
+                    .masks
+                    .iter()
+                    .filter_map(|m| m.column.strip_prefix(&table_prefix as &str).map(|col| (col, m)))
+                    .collect();
                 let mut offset = 0usize;
                 loop {
                     let select_sql = format!(
@@ -1565,7 +1607,18 @@ pub fn db_transfer_tables(
                     if n == 0 {
                         break;
                     }
-                    let insert_sql = build_insert(table, &col_names, &page.rows, &target_engine);
+                    let mut rows = page.rows;
+                    if !masks_by_col.is_empty() {
+                        for row in rows.iter_mut() {
+                            for (i, colname) in col_names.iter().enumerate() {
+                                if let Some(rule) = masks_by_col.get(colname.as_str()) {
+                                    let v = row[i].take();
+                                    row[i] = mask_value(&rule.kind, rule.value.as_deref(), v);
+                                }
+                            }
+                        }
+                    }
+                    let insert_sql = build_insert(table, &col_names, &rows, &target_engine);
                     db_query(state.clone(), target_id.clone(), insert_sql, Some(1))?;
                     copied += n as u64;
                     offset += n;
@@ -1613,6 +1666,171 @@ pub fn db_transfer_tables(
     }
 
     Ok(results)
+}
+
+// ── schema diff (Tools ▸ Compare Schemas) ──────────────────────────────
+// Compares two already-open connections table-by-table and column-by-column,
+// and best-effort generates the SQL to bring the target in line with the
+// source (new tables, new columns). It never runs anything — purely a diff +
+// a script for the user to review and run themselves.
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SchemaColumnDiff {
+    pub name: String,
+    pub source_type: Option<String>,
+    pub target_type: Option<String>,
+    /// "same" | "type_mismatch" | "missing_in_target" | "missing_in_source"
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SchemaTableDiff {
+    pub table: String,
+    /// "same" | "different" | "missing_in_target" | "missing_in_source"
+    pub status: String,
+    pub columns: Vec<SchemaColumnDiff>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SchemaDiffResult {
+    pub tables: Vec<SchemaTableDiff>,
+    /// Best-effort `CREATE TABLE` / `ALTER TABLE ADD COLUMN` statements to bring
+    /// the target up to date with the source. Review before running — it never
+    /// drops or alters existing columns (type mismatches are reported, not fixed).
+    pub migration_sql: String,
+}
+
+#[tauri::command]
+pub fn db_schema_diff(
+    state: State<DbManager>,
+    source_id: String,
+    target_id: String,
+    source_engine: String,
+    target_engine: String,
+) -> Result<SchemaDiffResult, String> {
+    let source_tables = db_tables(state.clone(), source_id.clone())?;
+    let target_tables = db_tables(state.clone(), target_id.clone())?;
+    let source_set: HashSet<&str> = source_tables.iter().map(|s| s.as_str()).collect();
+    let target_set: HashSet<&str> = target_tables.iter().map(|s| s.as_str()).collect();
+
+    let mut all_tables: Vec<String> = source_tables.iter().chain(target_tables.iter()).cloned().collect();
+    all_tables.sort();
+    all_tables.dedup();
+
+    let mut tables = Vec::with_capacity(all_tables.len());
+    let mut migration = String::new();
+
+    for t in all_tables {
+        let in_source = source_set.contains(t.as_str());
+        let in_target = target_set.contains(t.as_str());
+
+        if in_source && !in_target {
+            let cols = db_columns(state.clone(), source_id.clone(), t.clone())?;
+            if let Ok(ddl) = build_create_table(&t, &cols, &target_engine, &source_engine) {
+                migration.push_str(&ddl);
+                migration.push_str(";\n\n");
+            }
+            tables.push(SchemaTableDiff {
+                columns: cols
+                    .into_iter()
+                    .map(|c| SchemaColumnDiff {
+                        name: c.name,
+                        source_type: Some(c.data_type),
+                        target_type: None,
+                        status: "missing_in_target".into(),
+                    })
+                    .collect(),
+                table: t,
+                status: "missing_in_target".into(),
+            });
+            continue;
+        }
+
+        if in_target && !in_source {
+            let cols = db_columns(state.clone(), target_id.clone(), t.clone())?;
+            tables.push(SchemaTableDiff {
+                columns: cols
+                    .into_iter()
+                    .map(|c| SchemaColumnDiff {
+                        name: c.name,
+                        source_type: None,
+                        target_type: Some(c.data_type),
+                        status: "missing_in_source".into(),
+                    })
+                    .collect(),
+                table: t,
+                status: "missing_in_source".into(),
+            });
+            continue;
+        }
+
+        // Present on both sides: compare column-by-column.
+        let scols = db_columns(state.clone(), source_id.clone(), t.clone())?;
+        let tcols = db_columns(state.clone(), target_id.clone(), t.clone())?;
+        let smap: HashMap<&str, &ColumnInfo> = scols.iter().map(|c| (c.name.as_str(), c)).collect();
+        let tmap: HashMap<&str, &ColumnInfo> = tcols.iter().map(|c| (c.name.as_str(), c)).collect();
+        let mut names: Vec<&str> = smap.keys().chain(tmap.keys()).copied().collect();
+        names.sort();
+        names.dedup();
+
+        let mut coldiffs = Vec::with_capacity(names.len());
+        let mut changed = false;
+        for n in names {
+            match (smap.get(n), tmap.get(n)) {
+                (Some(s), Some(tg)) => {
+                    let same = s.data_type.eq_ignore_ascii_case(&tg.data_type);
+                    if !same {
+                        changed = true;
+                    }
+                    coldiffs.push(SchemaColumnDiff {
+                        name: n.to_string(),
+                        source_type: Some(s.data_type.clone()),
+                        target_type: Some(tg.data_type.clone()),
+                        status: if same { "same".into() } else { "type_mismatch".into() },
+                    });
+                }
+                (Some(s), None) => {
+                    changed = true;
+                    let ty = map_column_type(&target_engine, &source_engine, &s.data_type);
+                    migration.push_str(&format!(
+                        "ALTER TABLE {} ADD COLUMN {} {};\n",
+                        quote_ident(&target_engine, &t),
+                        quote_ident(&target_engine, n),
+                        ty
+                    ));
+                    coldiffs.push(SchemaColumnDiff {
+                        name: n.to_string(),
+                        source_type: Some(s.data_type.clone()),
+                        target_type: None,
+                        status: "missing_in_target".into(),
+                    });
+                }
+                (None, Some(tg)) => {
+                    changed = true;
+                    coldiffs.push(SchemaColumnDiff {
+                        name: n.to_string(),
+                        source_type: None,
+                        target_type: Some(tg.data_type.clone()),
+                        status: "missing_in_source".into(),
+                    });
+                }
+                (None, None) => unreachable!(),
+            }
+        }
+        if changed {
+            migration.push('\n');
+        }
+        tables.push(SchemaTableDiff {
+            table: t,
+            status: if changed { "different".into() } else { "same".into() },
+            columns: coldiffs,
+        });
+    }
+
+    Ok(SchemaDiffResult {
+        tables,
+        migration_sql: migration.trim().to_string(),
+    })
 }
 
 #[cfg(test)]

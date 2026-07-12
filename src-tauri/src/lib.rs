@@ -59,7 +59,8 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         ],
     )?;
     let data_transfer = MenuItem::with_id(app, "data-transfer", "Data Transfer…", true, None::<&str>)?;
-    let tools_menu = Submenu::with_items(app, "Tools", true, &[&data_transfer])?;
+    let compare_schemas = MenuItem::with_id(app, "compare-schemas", "Compare Schemas…", true, None::<&str>)?;
+    let tools_menu = Submenu::with_items(app, "Tools", true, &[&data_transfer, &compare_schemas])?;
     Menu::with_items(app, &[&app_menu, &edit_menu, &window_menu, &tools_menu])
 }
 
@@ -88,6 +89,8 @@ pub fn run() {
                     let _ = app.emit("menu://about", ());
                 } else if event.id() == "data-transfer" {
                     let _ = app.emit("menu://data-transfer", ());
+                } else if event.id() == "compare-schemas" {
+                    let _ = app.emit("menu://compare-schemas", ());
                 }
             });
             Ok(())
@@ -132,6 +135,7 @@ pub fn run() {
             projects::home_dir,
             projects::run_step,
             projects::git_worktree_list,
+            projects::git_worktree_conflicts,
             projects::git_worktree_add,
             projects::git_worktree_remove,
             projects::detect_gh,
@@ -168,6 +172,7 @@ pub fn run() {
             db::db_table_info,
             db::db_query,
             db::db_transfer_tables,
+            db::db_schema_diff,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

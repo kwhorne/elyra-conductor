@@ -84,6 +84,66 @@
     selected = allSelected ? new Set() : new Set(tables);
   }
 
+  // ── data masking (per-column, applied only on the target side) ──
+  // maskColumns[table] = ColumnInfo[] once loaded; masks[table][column] = { kind, value }
+  let maskOpenTable = $state(null); // which table's column list is expanded, or null
+  let maskColumns = $state({}); // table -> ColumnInfo[]
+  let maskColumnsLoading = $state(false);
+  let masks = $state({}); // table -> { column -> { kind, value } }
+  const MASK_KINDS = [
+    { value: "none", label: "Don't mask" },
+    { value: "null", label: "Set to NULL" },
+    { value: "fixed", label: "Fixed value" },
+    { value: "hash", label: "Hash (irreversible)" },
+    { value: "redact", label: "Redact (keep length)" },
+  ];
+
+  async function toggleMaskEditor(t) {
+    if (maskOpenTable === t) {
+      maskOpenTable = null;
+      return;
+    }
+    maskOpenTable = t;
+    if (!maskColumns[t]) {
+      maskColumnsLoading = true;
+      try {
+        maskColumns = { ...maskColumns, [t]: await invoke("db_columns", { id: source.id, table: t }) };
+      } catch {
+        maskColumns = { ...maskColumns, [t]: [] };
+      }
+      maskColumnsLoading = false;
+    }
+  }
+  function setMaskKind(t, col, kind) {
+    const forTable = { ...(masks[t] ?? {}) };
+    forTable[col] = { ...(forTable[col] ?? {}), kind };
+    masks = { ...masks, [t]: forTable };
+  }
+  function setMaskValue(t, col, value) {
+    const forTable = { ...(masks[t] ?? {}) };
+    forTable[col] = { ...(forTable[col] ?? {}), value };
+    masks = { ...masks, [t]: forTable };
+  }
+  // Count of columns actually masked (kind !== "none") across all selected tables — shown as a small badge.
+  let maskCount = $derived.by(() => {
+    let n = 0;
+    for (const t of Object.keys(masks)) {
+      for (const col of Object.values(masks[t] ?? {})) if (col.kind && col.kind !== "none") n++;
+    }
+    return n;
+  });
+  function buildMaskRules() {
+    const rules = [];
+    for (const t of Object.keys(masks)) {
+      if (!selected.has(t)) continue;
+      for (const [col, rule] of Object.entries(masks[t] ?? {})) {
+        if (!rule.kind || rule.kind === "none") continue;
+        rules.push({ column: `${t}.${col}`, kind: rule.kind, value: rule.value ?? null });
+      }
+    }
+    return rules;
+  }
+
   async function start() {
     if (running) return;
     error = null;
@@ -117,7 +177,7 @@
         sourceEngine: source.config.engine,
         targetEngine: target.config.engine,
         tables: list,
-        options,
+        options: { ...options, masks: buildMaskRules() },
       });
     } catch (e) {
       error = String(e?.message ?? e);
@@ -172,6 +232,9 @@
         {:else}
           <label class="chk"><input type="checkbox" bind:checked={options.truncate_existing} disabled={running} /> Empty target table before copying</label>
         {/if}
+        {#if options.data && maskCount > 0}
+          <div class="mask-summary">🔒 {maskCount} column{maskCount === 1 ? "" : "s"} will be masked on the target — click 🔒 on a table below to edit.</div>
+        {/if}
       </div>
 
       <div class="tables-box">
@@ -189,16 +252,42 @@
             <div class="hint">{source ? "No tables found." : "Pick a source connection."}</div>
           {:else}
             {#each tables as t (t)}
-              <label class="trow">
-                <input type="checkbox" checked={selected.has(t)} onchange={() => toggleTable(t)} disabled={running} />
-                <span class="tn">{t}</span>
-                {#if progress?.table === t}
-                  <span class="prog" class:err={progress.error}>{progress.error ? "✗" : `${progress.rowsCopied} rows…`}</span>
-                {:else if results.find((r) => r.table === t)}
-                  {@const r = results.find((r2) => r2.table === t)}
-                  <span class="prog" class:ok={r.ok} class:err={!r.ok} title={r.error ?? ""}>{r.ok ? `✓ ${r.rows_copied} rows` : "✗ failed"}</span>
+              {@const tableMasked = Object.values(masks[t] ?? {}).some((r) => r.kind && r.kind !== "none")}
+              <div class="trow-wrap">
+                <div class="trow">
+                  <input type="checkbox" checked={selected.has(t)} onchange={() => toggleTable(t)} disabled={running} />
+                  <span class="tn">{t}</span>
+                  {#if progress?.table === t}
+                    <span class="prog" class:err={progress.error}>{progress.error ? "✗" : `${progress.rowsCopied} rows…`}</span>
+                  {:else if results.find((r) => r.table === t)}
+                    {@const r = results.find((r2) => r2.table === t)}
+                    <span class="prog" class:ok={r.ok} class:err={!r.ok} title={r.error ?? ""}>{r.ok ? `✓ ${r.rows_copied} rows` : "✗ failed"}</span>
+                  {:else if options.data}
+                    <button type="button" class="mask-btn" class:active={tableMasked} title="Mask columns for this table" onclick={() => toggleMaskEditor(t)} disabled={running}>🔒</button>
+                  {/if}
+                </div>
+                {#if maskOpenTable === t}
+                  <div class="mask-editor">
+                    {#if maskColumnsLoading && !maskColumns[t]}
+                      <div class="hint">Loading columns…</div>
+                    {:else if (maskColumns[t] ?? []).length === 0}
+                      <div class="hint">No columns found.</div>
+                    {:else}
+                      {#each maskColumns[t] as col (col.name)}
+                        <div class="mask-row">
+                          <span class="mcol">{col.name}</span>
+                          <select value={masks[t]?.[col.name]?.kind ?? "none"} onchange={(e) => setMaskKind(t, col.name, e.currentTarget.value)} disabled={running}>
+                            {#each MASK_KINDS as k (k.value)}<option value={k.value}>{k.label}</option>{/each}
+                          </select>
+                          {#if masks[t]?.[col.name]?.kind === "fixed"}
+                            <input class="mval" placeholder="value" value={masks[t]?.[col.name]?.value ?? ""} oninput={(e) => setMaskValue(t, col.name, e.currentTarget.value)} disabled={running} />
+                          {/if}
+                        </div>
+                      {/each}
+                    {/if}
+                  </div>
                 {/if}
-              </label>
+              </div>
             {/each}
           {/if}
         </div>
@@ -235,8 +324,17 @@
   .tables-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--bg-3); }
   .tables-head .count { font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); }
   .tables-list { overflow-y: auto; padding: 4px 6px; flex: 1; }
-  .trow { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 5px; font-size: 12px; cursor: pointer; }
+  .trow { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 5px; font-size: 12px; }
   .trow:hover { background: var(--bg-3); }
+  .mask-summary { font-size: 11px; color: #e0af68; }
+  .mask-btn { background: transparent; border: none; color: var(--text-dim); font-size: 12px; cursor: pointer; padding: 2px 4px; border-radius: 4px; opacity: 0.6; }
+  .mask-btn:hover:not(:disabled) { opacity: 1; background: var(--bg); }
+  .mask-btn.active { opacity: 1; filter: drop-shadow(0 0 3px #e0af68); }
+  .mask-editor { margin: 2px 0 6px 26px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); display: flex; flex-direction: column; gap: 4px; }
+  .mask-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+  .mcol { min-width: 110px; color: var(--text); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mask-row select { background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; font-size: 11px; }
+  .mval { background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; font-size: 11px; flex: 1; min-width: 0; }
   .tn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hint { padding: 20px; text-align: center; color: var(--text-dim); font-size: 12px; }
   .prog { font-size: 11px; font-family: var(--font-mono); color: var(--text-dim); }

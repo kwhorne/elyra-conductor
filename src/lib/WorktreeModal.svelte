@@ -15,6 +15,7 @@
   let inputEl = $state();
   let prs = $state({}); // branch -> PR info (from gh)
   let prsLoading = $state(false);
+  let conflicts = $state([]); // { file, worktrees: [branch, ...] } — uncommitted changes overlapping across worktrees
 
   function baseOf(p) {
     return p ? p.split("/").pop() : "";
@@ -32,6 +33,18 @@
     }
     loading = false;
     loadPrs();
+    loadConflicts();
+  }
+
+  // Cheap, best-effort heads-up: files with uncommitted changes in more than
+  // one worktree right now — e.g. two agents about to step on each other.
+  async function loadConflicts() {
+    if (!project) return;
+    try {
+      conflicts = await invoke("git_worktree_conflicts", { path: project.path });
+    } catch {
+      conflicts = [];
+    }
   }
 
   // PRs load lazily and never block the worktree list. Needs an authenticated
@@ -157,6 +170,21 @@
         <div class="err">{error}</div>
       {/if}
 
+      {#if conflicts.length > 0}
+        <div class="conflict-warn">
+          <span class="cw-icon">⚠️</span>
+          <div class="cw-body">
+            <div class="cw-title">{conflicts.length} file{conflicts.length === 1 ? "" : "s"} with uncommitted changes in more than one worktree</div>
+            <div class="cw-list">
+              {#each conflicts.slice(0, 6) as c (c.file)}
+                <div class="cw-row"><code>{c.file}</code> <span class="cw-branches">{c.worktrees.join(", ")}</span></div>
+              {/each}
+              {#if conflicts.length > 6}<div class="cw-row cw-more">+{conflicts.length - 6} more…</div>{/if}
+            </div>
+          </div>
+        </div>
+      {/if}
+
       <div class="list">
         {#if loading}
           <div class="empty">Loading…</div>
@@ -250,6 +278,14 @@
   .create input.base { flex: 0 0 150px; }
   .create input:focus { border-color: var(--accent); }
   .err { margin: 10px 14px 0; background: rgba(247, 118, 142, 0.12); color: #f7768e; border-radius: 7px; padding: 8px 12px; font-size: 12px; font-family: var(--font-mono); white-space: pre-wrap; }
+  .conflict-warn { margin: 10px 14px 0; background: rgba(224, 175, 104, 0.1); border: 1px solid rgba(224, 175, 104, 0.35); border-radius: 7px; padding: 8px 12px; display: flex; gap: 8px; }
+  .cw-icon { flex: none; }
+  .cw-title { font-size: 12px; font-weight: 600; color: #e0af68; margin-bottom: 4px; }
+  .cw-list { display: flex; flex-direction: column; gap: 2px; }
+  .cw-row { font-size: 11px; color: var(--text-dim); display: flex; gap: 8px; align-items: baseline; }
+  .cw-row code { color: var(--text); font-family: var(--font-mono); }
+  .cw-branches { font-family: var(--font-mono); }
+  .cw-more { font-style: italic; }
   .list { overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
   .empty { color: var(--text-dim); text-align: center; padding: 28px; font-size: 13px; }
   .row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; background: var(--bg-3); }

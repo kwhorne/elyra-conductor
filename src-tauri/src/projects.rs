@@ -962,6 +962,52 @@ pub fn git_worktree_list(path: String) -> Vec<Worktree> {
     res
 }
 
+/// Files with **uncommitted** changes in more than one worktree of the same
+/// repo — an early "heads up, two agents are touching the same file" signal.
+/// Cheap and best-effort: only looks at working-tree status, not history, and
+/// never blocks anything — just surfaces it in the Worktrees panel.
+#[derive(serde::Serialize)]
+pub struct WorktreeConflict {
+    pub file: String,
+    pub worktrees: Vec<String>, // branch name (or short HEAD if detached)
+}
+
+#[tauri::command]
+pub fn git_worktree_conflicts(path: String) -> Vec<WorktreeConflict> {
+    let trees = git_worktree_list(path);
+    if trees.len() < 2 {
+        return vec![];
+    }
+    let mut by_file: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    for t in &trees {
+        let Some(out) = git(&t.path, &["status", "--porcelain"]) else {
+            continue;
+        };
+        let label = t.branch.clone().unwrap_or_else(|| format!("({})", t.head));
+        for line in out.lines() {
+            if line.len() < 4 {
+                continue;
+            }
+            // Porcelain v1 short format: "XY path" or "XY orig -> new" for renames.
+            let file = line[3..].rsplit(" -> ").next().unwrap_or("").trim().to_string();
+            if file.is_empty() {
+                continue;
+            }
+            let entry = by_file.entry(file).or_default();
+            if !entry.contains(&label) {
+                entry.push(label.clone());
+            }
+        }
+    }
+    let mut out: Vec<WorktreeConflict> = by_file
+        .into_iter()
+        .filter(|(_, worktrees)| worktrees.len() > 1)
+        .map(|(file, worktrees)| WorktreeConflict { file, worktrees })
+        .collect();
+    out.sort_by(|a, b| a.file.cmp(&b.file));
+    out
+}
+
 #[tauri::command]
 pub fn git_worktree_add(repo: String, branch: String, base: Option<String>) -> Result<String, String> {
     let branch = branch.trim().to_string();

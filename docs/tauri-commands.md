@@ -21,6 +21,7 @@ registered in `src-tauri/src/lib.rs`.
 | `git_changes` | `projects.rs` | List working-tree changes for the commit dialog. |
 | `git_commit` | `projects.rs` | Stage, commit, and optionally push. |
 | `git_worktree_list` / `git_worktree_add` / `git_worktree_remove` | `projects.rs` | Parallel isolated worktrees per branch. See [Worktrees](worktrees.md). |
+| `git_worktree_conflicts` | `projects.rs` | Files with uncommitted changes in more than one worktree of a repo (read-only heads-up). See [Worktrees](worktrees.md#conflict-warning--two-worktrees-touching-the-same-file). |
 | `detect_gh` / `gh_pr_list` | `projects.rs` | GitHub PR + CI status per branch via the `gh` CLI. |
 | `gh_pr_merge` | `projects.rs` | Squash/rebase/merge + delete-branch for a PR (auto-merge queue). See [Worktrees](worktrees.md#agent-dashboard-multi-agent-cockpit--auto-merge-queue). |
 | `run_step` | `projects.rs` | Run one runbook step headless (login shell, timeout) for [Verify](runbooks.md). |
@@ -42,7 +43,8 @@ registered in `src-tauri/src/lib.rs`.
 | `db_connect` / `db_disconnect` | `db.rs` | Open / close a MySQL or SQLite connection. |
 | `db_tables` / `db_columns` | `db.rs` | Schema: list tables / a table's columns. |
 | `db_query` | `db.rs` | Run SQL; returns columns + rows (or rows affected). Backs the [database browser](database.md). |
-| `db_transfer_tables` | `db.rs` | Copy one or more tables from one open connection to another (structure and/or data); emits `db-transfer-progress` events. Backs [Tools ▸ Data Transfer](database.md#data-transfer-copy-a-database-or-just-some-tables). |
+| `db_transfer_tables` | `db.rs` | Copy one or more tables from one open connection to another (structure and/or data, with optional per-column masking); emits `db-transfer-progress` events. Backs [Tools ▸ Data Transfer](database.md#data-transfer-copy-a-database-or-just-some-tables). |
+| `db_schema_diff` | `db.rs` | Table/column diff between two open connections + a best-effort migration script. Backs [Tools ▸ Compare Schemas](database.md#compare-schemas-schema-diff--migration-script). |
 
 ## Events
 
