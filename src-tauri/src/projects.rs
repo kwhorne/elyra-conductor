@@ -562,9 +562,16 @@ pub fn open_in_editor(editor: String, path: String) -> Result<(), String> {
         }
         EditorLauncher::App { app_name, bundle_id } => {
             let app = find_app(app_name, bundle_id).ok_or_else(|| format!("{app_name}.app not found in /Applications"))?;
+            // `open -a <app> <path>` routes through Launch Services' "open
+            // documents" Apple Event, which macOS refuses for a folder unless
+            // the app explicitly declares it handles the `public.folder` UTI
+            // (project editors generally don't bother). `--args` instead hands
+            // the path to the app as a plain argv entry — same as launching the
+            // binary directly — which every project-folder-opening app expects.
             std::process::Command::new("open")
                 .arg("-a")
                 .arg(app)
+                .arg("--args")
                 .arg(&path)
                 .spawn()
                 .map_err(|e| format!("failed to launch {editor}: {e}"))?;

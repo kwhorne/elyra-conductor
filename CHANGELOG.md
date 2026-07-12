@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.7] — 2026-07-12
+
+### Fixed
+
+- **Opening a project in `e` failed with "cannot open files in the 'folder' format."**
+  `open -a` routed the project path through macOS's document-open flow, which refuses
+  folders unless the app declares it handles them. Launching with `open -a … --args
+  <path>` instead hands the path over as a plain argument, like any other editor.
+
 ## [0.8.6] — 2026-07-12
 
 ### Added
@@ -802,7 +811,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.6...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.7...HEAD
+[0.8.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.4...v0.8.5
 [0.8.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.3...v0.8.4
