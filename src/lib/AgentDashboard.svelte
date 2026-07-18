@@ -18,7 +18,10 @@
     onclose,
   } = $props();
 
-  const PRESENCE_LABEL = { working: "Working", waiting: "Waiting for you", idle: "Idle", exited: "Exited" };
+  // Herdr-style semantic vocabulary ("every agent at a glance — blocked, working,
+  // done") — the same labels/glyphs used in the toolbar's herd strip.
+  const PRESENCE_LABEL = { working: "Working", waiting: "Blocked — needs your input", idle: "Idle", exited: "Done" };
+  const PRESENCE_GLYPH = { working: "▶", waiting: "⏸", idle: "○", exited: "✓" };
   const PRESENCE_ORDER = { waiting: 0, working: 1, idle: 2, exited: 3 };
 
   function ownerProject(cwd) {
@@ -176,7 +179,7 @@
           <div class="rows">
             {#each agentRows as r (r.tab.id)}
               <button class="row" onclick={() => jump(r.tab)}>
-                <span class="dot {r.presence}" title={PRESENCE_LABEL[r.presence]}></span>
+                <span class="dot {r.presence}" title={PRESENCE_LABEL[r.presence]}>{PRESENCE_GLYPH[r.presence]}</span>
                 <span class="rtitle">{r.tab.title || "elyra"}</span>
                 <span class="rproj" title={r.tab.cwd}>{r.projectName}</span>
                 <span class="rstatus">{r.status}</span>
@@ -232,10 +235,11 @@
   .rows { display: flex; flex-direction: column; gap: 2px; }
   .row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--bg-3); border: 1px solid transparent; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
   .row:hover { border-color: var(--accent); }
-  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-dim); }
-  .dot.working { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
-  .dot.waiting { background: #e0af68; animation: pulse 1.1s ease-in-out infinite; }
-  .dot.exited { background: var(--text-dim); opacity: 0.5; }
+  .dot { flex: none; line-height: 1; font-size: 11px; color: var(--text-dim); width: 14px; text-align: center; }
+  .dot.working { color: var(--accent); animation: pulse 1s ease-in-out infinite; }
+  .dot.waiting { color: #e0af68; animation: pulse 1.1s ease-in-out infinite; }
+  .dot.exited { color: var(--green); opacity: 0.8; }
+  .dot.idle { opacity: 0.6; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
   .rtitle { font-weight: 600; font-size: 12px; flex: none; }
   .rproj { font-size: 11px; color: var(--text-dim); flex: none; padding: 1px 6px; background: var(--bg); border-radius: 4px; }

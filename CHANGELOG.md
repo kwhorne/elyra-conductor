@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.8] — 2026-07-18
+
+### Added
+
+- **Herd strip — every agent at a glance, across every project.** The tab strip's agent
+  pills are now individual glyph chips, one per open agent: ⏸ blocked (needs your
+  input), ▶ working, ✓ done, ○ idle — with the agent's title, sorted so blocked agents
+  come first. Click a chip to jump straight to it; more than six collapse into a **+N**
+  chip that opens the full [Agent dashboard](docs/worktrees.md#agent-dashboard-multi-agent-cockpit--auto-merge-queue).
+  Presence labels across the app (tab dots, dashboard rows) now use the same shared
+  vocabulary — **blocked / working / done / idle** — instead of raw internal state names.
+
 ## [0.8.7] — 2026-07-12
 
 ### Fixed
@@ -811,7 +823,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.7...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.8...HEAD
+[0.8.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.5...v0.8.6
 [0.8.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.4...v0.8.5

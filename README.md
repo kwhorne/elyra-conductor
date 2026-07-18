@@ -136,13 +136,14 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   best-effort **conflict warning** flags files with uncommitted changes in more than one
   worktree at once, and a small **PR-status dot right on the tab** (🟢/🔴/🟡) shows CI
   state without opening any panel.
-- 🤖 **Agent command center** — each agent reports a coarse state, shown as a per-tab
-  dot (working / waiting on you / exited) and a pill in the tab strip counting how many
-  agents are **working** vs **waiting for your input**. Click to jump straight to one;
-  a notification fires when an agent starts waiting while you're looking elsewhere.
+- 🤖 **Agent command center + herd strip** — each agent reports a coarse, shared state —
+  ⏸ **blocked** / ▶ **working** / ✓ **done** / ○ idle — shown as a per-tab dot *and* as a
+  glyph chip in a **herd strip** next to the tab bar: every open agent, across every
+  project, at a glance, no dashboard required. Click a chip to jump straight to it; a
+  notification fires when an agent starts blocking on you while you're looking elsewhere.
 - 🎛 **Agent dashboard + auto-merge queue** — one view of every open agent across every
-  project and worktree (status, last activity, jump-to), sorted so agents **waiting on
-  you** float to the top. A **Ready to merge** queue lists PRs behind those agents whose
+  project and worktree (status, last activity, jump-to), sorted so **blocked** agents
+  float to the top. A **Ready to merge** queue lists PRs behind those agents whose
   checks are all green; **Squash & merge** runs `gh pr merge`, closes the agent tab, and
   removes the worktree in one click.
 - ✅ **GitHub PR status** — with an authenticated `gh`, each worktree shows its open

@@ -448,22 +448,24 @@
     tabPrStatus = map;
   }
 
-  const PRESENCE_LABEL = { working: "Agent working", waiting: "Waiting for you", idle: "Agent idle", exited: "Agent exited" };
-  let agentSummary = $derived.by(() => {
-    let working = 0,
-      waiting = 0;
-    for (const t of tabs) {
-      if (t.kind !== "agent") continue;
-      const s = agentPresence[t.id];
-      if (s === "working") working++;
-      else if (s === "waiting") waiting++;
-    }
-    return { working, waiting };
+  // Herdr-style semantic vocabulary ("every agent at a glance — blocked, working,
+  // done") instead of raw internal state names: "waiting" reads as *blocked* (it's
+  // asked you something and can't proceed), "exited" reads as *done* (it finished
+  // its run). "idle" is the in-between: started, no open question, not yet exited.
+  const PRESENCE_LABEL = { working: "Working", waiting: "Blocked — needs your input", idle: "Idle", exited: "Done" };
+  const HERD_GLYPH = { working: "▶", waiting: "⏸", idle: "○", exited: "✓" };
+  const HERD_ORDER = { waiting: 0, working: 1, idle: 2, exited: 3 };
+  const HERD_MAX_CHIPS = 6;
+  // The "herd view": every open agent, across every project, as a glyph — not
+  // just a color — always visible next to the tab strip (no dashboard needed
+  // for the at-a-glance case). Blocked agents sort first; click a chip to jump.
+  let herdChips = $derived.by(() => {
+    const chips = tabs
+      .filter((t) => t.kind === "agent")
+      .map((t) => ({ tab: t, state: agentPresence[t.id] ?? "idle" }));
+    chips.sort((a, b) => (HERD_ORDER[a.state] ?? 9) - (HERD_ORDER[b.state] ?? 9));
+    return chips;
   });
-  function jumpToAgent(state) {
-    const t = tabs.find((t) => t.kind === "agent" && agentPresence[t.id] === state);
-    if (t) focusTab(t);
-  }
   let titles = $state({}); // termId -> foreground process name (or null)
 
   // ---------- finished-command notifications ----------
@@ -2093,18 +2095,18 @@
         {/each}
         <button class="new-tab" title="New tab (⌘N)" onclick={() => newTab(activeProject?.path ?? root, activeProject?.name)}>＋</button>
       </div>
-      {#if tabs.some((t) => t.kind === "agent")}
+      {#if herdChips.length > 0}
         <div class="agent-center">
-          {#if agentSummary.waiting}
-            <button class="ac-pill waiting" onclick={() => jumpToAgent("waiting")} title="An agent is waiting for your input — click to jump">
-              <span class="ac-dot waiting"></span>{agentSummary.waiting} waiting
-            </button>
-          {/if}
-          {#if agentSummary.working}
-            <button class="ac-pill working" onclick={() => jumpToAgent("working")} title="Agents working — click to jump">
-              <span class="ac-dot working"></span>{agentSummary.working} working
-            </button>
-          {/if}
+          <div class="herd-strip">
+            {#each herdChips.slice(0, HERD_MAX_CHIPS) as h (h.tab.id)}
+              <button class="herd-chip {h.state}" onclick={() => focusTab(h.tab)} title={`${h.tab.title || "elyra"} — ${PRESENCE_LABEL[h.state]}`}>
+                <span class="herd-glyph">{HERD_GLYPH[h.state]}</span>{h.tab.title || "elyra"}
+              </button>
+            {/each}
+            {#if herdChips.length > HERD_MAX_CHIPS}
+              <button class="herd-chip more" onclick={() => (agentDashboardOpen = true)} title="Show all agents">+{herdChips.length - HERD_MAX_CHIPS}</button>
+            {/if}
+          </div>
           <button class="ac-pill" onclick={() => (agentDashboardOpen = true)} title="Agent dashboard — every agent, plus an auto-merge queue for green PRs">
             🎛 Dashboard
           </button>
@@ -2423,10 +2425,19 @@
   .agent-center { display: flex; align-items: center; gap: 6px; flex: none; margin-left: 8px; padding-left: 8px; border-left: 1px solid var(--border); }
   .ac-pill { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-3); border: 1px solid var(--border); color: var(--text-dim); border-radius: 12px; padding: 2px 9px; font-size: 11px; cursor: pointer; white-space: nowrap; }
   .ac-pill:hover { color: var(--text); border-color: var(--accent); }
-  .ac-pill.waiting { color: #e0af68; border-color: color-mix(in srgb, #e0af68 45%, var(--border)); }
-  .ac-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-  .ac-dot.working { background: var(--accent); }
-  .ac-dot.waiting { background: #e0af68; animation: wait-pulse 1.1s ease-in-out infinite; }
+  /* Herd view: one glyph chip per open agent, always visible (Herdr-style "every
+     agent at a glance") — no modal needed to see who's blocked vs working vs done. */
+  .herd-strip { display: flex; align-items: center; gap: 4px; max-width: 46vw; overflow-x: auto; }
+  .herd-chip { display: inline-flex; align-items: center; gap: 5px; background: var(--bg-3); border: 1px solid var(--border); color: var(--text-dim); border-radius: 12px; padding: 2px 8px; font-size: 11px; cursor: pointer; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; flex: none; }
+  .herd-chip:hover { color: var(--text); border-color: var(--accent); }
+  .herd-chip.more { color: var(--text-dim); font-family: var(--font-mono); }
+  .herd-glyph { flex: none; line-height: 1; }
+  .herd-chip.working { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+  .herd-chip.working .herd-glyph { animation: run-spin 1s ease-in-out infinite; }
+  .herd-chip.waiting { color: #e0af68; border-color: color-mix(in srgb, #e0af68 45%, var(--border)); }
+  .herd-chip.waiting .herd-glyph { animation: wait-pulse 1.1s ease-in-out infinite; }
+  .herd-chip.exited { color: var(--green); opacity: 0.8; }
+  .herd-chip.idle { opacity: 0.7; }
   .tab-proc { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-left: 4px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
   .tab.running { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
   .tab-label { display: inline-block; background: transparent; border: none; color: var(--text); padding: 4px 6px; font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; -webkit-user-drag: none; user-select: none; }

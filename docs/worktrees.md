@@ -55,12 +55,16 @@ at working-tree status, not history, and never blocks anything.
 ## Agent command center
 
 With several agents running, you need to know — at a glance — which one needs you. Each
-agent reports a coarse state, surfaced two ways:
+agent reports a coarse state, in a small shared semantic vocabulary (**blocked**,
+**working**, **done**, **idle**) rather than raw colors, surfaced three ways:
 
-- **A dot on its tab:** blue pulse = working, amber pulse = **waiting on you**, grey =
-  exited.
-- **A pill in the tab strip:** counts how many agents are *working* vs *waiting*. Click
-  it to jump straight to one. `waiting` is prioritised — a blocked agent is wasted time.
+- **A dot on its tab:** blue pulse = working, amber pulse = **blocked** (waiting on you),
+  green = **done** (exited), grey = idle.
+- **The herd strip:** every open agent gets its own glyph chip next to the tab strip —
+  ⏸ blocked, ▶ working, ✓ done, ○ idle — with its title, so you see every agent **at a
+  glance across every project** without opening anything. Blocked agents sort first.
+  Click a chip to jump straight to it; more than six collapse into a **+N** chip that
+  opens the full [dashboard](#agent-dashboard-multi-agent-cockpit--auto-merge-queue).
 
 When an agent starts waiting while you're looking at another tab or app, you get a system
 notification (*Agent needs you*). See [Elyra agent](elyra-agent.md#agent-command-center)
@@ -68,15 +72,14 @@ for how the state is derived.
 
 ## Agent dashboard (multi-agent cockpit + auto-merge queue)
 
-With several agents running across different worktrees, the tab strip's presence pill
-only tells you *how many* are working/waiting. Click **🎛 Dashboard** next to it (shown
-whenever at least one agent tab is open; also in the command palette — *Agent
-dashboard…*) for the full cockpit:
+With several agents running across different worktrees, the herd strip is the at-a-glance
+view; click **🎛 Dashboard** next to it (shown whenever at least one agent tab is open;
+also in the command palette — *Agent dashboard…*) for the full cockpit:
 
 - **Agents** — every open agent tab, across every project and worktree, in one list:
-  presence dot (working / waiting for you / idle / exited), its owning project, the
+  presence glyph (⏸ blocked / ▶ working / ○ idle / ✓ done), its owning project, the
   latest **status line**, and **last activity** ("2m ago"). Click a row to jump straight
-  to that tab. Sorted so **waiting** agents float to the top — the ones costing you time.
+  to that tab. Sorted so **blocked** agents float to the top — the ones costing you time.
 - **Ready to merge** — an auto-merge queue: for every project behind an open agent,
   Conductor checks its open PRs and lists the ones that are **not a draft** and have
   **all checks passing** (no failing/pending checks). Each row shows the PR number/title,
