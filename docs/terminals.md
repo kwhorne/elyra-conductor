@@ -103,6 +103,19 @@ Only zsh is supported for now; other shells keep the lighter, process-name-based
 Press `⌘F` while a terminal is focused to open a find bar. Use `↵` / `⇧↵` to step
 through matches and `Esc` to close. Powered by the xterm search addon.
 
+## Clickable links
+
+URLs in terminal output are underlined on hover and open in your **system browser** when
+clicked (e.g. a dev server printing `➜  Local:  http://localhost:1420`). Links open
+via the OS, not inside the app window.
+
+## Font size
+
+`⌘+` and `⌘−` grow and shrink the terminal font across **all panes** at once; `⌘0`
+resets it to the default (13px). The chosen size persists across restarts (it's part of
+the saved layout). Emoji and wide CJK glyphs are measured at their correct width
+(Unicode 11), so box-drawing in TUIs stays aligned.
+
 ## Newline vs. submit (`⇧↵`)
 
 Many TUIs use `⇧↵` to insert a newline while `↵` submits. Plain xterm.js can't send a

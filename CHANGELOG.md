@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-07-19
+
+### Added
+
+- **Clickable links in the terminal.** URLs in output are now underlined on hover and
+  open in your **system browser** on click (wired through Tauri's `open_url`, not the
+  webview) — e.g. a dev server's `http://localhost:1420`.
+- **Terminal font zoom.** `⌘+` / `⌘−` grow and shrink the terminal font across **all
+  panes** at once, `⌘0` resets to the default. The size persists across restarts and is
+  also available from the command palette.
+- **Correct emoji / CJK glyph width (Unicode 11).** Wide glyphs no longer smear
+  box-drawing in TUIs.
+
 ## [0.8.8] — 2026-07-18
 
 ### Added
@@ -823,7 +836,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.8...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.8...v0.9.0
 [0.8.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.6...v0.8.7
 [0.8.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.5...v0.8.6

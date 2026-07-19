@@ -5,11 +5,13 @@
   import { SearchAddon } from "@xterm/addon-search";
   import { SerializeAddon } from "@xterm/addon-serialize";
   import { WebglAddon } from "@xterm/addon-webgl";
+  import { WebLinksAddon } from "@xterm/addon-web-links";
+  import { Unicode11Addon } from "@xterm/addon-unicode11";
   import "@xterm/xterm/css/xterm.css";
   import { invoke, Channel } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
-  let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark", active = false, register = null, unregister = null, shellIntegration = false, oncommand = null } = $props();
+  let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark", fontSize = 13, active = false, register = null, unregister = null, shellIntegration = false, oncommand = null } = $props();
 
   // Focus the xterm when this pane becomes active (e.g. via keyboard pane-nav).
   $effect(() => {
@@ -95,7 +97,7 @@
 
   onMount(async () => {
     term = new Terminal({
-      fontSize: 13,
+      fontSize: fontSize || 13,
       fontFamily: '"JetBrains Mono", "SF Mono", Menlo, monospace',
       cursorBlink: true,
       allowProposedApi: true,
@@ -103,6 +105,18 @@
     });
     fit = new FitAddon();
     term.loadAddon(fit);
+    // Correct display width for emoji / CJK glyphs so TUIs (and the Elyra CLI)
+    // don't smear box-drawing. allowProposedApi is already on above.
+    try {
+      term.loadAddon(new Unicode11Addon());
+      term.unicode.activeVersion = "11";
+    } catch {}
+    // Clickable URLs — open in the *system* browser via Tauri, not the webview.
+    term.loadAddon(
+      new WebLinksAddon((_e, uri) => {
+        invoke("open_url", { url: uri }).catch(() => {});
+      }),
+    );
     search = new SearchAddon();
     term.loadAddon(search);
     serializeAddon = new SerializeAddon();
@@ -327,6 +341,20 @@
   // React to theme changes after mount.
   $effect(() => {
     if (term) term.options.theme = THEMES[theme] ?? THEMES.dark;
+  });
+
+  // React to font-size changes (⌘+/⌘−, driven globally from App). Re-fit so the
+  // pty's cols/rows track the new cell size, or TUIs wrap at the wrong width.
+  $effect(() => {
+    const size = fontSize || 13;
+    if (!term || term.options.fontSize === size) return;
+    term.options.fontSize = size;
+    if (el && el.clientWidth > 0 && el.clientHeight > 0) {
+      try {
+        fit?.fit();
+        invoke("pty_resize", { id, cols: term.cols, rows: term.rows }).catch(() => {});
+      } catch {}
+    }
   });
 
   onDestroy(() => {

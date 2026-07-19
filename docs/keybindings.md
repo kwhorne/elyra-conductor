@@ -22,6 +22,8 @@ Conductor is keyboard-first. The shortcuts below use `⌘` on macOS; on Linux/Wi
 | `⌘G` | Open the Git panel |
 | `⌘S` | Save the file (when the editor is focused) |
 | `⌘F` | Find in terminal (when a terminal is focused) |
+| `⌘+` / `⌘−` | Increase / decrease terminal font size (all panes) |
+| `⌘0` | Reset terminal font size to the default |
 | `⌘↵` | Commit (in the commit dialog) |
 | `⌘/` | Show the keyboard-shortcuts help |
 

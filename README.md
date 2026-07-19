@@ -55,7 +55,8 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
 - 🖥️ **Real terminals** — one PTY per pane, powered by `portable-pty` and rendered
   with `xterm.js` on the **GPU (WebGL)**. Output streams over a binary channel and is
   batched per frame, so several repaint-heavy agents stay smooth. Full resize handling
-  and your login shell.
+  and your login shell. **Clickable URLs** (open in your system browser), **⌘+/⌘−/⌘0
+  font zoom** across all panes, and correct emoji/CJK glyph width (Unicode 11).
 - 🔍 **Command palette (⌘K)** — jump between projects, tabs, and actions from one
   fuzzy-searchable list.
 - 🗂️ **File sidebar (⌘B)** — a lazy-loaded recursive file tree of the active

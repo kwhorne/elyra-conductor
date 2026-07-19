@@ -28,6 +28,8 @@
       items: [
         ["⌘F", "Find in terminal"],
         ["↵ / ⇧↵", "Next / previous match"],
+        ["⌘+ / ⌘− / ⌘0", "Font size: bigger / smaller / reset"],
+        ["Click URL", "Open link in the system browser"],
       ],
     },
     {

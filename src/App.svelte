@@ -103,12 +103,21 @@
   let showFiles = $state(true);
   let showHidden = $state(false);
   let theme = $state("dark");
+  let termFontSize = $state(13); // terminal font size (⌘+/⌘−/⌘0), shared by all panes
+  const TERM_FONT_MIN = 8;
+  const TERM_FONT_MAX = 28;
   let loaded = $state(false);
 
   // Apply theme to the document root (drives all CSS variables).
   $effect(() => {
     document.documentElement.dataset.theme = theme;
   });
+
+  // Terminal font size: delta === 0 resets to the default (13); otherwise
+  // clamp within [MIN, MAX]. Applied reactively by every Terminal pane.
+  function adjustTermFont(delta) {
+    termFontSize = delta === 0 ? 13 : Math.max(TERM_FONT_MIN, Math.min(TERM_FONT_MAX, termFontSize + delta));
+  }
 
   // ---------- per-project tasks (npm/make/just/composer) ----------
   let projectTasks = $state([]); // [{ label, command, source }]
@@ -1544,6 +1553,9 @@
     list.push({ id: "act:zoom", title: zoomed ? "Unzoom pane" : "Zoom active pane", hint: "\u2318\u2325Z", group: "action", icon: "\u26f6", action: () => { if (activeTab?.kind === "term") zoomed = !zoomed; } });
     list.push({ id: "act:toggle-hidden", title: showHidden ? "Hide node_modules/.git in tree" : "Show all files in tree", group: "action", icon: "\u{1F441}", action: () => (showHidden = !showHidden) });
     list.push({ id: "act:toggle-theme", title: theme === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "action", icon: theme === "dark" ? "\u2600" : "\u263D", action: () => (theme = theme === "dark" ? "light" : "dark") });
+    list.push({ id: "act:term-font-inc", title: "Terminal: increase font size", hint: "\u2318+", group: "action", icon: "\uFF0B", action: () => adjustTermFont(1) });
+    list.push({ id: "act:term-font-dec", title: "Terminal: decrease font size", hint: "\u2318\u2212", group: "action", icon: "\uFF0D", action: () => adjustTermFont(-1) });
+    list.push({ id: "act:term-font-reset", title: `Terminal: reset font size (${termFontSize}px \u2192 13px)`, hint: "\u23180", group: "action", icon: "\u21ba", action: () => adjustTermFont(0) });
     list.push({ id: "act:toggle-notify", title: notifyOnFinish ? "Disable finished-command notifications" : "Notify when a background command finishes", group: "action", icon: "\u{1F514}", action: () => { notifyOnFinish = !notifyOnFinish; if (notifyOnFinish) ensureNotifyPermission(); } });
     list.push({ id: "act:toggle-shellint", title: shellIntegration ? "Disable shell integration (zsh)" : "Enable shell integration (zsh) \u2014 real commands & exit codes", hint: "new terminals", group: "action", icon: "\u{1F517}", action: () => (shellIntegration = !shellIntegration) });
     list.push({ id: "act:toggle-broadcast", title: broadcast ? "Stop broadcasting input" : "Broadcast input to all panes", group: "action", icon: "\u2301", action: () => (broadcast = !broadcast) });
@@ -1649,6 +1661,16 @@
     } else if (k === "/") {
       e.preventDefault();
       helpOpen = !helpOpen;
+    } else if (k === "=" || k === "+") {
+      // ⌘+ (usually ⌘⇧= → "+", or a bare "=") — grow the terminal font.
+      e.preventDefault();
+      adjustTermFont(1);
+    } else if (k === "-" || k === "_") {
+      e.preventDefault();
+      adjustTermFont(-1);
+    } else if (k === "0") {
+      e.preventDefault();
+      adjustTermFont(0);
     } else {
       // ⌘1–⌘9 (Ctrl on non-mac) jump straight to a tab by its position in the
       // bar. Fall back to e.code (Digit1..9) for layouts where the number row
@@ -1682,6 +1704,7 @@
       showFiles,
       showHidden,
       theme,
+      termFontSize,
       showEditor,
       editorPath,
       notifyOnFinish,
@@ -1820,6 +1843,7 @@
     showFiles = saved.showFiles ?? true;
     showHidden = saved.showHidden ?? false;
     theme = saved.theme ?? "dark";
+    termFontSize = saved.termFontSize ?? 13;
     showEditor = saved.showEditor ?? false;
     editorPath = saved.editorPath ?? null;
     notifyOnFinish = saved.notifyOnFinish ?? true;
@@ -2178,7 +2202,7 @@
                   <button title="Split down (⇧⌘D)" onclick={() => splitPane(leaf.termId, "col")}>▤</button>
                   <button title="Close pane (⌘W)" onclick={() => closePane(leaf.termId)}>×</button>
                 </div>
-                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} persistKey={leaf.key} runCommand={leaf.runOnce ?? null} active={leaf.termId === activeTermId && tab.id === activeTabId} register={registerTerm} unregister={unregisterTerm} onactivity={() => markActivity(tab.id)} onuserinput={onPaneInput} shellIntegration={shellIntegration} oncommand={(rec) => onShellCommand(leaf.termId, rec)} />
+                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} fontSize={termFontSize} persistKey={leaf.key} runCommand={leaf.runOnce ?? null} active={leaf.termId === activeTermId && tab.id === activeTabId} register={registerTerm} unregister={unregisterTerm} onactivity={() => markActivity(tab.id)} onuserinput={onPaneInput} shellIntegration={shellIntegration} oncommand={(rec) => onShellCommand(leaf.termId, rec)} />
               </div>
             {/each}
 
