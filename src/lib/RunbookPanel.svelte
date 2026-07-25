@@ -1,6 +1,7 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { marked } from "marked";
+  import { sanitizeRunbookHtml } from "./sanitize.js";
 
   let {
     projectPath,
@@ -94,6 +95,12 @@ pnpm dev
     } else if (href.startsWith("ctask:")) {
       e.preventDefault();
       ontask?.(decodeURIComponent(href.slice("ctask:".length)));
+    } else if (/^https?:/i.test(href)) {
+      // Without this an external link would navigate the *whole webview* away
+      // from the app (a blank window you can only escape by restarting). Hand
+      // it to the OS browser instead, like terminal links.
+      e.preventDefault();
+      invoke("open_url", { url: href }).catch(() => {});
     }
   }
 
@@ -105,6 +112,9 @@ pnpm dev
     } catch {
       return [{ type: "html", html: "<p>Could not parse markdown.</p>" }];
     }
+    // Runbooks are agent-written and travel with cloned repos, so treat the
+    // rendered HTML as untrusted (see lib/sanitize.js). Sanitised once here
+    // rather than in the template, so it happens per parse, not per render.
     const out = [];
     for (const tok of tokens) {
       if (tok.type === "code") {
@@ -113,7 +123,7 @@ pnpm dev
       } else {
         let html = "";
         try {
-          html = marked.parser([tok]);
+          html = sanitizeRunbookHtml(marked.parser([tok]));
         } catch {
           html = "";
         }

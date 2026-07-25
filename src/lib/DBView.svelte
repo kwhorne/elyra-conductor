@@ -189,8 +189,21 @@
   function q(name) {
     return engine === "mysql" ? `\`${name.replace(/`/g, "``")}\`` : `"${name.replace(/"/g, '""')}"`;
   }
+  // Escape a value for a single-quoted SQL literal.
+  //
+  // Doubling `'` is enough for the SQL standard, but MySQL and ClickHouse also
+  // treat `\` as an escape character inside string literals. Without handling
+  // it, a value like `C:\path` silently changed meaning, and one ending in a
+  // backslash escaped the closing quote outright — breaking the statement (and
+  // opening the door to injection through a cell value).
+  //
+  // It has to stay engine-aware: PostgreSQL and SQLite take backslashes
+  // literally, so doubling them there would corrupt the data instead.
+  const BACKSLASH_ESCAPES = new Set(["mysql", "clickhouse"]);
   function esc(v) {
-    return String(v).replace(/'/g, "''");
+    let s = String(v);
+    if (BACKSLASH_ESCAPES.has(engine)) s = s.replace(/\\/g, "\\\\");
+    return s.replace(/'/g, "''");
   }
   function castText(col) {
     if (engine === "mysql") return `CAST(${q(col)} AS CHAR)`;

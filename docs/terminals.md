@@ -138,6 +138,18 @@ time Conductor launches, with a fresh shell started beneath it. A live PTY canno
 revived once the app closes, so this restores context, not a live process. Details and
 limits are in [State & persistence](persistence.md).
 
+### Secrets in saved scrollback
+
+Saved scrollback is stored in `localStorage` as plain text, and terminal output regularly
+contains credentials — a `cat .env`, an exported token, a connection string printed by a
+migration. Conductor masks the common shapes before writing: `*_TOKEN` / `*_PASSWORD`
+assignments, `Bearer` tokens, GitHub / AWS / Stripe / Slack / OpenAI keys, JWTs, PEM
+private-key blocks, and credentials inside URLs all become `•••REDACTED•••`.
+
+That is a mitigation, not a guarantee — a secret in an unusual format can still slip
+through. If you would rather nothing were written at all, `⌘K` → **Stop saving terminal
+scrollback to disk** turns it off and deletes whatever is already stored.
+
 ## Running a command on open
 
 Tabs opened for a [task](tasks.md) (or a file run) start a shell and then run the chosen

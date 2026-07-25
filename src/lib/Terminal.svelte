@@ -7,11 +7,12 @@
   import { WebglAddon } from "@xterm/addon-webgl";
   import { WebLinksAddon } from "@xterm/addon-web-links";
   import { Unicode11Addon } from "@xterm/addon-unicode11";
+  import { redactSecrets } from "./redact.js";
   import "@xterm/xterm/css/xterm.css";
   import { invoke, Channel } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
-  let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark", fontSize = 13, active = false, register = null, unregister = null, shellIntegration = false, oncommand = null } = $props();
+  let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark", fontSize = 13, persistScrollback = true, active = false, register = null, unregister = null, shellIntegration = false, oncommand = null } = $props();
 
   // Focus the xterm when this pane becomes active (e.g. via keyboard pane-nav).
   $effect(() => {
@@ -28,9 +29,22 @@
   let sbDirty = false; // true when new output arrived since the last save
   function saveScrollback() {
     if (!SB_KEY || !serializeAddon || !sbDirty) return; // skip when unchanged
+    // Honour the opt-out: drop anything already on disk so turning the setting
+    // off actually removes the history rather than just freezing it.
+    if (!persistScrollback) {
+      try {
+        localStorage.removeItem(SB_KEY);
+      } catch {}
+      sbDirty = false;
+      return;
+    }
     try {
       let data = serializeAddon.serialize({ scrollback: 1000 });
       if (data.length > SB_MAX) data = data.slice(data.length - SB_MAX);
+      // Terminal output routinely contains credentials (a `cat .env`, an
+      // exported token). localStorage is plain text on disk, so mask the
+      // obvious shapes before persisting — see lib/redact.js.
+      data = redactSecrets(data);
       if (data.trim()) localStorage.setItem(SB_KEY, data);
       sbDirty = false;
     } catch {}
@@ -296,7 +310,7 @@
 
     // Replay last session's scrollback as read-only history before the new
     // shell starts, so context isn't lost across restarts.
-    if (SB_KEY) {
+    if (SB_KEY && persistScrollback) {
       try {
         const prev = localStorage.getItem(SB_KEY);
         if (prev) {
@@ -308,15 +322,23 @@
 
     // The command (if any) is run by the shell itself at startup (see pty.rs),
     // which avoids the race of typing into a not-yet-ready interactive shell.
-    await invoke("pty_spawn", {
-      id,
-      cwd,
-      cols: term.cols,
-      rows: term.rows,
-      runCommand: runCommand ?? null,
-      shellIntegration: shellIntegration ?? false,
-      onData,
-    });
+    try {
+      await invoke("pty_spawn", {
+        id,
+        cwd,
+        cols: term.cols,
+        rows: term.rows,
+        runCommand: runCommand ?? null,
+        shellIntegration: shellIntegration ?? false,
+        onData,
+      });
+    } catch (e) {
+      // Without this the rejection was unhandled and the pane just sat there
+      // black — no shell, no message, nothing to act on. Say what went wrong
+      // (bad cwd, missing shell) in the pane itself.
+      term.write(`\r\n\x1b[31mCould not start a shell:\x1b[0m ${String(e).replace(/\n/g, "\r\n")}\r\n`);
+      return;
+    }
 
     // Periodically snapshot the buffer so a hard window close still persists it.
     if (SB_KEY) {

@@ -9,3 +9,17 @@ src-tauri/gen/schemas
 
 # Updater manifest (generated per release, uploaded to GitHub Releases)
 latest.json
+
+# Secrets — never commit. The updater's signing key in particular would let a
+# third party publish a release the app accepts as genuine.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*_rsa
+*_ed25519

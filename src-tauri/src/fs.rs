@@ -8,7 +8,7 @@ pub struct DirEntry {
     is_dir: bool,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     let mut out = Vec::new();
     let entries = std::fs::read_dir(&path).map_err(|e| format!("{path}: {e}"))?;
@@ -28,12 +28,12 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     Ok(out)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_file(path: String, content: String) -> Result<(), String> {
     // Create parent directories so saving e.g. a new .conductor/notes/foo.md
     // (or any file in a not-yet-existing folder) just works.
@@ -64,7 +64,7 @@ fn ensure_queries_dir(project: &str) -> Result<std::path::PathBuf, String> {
     Ok(dir)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_queries(project: String) -> Result<Vec<SavedQuery>, String> {
     let dir = ensure_queries_dir(&project)?;
     let file = dir.join("queries.json");
@@ -75,7 +75,7 @@ pub fn list_queries(project: String) -> Result<Vec<SavedQuery>, String> {
     Ok(serde_json::from_str(&txt).unwrap_or_default())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_queries(project: String, queries: Vec<SavedQuery>) -> Result<(), String> {
     let dir = ensure_queries_dir(&project)?;
     let file = dir.join("queries.json");
@@ -85,7 +85,7 @@ pub fn save_queries(project: String, queries: Vec<SavedQuery>) -> Result<(), Str
 
 /// Write raw bytes to a path (used for binary exports like .xlsx). Creates
 /// parent directories as needed.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_bytes(path: String, bytes: Vec<u8>) -> Result<(), String> {
     if let Some(parent) = Path::new(&path).parent() {
         if !parent.as_os_str().is_empty() {
@@ -118,7 +118,7 @@ const SKIP_DIRS: &[&str] = &[
 
 /// Recursively list files under `root` (relative paths), skipping heavy dirs.
 /// Capped so a giant tree can't hang the UI.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_files(root: String) -> Result<Vec<String>, String> {
     let root_path = Path::new(&root);
     let mut out: Vec<String> = Vec::new();
@@ -158,7 +158,7 @@ pub struct Match {
 
 /// Search file contents under `root` for `query`. Uses ripgrep when available
 /// (fast, respects .gitignore); otherwise falls back to a simple Rust walk.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn search_content(root: String, query: String) -> Result<Vec<Match>, String> {
     if query.trim().is_empty() {
         return Ok(vec![]);
@@ -246,7 +246,7 @@ fn fallback_search(root: &str, query: &str) -> Vec<Match> {
 
 /// Create a new, empty file. Fails if a file or folder already exists there, so
 /// we never silently clobber.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_file(path: String) -> Result<(), String> {
     if Path::new(&path).exists() {
         return Err(format!("{path} already exists"));
@@ -260,7 +260,7 @@ pub fn create_file(path: String) -> Result<(), String> {
 }
 
 /// Create a new directory (including parents). Fails if it already exists.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_folder(path: String) -> Result<(), String> {
     if Path::new(&path).exists() {
         return Err(format!("{path} already exists"));
@@ -269,7 +269,7 @@ pub fn create_folder(path: String) -> Result<(), String> {
 }
 
 /// Rename (or move) a path. Refuses to overwrite an existing destination.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rename_path(from: String, to: String) -> Result<(), String> {
     if from == to {
         return Ok(());
@@ -281,7 +281,7 @@ pub fn rename_path(from: String, to: String) -> Result<(), String> {
 }
 
 /// Recursively copy a file or directory to a new path. Refuses to overwrite.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn copy_path(from: String, to: String) -> Result<(), String> {
     if Path::new(&to).exists() {
         return Err(format!("{to} already exists"));
@@ -306,7 +306,7 @@ fn copy_recursive(from: &Path, to: &Path) -> std::io::Result<()> {
 }
 
 /// Move a path to the OS trash (recoverable) rather than deleting permanently.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn trash_path(path: String) -> Result<(), String> {
     trash::delete(&path).map_err(|e| format!("{e}"))
 }
@@ -324,7 +324,7 @@ pub fn reveal_path(path: String) -> Result<(), String> {
 
 /// List markdown runbooks for a project, stored under `<project>/.conductor/notes`.
 /// Creates the directory if it does not exist so the first save always works.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_runbooks(project: String) -> Result<Vec<DirEntry>, String> {
     let dir = Path::new(&project).join(".conductor").join("notes");
     if !dir.exists() {
@@ -386,7 +386,7 @@ fn json_script_keys(dir: &Path, file: &str) -> Vec<String> {
 }
 
 /// Scan a project folder for runnable tasks across common task runners.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_tasks(path: String) -> Vec<Task> {
     let dir = Path::new(&path);
     let mut tasks = Vec::new();

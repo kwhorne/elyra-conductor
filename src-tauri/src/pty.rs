@@ -1,9 +1,10 @@
+use crate::util::lock_recover;
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Mutex, OnceLock};
 use tauri::ipc::{Channel, Response};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 // ── Shell integration (zsh) ────────────────────────────────────────────────
 // We point ZDOTDIR at a generated shim that sources the user's real zsh config
@@ -57,7 +58,8 @@ pub struct PtyManager {
     sessions: Mutex<HashMap<String, PtySession>>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
+#[allow(clippy::too_many_arguments)] // mirrors the JS invoke() payload one-for-one
 pub fn pty_spawn(
     app: AppHandle,
     state: State<PtyManager>,
@@ -144,10 +146,16 @@ pub fn pty_spawn(
         }
         // The pty reached EOF because the child exited; collect its code.
         let code: i64 = child.wait().map(|s| s.exit_code() as i64).unwrap_or(-1);
+        // Drop the registry entry too. Previously only `pty_kill` removed it, so
+        // a shell that exited on its own (Ctrl-D, `exit`, a crash) left its
+        // master fd and writer alive in the map for the lifetime of the app.
+        if let Some(mgr) = app.try_state::<PtyManager>() {
+            lock_recover(&mgr.sessions).remove(&id_for_thread);
+        }
         let _ = app.emit(&format!("pty://exit/{id_for_thread}"), code);
     });
 
-    state.sessions.lock().unwrap().insert(
+    lock_recover(&state.sessions).insert(
         id,
         PtySession {
             master: pair.master,
@@ -161,7 +169,7 @@ pub fn pty_spawn(
 
 #[tauri::command]
 pub fn pty_write(state: State<PtyManager>, id: String, data: String) -> Result<(), String> {
-    let mut sessions = state.sessions.lock().unwrap();
+    let mut sessions = lock_recover(&state.sessions);
     if let Some(session) = sessions.get_mut(&id) {
         session
             .writer
@@ -179,7 +187,7 @@ pub fn pty_resize(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    let sessions = state.sessions.lock().unwrap();
+    let sessions = lock_recover(&state.sessions);
     if let Some(session) = sessions.get(&id) {
         session
             .master
@@ -199,7 +207,7 @@ pub fn pty_resize(
 #[tauri::command]
 pub fn pty_title(state: State<PtyManager>, id: String) -> Option<String> {
     let pid = {
-        let sessions = state.sessions.lock().unwrap();
+        let sessions = lock_recover(&state.sessions);
         sessions.get(&id)?.master.process_group_leader()?
     };
 
@@ -226,9 +234,10 @@ pub fn pty_title(state: State<PtyManager>, id: String) -> Option<String> {
     Some(base.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pty_kill(state: State<PtyManager>, id: String) -> Result<(), String> {
-    if let Some(mut session) = state.sessions.lock().unwrap().remove(&id) {
+    let session = lock_recover(&state.sessions).remove(&id);
+    if let Some(mut session) = session {
         let _ = session.killer.kill();
     }
     Ok(())

@@ -32,6 +32,7 @@
   import { check as checkUpdate } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
   import { marked } from "marked";
+  import { sanitizeMarkdownHtml } from "./lib/sanitize.js";
   import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
   import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf, allLeaves } from "./lib/layout.js";
   import { dirOf, baseOf, detectRunCommand, isIdleProc, rankDevTasks, scoreDevTask } from "./lib/util.js";
@@ -104,6 +105,10 @@
   let showHidden = $state(false);
   let theme = $state("dark");
   let termFontSize = $state(13); // terminal font size (⌘+/⌘−/⌘0), shared by all panes
+  // Persisted scrollback is convenient but writes terminal output — which often
+  // contains credentials — to localStorage in plain text. Secrets are masked on
+  // the way out (lib/redact.js); this switch turns the whole thing off.
+  let persistScrollback = $state(true);
   const TERM_FONT_MIN = 8;
   const TERM_FONT_MAX = 28;
   let loaded = $state(false);
@@ -112,6 +117,17 @@
   $effect(() => {
     document.documentElement.dataset.theme = theme;
   });
+
+  // Turning scrollback persistence off must also remove what is already on
+  // disk — otherwise yesterday's output (with whatever it contained) lingers
+  // in localStorage even though the setting says it isn't being saved.
+  function clearStoredScrollback() {
+    try {
+      for (const k of Object.keys(localStorage)) {
+        if (k.startsWith("conductor:sb:")) localStorage.removeItem(k);
+      }
+    } catch {}
+  }
 
   // Terminal font size: delta === 0 resets to the default (13); otherwise
   // clamp within [MIN, MAX]. Applied reactively by every Terminal pane.
@@ -1555,6 +1571,7 @@
     list.push({ id: "act:toggle-theme", title: theme === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "action", icon: theme === "dark" ? "\u2600" : "\u263D", action: () => (theme = theme === "dark" ? "light" : "dark") });
     list.push({ id: "act:term-font-inc", title: "Terminal: increase font size", hint: "\u2318+", group: "action", icon: "\uFF0B", action: () => adjustTermFont(1) });
     list.push({ id: "act:term-font-dec", title: "Terminal: decrease font size", hint: "\u2318\u2212", group: "action", icon: "\uFF0D", action: () => adjustTermFont(-1) });
+    list.push({ id: "act:toggle-scrollback-persist", title: persistScrollback ? "Stop saving terminal scrollback to disk" : "Save terminal scrollback across restarts", hint: persistScrollback ? "currently on" : "currently off", group: "action", icon: "\u{1F5C4}", action: () => { persistScrollback = !persistScrollback; if (!persistScrollback) clearStoredScrollback(); } });
     list.push({ id: "act:term-font-reset", title: `Terminal: reset font size (${termFontSize}px \u2192 13px)`, hint: "\u23180", group: "action", icon: "\u21ba", action: () => adjustTermFont(0) });
     list.push({ id: "act:toggle-notify", title: notifyOnFinish ? "Disable finished-command notifications" : "Notify when a background command finishes", group: "action", icon: "\u{1F514}", action: () => { notifyOnFinish = !notifyOnFinish; if (notifyOnFinish) ensureNotifyPermission(); } });
     list.push({ id: "act:toggle-shellint", title: shellIntegration ? "Disable shell integration (zsh)" : "Enable shell integration (zsh) \u2014 real commands & exit codes", hint: "new terminals", group: "action", icon: "\u{1F517}", action: () => (shellIntegration = !shellIntegration) });
@@ -1705,6 +1722,7 @@
       showHidden,
       theme,
       termFontSize,
+      persistScrollback,
       showEditor,
       editorPath,
       notifyOnFinish,
@@ -1844,6 +1862,7 @@
     showHidden = saved.showHidden ?? false;
     theme = saved.theme ?? "dark";
     termFontSize = saved.termFontSize ?? 13;
+    persistScrollback = saved.persistScrollback ?? true;
     showEditor = saved.showEditor ?? false;
     editorPath = saved.editorPath ?? null;
     notifyOnFinish = saved.notifyOnFinish ?? true;
@@ -2202,7 +2221,7 @@
                   <button title="Split down (⇧⌘D)" onclick={() => splitPane(leaf.termId, "col")}>▤</button>
                   <button title="Close pane (⌘W)" onclick={() => closePane(leaf.termId)}>×</button>
                 </div>
-                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} fontSize={termFontSize} persistKey={leaf.key} runCommand={leaf.runOnce ?? null} active={leaf.termId === activeTermId && tab.id === activeTabId} register={registerTerm} unregister={unregisterTerm} onactivity={() => markActivity(tab.id)} onuserinput={onPaneInput} shellIntegration={shellIntegration} oncommand={(rec) => onShellCommand(leaf.termId, rec)} />
+                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} fontSize={termFontSize} {persistScrollback} persistKey={leaf.key} runCommand={leaf.runOnce ?? null} active={leaf.termId === activeTermId && tab.id === activeTabId} register={registerTerm} unregister={unregisterTerm} onactivity={() => markActivity(tab.id)} onuserinput={onPaneInput} shellIntegration={shellIntegration} oncommand={(rec) => onShellCommand(leaf.termId, rec)} />
               </div>
             {/each}
 
@@ -2394,7 +2413,9 @@
           <button onclick={() => (updateDismissed = true)}>Later</button>
         </div>
         {#if updateNotesOpen && update.body}
-          <div class="ut-notes">{@html marked.parse(update.body)}</div>
+          <!-- Release notes come from GitHub as markdown. The updater signature
+               covers the binary, not this text, so sanitise before rendering. -->
+          <div class="ut-notes">{@html sanitizeMarkdownHtml(marked.parser(marked.lexer(update.body)))}</div>
         {/if}
       {/if}
     </div>

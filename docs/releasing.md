@@ -61,8 +61,12 @@ If the private key is lost, existing installs can no longer auto-update.
 
 - Current target is **Apple Silicon (`darwin-aarch64`)**. To support Intel or a universal
   binary, build for that target and add the matching `platforms` entry in `latest.json`.
-- Releases are **not notarized** by Apple, so the first launch still needs
-  right-click → Open. Notarization is independent of the Tauri update signature.
+- Releases **are** Developer ID code-signed **and Apple-notarized** (the release
+  script submits the DMG via `xcrun notarytool` and staples the ticket), so a
+  downloaded build opens without a Gatekeeper warning — no right-click → Open
+  needed. Notarization is independent of the Tauri update signature: the former
+  is Apple vouching for the binary, the latter is what the in-app updater
+  verifies. See [`RELEASING.md`](../RELEASING.md) for the signing setup.
 
 ## Related
 

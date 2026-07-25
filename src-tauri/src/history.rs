@@ -60,7 +60,7 @@ pub struct HistoryRow {
     output: Option<String>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn history_add(store: State<HistoryStore>, entry: HistoryEntry) -> Result<(), String> {
     let conn = store.0.lock().map_err(|e| e.to_string())?;
     conn.execute(
@@ -84,7 +84,7 @@ pub fn history_add(store: State<HistoryStore>, entry: HistoryEntry) -> Result<()
 /// Query history newest-first. With a non-empty `query`, does a substring match
 /// over the command and its captured output (the "how did I fix this last time"
 /// search). Optionally scoped to one project.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn history_query(
     store: State<HistoryStore>,
     query: Option<String>,
@@ -155,7 +155,7 @@ pub struct FlowStats {
 /// Aggregate flow metrics from the history: how many commands ran since `since`
 /// (epoch ms), how much wall-clock time they took, how many failed, and the
 /// biggest time sinks grouped by command. Optional project scope.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn history_stats(
     store: State<HistoryStore>,
     since: Option<i64>,
@@ -207,8 +207,8 @@ pub fn history_stats(
         })
     };
     let top: Vec<ProcStat> = match &proj_param {
-        Some(p) => stmt.query_map(&[&since as &dyn rusqlite::ToSql, p], map_row),
-        None => stmt.query_map(&[&since as &dyn rusqlite::ToSql], map_row),
+        Some(p) => stmt.query_map([&since as &dyn rusqlite::ToSql, p], map_row),
+        None => stmt.query_map([&since as &dyn rusqlite::ToSql], map_row),
     }
     .map_err(|e| e.to_string())?
     .collect::<Result<Vec<_>, _>>()
@@ -218,7 +218,7 @@ pub fn history_stats(
 }
 
 /// Delete history, optionally only for one project.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn history_clear(store: State<HistoryStore>, project: Option<String>) -> Result<(), String> {
     let conn = store.0.lock().map_err(|e| e.to_string())?;
     match project.filter(|p| !p.is_empty()) {

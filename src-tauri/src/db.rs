@@ -4,6 +4,7 @@
 // existing `.env`, or supplied per-session by the user. Nothing new is persisted.
 
 use serde::{Deserialize, Serialize};
+use crate::util::lock_recover;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
@@ -330,7 +331,15 @@ fn start_tunnel(config: &DbConfig) -> Result<SshTunnel, String> {
     if let Some(p) = &askpass {
         let _ = std::fs::remove_file(p);
     }
-    res?;
+    // On failure the SshTunnel (whose Drop kills the child) is never constructed,
+    // so tear the process down by hand — otherwise a tunnel that timed out or
+    // failed to authenticate leaves an `ssh -N -L` running with the port still
+    // forwarded, and retrying picks a new local port each time.
+    if let Err(e) = res {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(e);
+    }
     Ok(SshTunnel { child, local_port })
 }
 
@@ -390,7 +399,7 @@ fn parse_env(path: &Path) -> HashMap<String, String> {
 
 /// Build a connection config from a project's `.env` (Laravel conventions).
 /// Returns None if the file has no usable DB_CONNECTION we support.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn db_from_env(project: String) -> Option<DbConfig> {
     let env = parse_env(&Path::new(&project).join(".env"));
     let engine = env
@@ -534,7 +543,7 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
 // project folder, so nothing can be committed, and secrets live in secure storage.
 const KEYCHAIN_SERVICE: &str = "com.elyra.conductor.db-connections";
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_connections(project: String) -> Result<Vec<DbConfig>, String> {
     let entry = keyring::Entry::new(KEYCHAIN_SERVICE, &project).map_err(|e| e.to_string())?;
     match entry.get_password() {
@@ -544,7 +553,7 @@ pub fn list_connections(project: String) -> Result<Vec<DbConfig>, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_connections(project: String, connections: Vec<DbConfig>) -> Result<(), String> {
     let entry = keyring::Entry::new(KEYCHAIN_SERVICE, &project).map_err(|e| e.to_string())?;
     if connections.is_empty() {
@@ -636,7 +645,7 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
                 // pulling rustls/aws-lc-rs (which needs cmake).
                 let insecure = config.tls_insecure;
                 let host_cloned = host.clone();
-                tauri::async_runtime::block_on(async move {
+                crate::util::block_on_future(async move {
                     use tokio::io::AsyncWriteExt;
                     let connector = native_tls::TlsConnector::builder()
                         .danger_accept_invalid_certs(insecure)
@@ -659,11 +668,11 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
                         .map_err(|e| e.to_string())
                 })?
             } else {
-                tauri::async_runtime::block_on(klickhouse::Client::connect(addr, opts))
+                crate::util::block_on_future(klickhouse::Client::connect(addr, opts))
                     .map_err(|e| e.to_string())?
             };
             // Validate eagerly.
-            tauri::async_runtime::block_on(client.execute("SELECT 1"))
+            crate::util::block_on_future(client.execute("SELECT 1"))
                 .map_err(|e| e.to_string())?;
             Conn::Clickhouse(client)
         }
@@ -673,7 +682,7 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
                 return Err("SQL Anywhere URL is required (libsql:// or https://)".into());
             }
             let token = config.token.clone();
-            let db = tauri::async_runtime::block_on(async move {
+            let db = crate::util::block_on_future(async move {
                 let db = libsql::Builder::new_remote(url, token)
                     .build()
                     .await
@@ -689,24 +698,24 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn db_connect(state: State<DbManager>, config: DbConfig) -> Result<String, String> {
     let (eff, tunnel) = prepare(&config)?;
     let conn = open_conn(&eff)?;
-    let mut seq = state.seq.lock().unwrap();
+    let mut seq = lock_recover(&state.seq);
     *seq += 1;
     let id = format!("db-{}", *seq);
     drop(seq);
-    state.conns.lock().unwrap().insert(id.clone(), conn);
+    lock_recover(&state.conns).insert(id.clone(), conn);
     if let Some(t) = tunnel {
-        state.tunnels.lock().unwrap().insert(id.clone(), t);
+        lock_recover(&state.tunnels).insert(id.clone(), t);
     }
     Ok(id)
 }
 
 /// Try a connection without storing it (the "Test connection" button). The
 /// tunnel (if any) is torn down when this returns.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn db_test(config: DbConfig) -> Result<(), String> {
     let (eff, _tunnel) = prepare(&config)?;
     open_conn(&eff)?;
@@ -715,15 +724,15 @@ pub fn db_test(config: DbConfig) -> Result<(), String> {
 
 #[tauri::command]
 pub fn db_disconnect(state: State<DbManager>, id: String) {
-    state.conns.lock().unwrap().remove(&id);
-    state.tunnels.lock().unwrap().remove(&id);
+    lock_recover(&state.conns).remove(&id);
+    lock_recover(&state.tunnels).remove(&id);
 }
 
 // ── schema ─────────────────────────────────────────────────────
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn db_tables(state: State<DbManager>, id: String) -> Result<Vec<String>, String> {
-    let conns = state.conns.lock().unwrap();
+    let conns = lock_recover(&state.conns);
     let conn = conns.get(&id).ok_or("Connection not found")?;
     match conn {
         Conn::Mysql(pool) => {
@@ -743,7 +752,7 @@ pub fn db_tables(state: State<DbManager>, id: String) -> Result<Vec<String>, Str
             Ok(rows.filter_map(|r| r.ok()).collect())
         }
         Conn::Postgres(m) => {
-            let mut client = m.lock().unwrap();
+            let mut client = lock_recover(m);
             let (_c, rows, _a, _t) = pg_query(
                 &mut client,
                 "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema') ORDER BY tablename",
@@ -756,7 +765,7 @@ pub fn db_tables(state: State<DbManager>, id: String) -> Result<Vec<String>, Str
         }
         Conn::Clickhouse(client) => {
             let rows: Vec<ChRow> =
-                tauri::async_runtime::block_on(client.query_collect::<ChRow>("SHOW TABLES"))
+                crate::util::block_on_future(client.query_collect::<ChRow>("SHOW TABLES"))
                     .map_err(|e| e.to_string())?;
             Ok(rows
                 .into_iter()
@@ -768,7 +777,7 @@ pub fn db_tables(state: State<DbManager>, id: String) -> Result<Vec<String>, Str
                 })
                 .collect())
         }
-        Conn::SqlAnywhere(db) => tauri::async_runtime::block_on(async {
+        Conn::SqlAnywhere(db) => crate::util::block_on_future(async {
             let conn = db.connect().map_err(|e| e.to_string())?;
             let mut rows = conn
                 .query(
@@ -796,13 +805,13 @@ pub struct ColumnInfo {
     pub key: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn db_columns(
     state: State<DbManager>,
     id: String,
     table: String,
 ) -> Result<Vec<ColumnInfo>, String> {
-    let conns = state.conns.lock().unwrap();
+    let conns = lock_recover(&state.conns);
     let conn = conns.get(&id).ok_or("Connection not found")?;
     match conn {
         Conn::Mysql(pool) => {
@@ -843,7 +852,7 @@ pub fn db_columns(
             Ok(rows.filter_map(|r| r.ok()).collect())
         }
         Conn::Postgres(m) => {
-            let mut client = m.lock().unwrap();
+            let mut client = lock_recover(m);
             let t = table.replace('\'', "''");
             // Primary-key columns for this table.
             let (_pc, pk_rows, _a, _tr) = pg_query(
@@ -895,7 +904,7 @@ pub fn db_columns(
         }
         Conn::Clickhouse(client) => {
             let q = format!("DESCRIBE TABLE `{}`", table.replace('`', "``"));
-            let rows: Vec<ChRow> = tauri::async_runtime::block_on(client.query_collect::<ChRow>(q))
+            let rows: Vec<ChRow> = crate::util::block_on_future(client.query_collect::<ChRow>(q))
                 .map_err(|e| e.to_string())?;
             // DESCRIBE columns: name, type, default_type, default_expression, ...
             Ok(rows
@@ -917,7 +926,7 @@ pub fn db_columns(
         }
         Conn::SqlAnywhere(db) => {
             let q = format!("PRAGMA table_info(\"{}\")", table.replace('"', "\"\""));
-            tauri::async_runtime::block_on(async {
+            crate::util::block_on_future(async {
                 let conn = db.connect().map_err(|e| e.to_string())?;
                 let mut rows = conn.query(&q, ()).await.map_err(|e| e.to_string())?;
                 let mut out = Vec::new();
@@ -949,13 +958,13 @@ pub struct TableInfo {
     pub approximate: bool,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn db_table_info(
     state: State<DbManager>,
     id: String,
     table: String,
 ) -> Result<TableInfo, String> {
-    let conns = state.conns.lock().unwrap();
+    let conns = lock_recover(&state.conns);
     let conn = conns.get(&id).ok_or("Connection not found")?;
     match conn {
         Conn::Mysql(pool) => {
@@ -986,7 +995,7 @@ pub fn db_table_info(
             })
         }
         Conn::Postgres(m) => {
-            let mut client = m.lock().unwrap();
+            let mut client = lock_recover(m);
             let t = table.replace('\'', "''");
             let (_c, rows_data, _a, _tr) = pg_query(
                 &mut client,
@@ -1018,7 +1027,7 @@ pub fn db_table_info(
         }
         Conn::Clickhouse(client) => {
             let t = table.replace('\'', "''");
-            let rows_ch: Vec<ChRow> = tauri::async_runtime::block_on(client.query_collect::<ChRow>(
+            let rows_ch: Vec<ChRow> = crate::util::block_on_future(client.query_collect::<ChRow>(
                 format!("SELECT total_rows, total_bytes FROM system.tables WHERE database = currentDatabase() AND name = '{t}'"),
             ))
             .map_err(|e| e.to_string())?;
@@ -1041,7 +1050,7 @@ pub fn db_table_info(
         }
         Conn::SqlAnywhere(db) => {
             let q = format!("SELECT COUNT(*) FROM \"{}\"", table.replace('"', "\"\""));
-            let rows = tauri::async_runtime::block_on(async {
+            let rows = crate::util::block_on_future(async {
                 let conn = db.connect().map_err(|e| e.to_string())?;
                 let mut rs = conn.query(&q, ()).await.map_err(|e| e.to_string())?;
                 let n = match rs.next().await.map_err(|e| e.to_string())? {
@@ -1097,7 +1106,7 @@ fn is_select(sql: &str) -> bool {
 
 const MAX_ROWS: usize = 1000;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn db_query(
     state: State<DbManager>,
     id: String,
@@ -1105,7 +1114,7 @@ pub fn db_query(
     max: Option<usize>,
 ) -> Result<QueryResult, String> {
     let max_rows = max.unwrap_or(MAX_ROWS);
-    let conns = state.conns.lock().unwrap();
+    let conns = lock_recover(&state.conns);
     let conn = conns.get(&id).ok_or("Connection not found")?;
     let select = is_select(&sql);
     let start = Instant::now();
@@ -1205,7 +1214,7 @@ pub fn db_query(
             }
         }
         Conn::Postgres(m) => {
-            let mut client = m.lock().unwrap();
+            let mut client = lock_recover(m);
             let (columns, rows, affected, truncated) = pg_query(&mut client, &sql, max_rows)?;
             let elapsed_ms = start.elapsed().as_millis() as u64;
             if select {
@@ -1231,7 +1240,7 @@ pub fn db_query(
         Conn::Clickhouse(client) => {
             if select {
                 let chrows: Vec<ChRow> =
-                    tauri::async_runtime::block_on(client.query_collect::<ChRow>(sql.clone()))
+                    crate::util::block_on_future(client.query_collect::<ChRow>(sql.clone()))
                         .map_err(|e| e.to_string())?;
                 let columns: Vec<String> = chrows
                     .first()
@@ -1255,7 +1264,7 @@ pub fn db_query(
                     truncated,
                 })
             } else {
-                tauri::async_runtime::block_on(client.execute(sql.clone()))
+                crate::util::block_on_future(client.execute(sql.clone()))
                     .map_err(|e| e.to_string())?;
                 Ok(QueryResult {
                     columns: vec![],
@@ -1269,7 +1278,7 @@ pub fn db_query(
         }
         Conn::SqlAnywhere(db) => {
             if select {
-                let (columns, rows, truncated) = tauri::async_runtime::block_on(async {
+                let (columns, rows, truncated) = crate::util::block_on_future(async {
                     let conn = db.connect().map_err(|e| e.to_string())?;
                     let mut rs = conn.query(&sql, ()).await.map_err(|e| e.to_string())?;
                     let ncols = rs.column_count();
@@ -1299,7 +1308,7 @@ pub fn db_query(
                     truncated,
                 })
             } else {
-                let affected = tauri::async_runtime::block_on(async {
+                let affected = crate::util::block_on_future(async {
                     let conn = db.connect().map_err(|e| e.to_string())?;
                     conn.execute(&sql, ()).await.map_err(|e| e.to_string())
                 })?;
@@ -1409,10 +1418,28 @@ fn quote_ident(engine: &str, name: &str) -> String {
 }
 
 /// Escape a value for use as a quoted SQL text literal. `None` becomes NULL.
-fn quote_literal(value: &Option<String>) -> String {
+/// Engines that treat `\` as an escape character inside string literals.
+/// PostgreSQL, SQLite and SQL Anywhere take backslashes literally, so doubling
+/// them there would write two backslashes where the source had one.
+fn backslash_escapes(engine: &str) -> bool {
+    matches!(engine, "mysql" | "clickhouse" | "ch")
+}
+
+fn quote_literal(engine: &str, value: &Option<String>) -> String {
     match value {
         None => "NULL".to_string(),
-        Some(v) => format!("'{}'", v.replace('\'', "''")),
+        Some(v) => {
+            // Doubling `'` alone was not enough: on MySQL/ClickHouse a value
+            // containing a backslash changed meaning, and one *ending* in a
+            // backslash escaped the closing quote and broke the INSERT.
+            let mut s = if backslash_escapes(engine) {
+                v.replace('\\', "\\\\")
+            } else {
+                v.clone()
+            };
+            s = s.replace('\'', "''");
+            format!("'{s}'")
+        }
     }
 }
 
@@ -1533,7 +1560,11 @@ fn build_insert(table: &str, columns: &[String], rows: &[Vec<Option<String>>], t
     let values = rows
         .iter()
         .map(|row| {
-            let cells = row.iter().map(quote_literal).collect::<Vec<_>>().join(", ");
+            let cells = row
+                .iter()
+                .map(|v| quote_literal(target_engine, v))
+                .collect::<Vec<_>>()
+                .join(", ");
             format!("({cells})")
         })
         .collect::<Vec<_>>()
@@ -1545,7 +1576,7 @@ fn build_insert(table: &str, columns: &[String], rows: &[Vec<Option<String>>], t
 /// be open connections). Emits `db-transfer-progress` events as it goes so the
 /// UI can show a live progress bar while the command itself runs to completion
 /// and returns a full summary.
-#[tauri::command]
+#[tauri::command(async)]
 #[allow(clippy::too_many_arguments)]
 pub fn db_transfer_tables(
     app: tauri::AppHandle,
@@ -1700,7 +1731,7 @@ pub struct SchemaDiffResult {
     pub migration_sql: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn db_schema_diff(
     state: State<DbManager>,
     source_id: String,
@@ -1842,6 +1873,31 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(".env"), contents).unwrap();
         dir
+    }
+
+    #[test]
+    fn quote_literal_escapes_backslashes_only_where_the_engine_needs_it() {
+        let v = Some(r"C:\path".to_string());
+        // MySQL / ClickHouse: backslash is an escape char, so it must be doubled.
+        assert_eq!(quote_literal("mysql", &v), r"'C:\\path'");
+        assert_eq!(quote_literal("clickhouse", &v), r"'C:\\path'");
+        // Postgres / SQLite take it literally — doubling would corrupt the value.
+        assert_eq!(quote_literal("postgres", &v), r"'C:\path'");
+        assert_eq!(quote_literal("sqlite", &v), r"'C:\path'");
+    }
+
+    #[test]
+    fn quote_literal_trailing_backslash_cannot_escape_the_closing_quote() {
+        // The dangerous case: `foo\` used to produce 'foo\' which swallowed the
+        // terminator and broke (or extended) the statement.
+        let v = Some(r"foo\".to_string());
+        assert_eq!(quote_literal("mysql", &v), r"'foo\\'");
+    }
+
+    #[test]
+    fn quote_literal_still_doubles_single_quotes_and_maps_null() {
+        assert_eq!(quote_literal("mysql", &Some("O'Brien".into())), "'O''Brien'");
+        assert_eq!(quote_literal("postgres", &None), "NULL");
     }
 
     #[test]

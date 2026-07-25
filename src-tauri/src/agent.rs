@@ -8,6 +8,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
+use crate::util::lock_recover;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
@@ -21,7 +22,7 @@ pub struct AgentManager {
     sessions: Mutex<HashMap<String, AgentSession>>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_spawn(
     app: AppHandle,
     state: State<AgentManager>,
@@ -89,32 +90,39 @@ pub fn agent_spawn(
         }
     });
 
-    state
-        .sessions
-        .lock()
-        .unwrap()
-        .insert(id, AgentSession { child, stdin });
+    lock_recover(&state.sessions).insert(id, AgentSession { child, stdin });
     Ok(())
 }
 
 #[tauri::command]
 pub fn agent_send(state: State<AgentManager>, id: String, command: Value) -> Result<(), String> {
-    let mut sessions = state.sessions.lock().unwrap();
-    if let Some(s) = sessions.get_mut(&id) {
-        let line = serde_json::to_string(&command).map_err(|e| e.to_string())?;
-        s.stdin
-            .write_all(line.as_bytes())
-            .map_err(|e| e.to_string())?;
-        s.stdin.write_all(b"\n").map_err(|e| e.to_string())?;
-        s.stdin.flush().map_err(|e| e.to_string())?;
-    }
+    let mut sessions = lock_recover(&state.sessions);
+    // Report a missing session instead of silently succeeding: the UI appends
+    // the message to the transcript optimistically, so swallowing this made a
+    // prompt look delivered when the agent had actually exited.
+    let s = sessions
+        .get_mut(&id)
+        .ok_or_else(|| format!("agent session {id} is no longer running"))?;
+    let line = serde_json::to_string(&command).map_err(|e| e.to_string())?;
+    s.stdin
+        .write_all(line.as_bytes())
+        .map_err(|e| e.to_string())?;
+    s.stdin.write_all(b"\n").map_err(|e| e.to_string())?;
+    s.stdin.flush().map_err(|e| e.to_string())?;
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_kill(state: State<AgentManager>, id: String) -> Result<(), String> {
-    if let Some(mut s) = state.sessions.lock().unwrap().remove(&id) {
+    let session = lock_recover(&state.sessions).remove(&id);
+    if let Some(mut s) = session {
         let _ = s.child.kill();
+        // Reap it. Without the wait() the killed `elyra` lingers as a zombie
+        // for the lifetime of the app — open and close a few agent tabs and
+        // they accumulate. Dropping the stdin handle first lets the child see
+        // EOF, so it usually exits before we even get here.
+        drop(s.stdin);
+        let _ = s.child.wait();
     }
     Ok(())
 }

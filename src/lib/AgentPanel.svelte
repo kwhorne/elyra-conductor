@@ -51,7 +51,13 @@
   }
 
   function send(cmd) {
-    invoke("agent_send", { id, command: cmd }).catch(() => {});
+    // Surface delivery failures. The transcript appends the user's message
+    // optimistically, so swallowing this made a prompt look sent when the agent
+    // had actually exited — you'd sit waiting for a reply that could never come.
+    invoke("agent_send", { id, command: cmd }).catch((e) => {
+      entries.push({ kind: "note", level: "error", text: `Message not delivered: ${e}` });
+      bump();
+    });
   }
 
   function onEvent(m) {

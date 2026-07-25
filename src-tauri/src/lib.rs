@@ -4,6 +4,7 @@ mod fs;
 mod history;
 mod projects;
 mod pty;
+mod util;
 
 use agent::AgentManager;
 use db::DbManager;

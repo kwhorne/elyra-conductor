@@ -129,6 +129,15 @@ pnpm dev
 A failing step gets its own **⚡ Fix** button that hands the command and output to an
 Elyra agent. Verification runs each step via the `run_step` Tauri command.
 
+## A note on trust
+
+Runbooks are markdown files that live in the repository, which means a runbook can
+arrive from anywhere you cloned from — or be written by an agent. Conductor therefore
+treats runbook content as untrusted: the rendered HTML is sanitised before display, and
+external links open in your browser rather than inside the app. Shell blocks are never
+run on their own — `▶ Run` is always an explicit click, and you see the command first.
+See [Architecture](architecture.md#untrusted-content--the-webview-boundary).
+
 ## Related
 
 - [Terminals & panes](terminals.md) — where Run sends its commands.
