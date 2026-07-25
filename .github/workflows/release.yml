@@ -1,0 +1,131 @@
+name: Release
+
+# Push a tag to cut a release:
+#   git tag -a v0.9.2 -m "elyra-conductor v0.9.2" && git push origin v0.9.2
+#
+# Everything the local script did — quality gate, signed build, notarisation,
+# latest.json, GitHub release — happens here instead, so the Developer ID
+# certificate and the updater signing key live in repository secrets rather
+# than in a shell on one laptop.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      # Catch the classic footgun first: a tag that does not match the version
+      # baked into the binary. That mismatch produces an updater manifest the
+      # app can never satisfy, so it would re-offer the same update forever.
+      - name: Version matches the tag
+        run: node scripts/check-version-sync.mjs "${{ github.ref_name }}"
+
+      - name: Release notes exist for this version
+        run: node scripts/release-notes.mjs > /tmp/release-notes.md
+
+      - name: Frontend quality gate
+        run: pnpm check
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Build, sign and notarize
+        env:
+          # Skips create-dmg's AppleScript window styling, which needs a Finder.
+          CI: true
+          # Developer ID signing — Tauri imports the certificate into a
+          # temporary keychain when these are present.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # Notarisation — Tauri submits and staples when all three are set.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Updater signature (minisign) the in-app updater verifies.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build
+
+      # Tauri only *warns* when the signing or notarisation secrets are missing
+      # and carries on building, so without this a misconfigured secret would
+      # publish an unsigned release that users cannot open. Fail loudly instead.
+      - name: Verify the bundle really is signed, notarized and stapled
+        run: |
+          set -euo pipefail
+          APP="src-tauri/target/release/bundle/macos/Elyra Conductor.app"
+          DMG=$(ls -t src-tauri/target/release/bundle/dmg/*.dmg | head -1)
+
+          echo "== codesign =="
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+          echo "== Gatekeeper =="
+          if ! spctl -a -t exec -vv "$APP" 2>&1 | tee /dev/stderr | grep -q "source=Notarized Developer ID"; then
+            echo "::error::bundle is not notarized — check the APPLE_* secrets"
+            exit 1
+          fi
+
+          echo "== stapled ticket =="
+          xcrun stapler validate "$APP"
+          xcrun stapler validate "$DMG"
+
+          echo "== updater signature =="
+          test -f "src-tauri/target/release/bundle/macos/Elyra Conductor.app.tar.gz.sig" \
+            || { echo "::error::no updater signature — check TAURI_SIGNING_PRIVATE_KEY"; exit 1; }
+
+      - name: Generate latest.json
+        run: node scripts/make-latest-json.mjs
+
+      # The bundle name comes from productName and contains a space; the updater
+      # URL in latest.json points at a stable, space-free name. The signature is
+      # over the contents, not the filename, so renaming is safe.
+      - name: Stage release assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist-release
+          cp src-tauri/target/release/bundle/dmg/*.dmg dist-release/
+          cp "src-tauri/target/release/bundle/macos/Elyra Conductor.app.tar.gz" \
+             dist-release/elyra-conductor.app.tar.gz
+          cp "src-tauri/target/release/bundle/macos/Elyra Conductor.app.tar.gz.sig" \
+             dist-release/elyra-conductor.app.tar.gz.sig
+          cp latest.json dist-release/
+          ls -la dist-release/
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist-release/* --clobber
+          else
+            gh release create "$TAG" dist-release/* \
+              --title "$TAG" --notes-file /tmp/release-notes.md
+          fi

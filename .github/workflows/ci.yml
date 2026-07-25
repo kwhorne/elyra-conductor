@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # macOS is not a preference here: the Rust side pulls in `keyring` with the
+    # apple-native backend, the macOS `trash` bindings and osascript paths, so
+    # it does not build anywhere else.
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      # svelte-check (no errors *or* warnings) plus the security regression
+      # suite: HTML sanitising and scrollback redaction.
+      - name: Frontend quality gate
+        run: pnpm check
+
+      - name: Versions agree across package.json / tauri.conf.json / Cargo
+        run: node scripts/check-version-sync.mjs
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      # Deliberately no `cargo fmt --check`: the tree predates rustfmt and is
+      # not clean, so the gate would fail on unrelated code. Reformatting is a
+      # separate decision, not something to smuggle into CI.

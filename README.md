@@ -4,6 +4,9 @@
 
 **A local project conductor — switch projects, run terminals, split panes, browse files, and quick-edit, all in one window.**
 
+[![CI](https://github.com/kwhorne/elyra-conductor/actions/workflows/ci.yml/badge.svg)](https://github.com/kwhorne/elyra-conductor/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kwhorne/elyra-conductor?sort=semver)](https://github.com/kwhorne/elyra-conductor/releases)
+
 <img src="assets/screenshot.png" alt="Elyra Conductor — project sidebar, a deploy running in a terminal, and the file explorer" width="100%" />
 
 </div>

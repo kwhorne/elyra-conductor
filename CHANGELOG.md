@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Releases are built by CI.** A `Release` workflow builds, signs, notarizes,
+  staples and publishes on tag push, so the Developer ID certificate and the
+  updater signing key live in repository secrets instead of a shell on one
+  laptop. It verifies the finished bundle really is notarized and fails if not —
+  Tauri only warns when signing secrets are missing, which would otherwise ship a
+  release nobody can open. `scripts/release-build.sh` still works for local builds.
+- **A `CI` workflow** runs the frontend quality gate, the security regression
+  suite, `cargo test` and Clippy (`-D warnings`) on every push and pull request.
+- `scripts/check-version-sync.mjs` verifies `package.json`, `tauri.conf.json`,
+  `Cargo.toml` and `Cargo.lock` all agree — and, in CI, that they match the tag.
+  A mismatch there produces an updater manifest the app can never satisfy.
+
 ## [0.9.1] — 2026-07-25
 
 ### Security

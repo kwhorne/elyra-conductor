@@ -20,53 +20,70 @@ pnpm tauri signer generate -w ~/.tauri/elyra-conductor.key
 
 ## Cutting a release
 
+Releases are built by GitHub Actions ([`.github/workflows/release.yml`](.github/workflows/release.yml)).
+Pushing a tag is the whole process — the signing certificate and the updater key
+live in repository secrets, not on a laptop.
+
 1. **Update the changelog.** In [CHANGELOG.md](CHANGELOG.md), rename the
    `[Unreleased]` heading to `[<version>] — <YYYY-MM-DD>`, then add a fresh empty
    `[Unreleased]` section above it. Update the comparison links at the bottom of
    the file (add a `compare/v<prev>...v<version>` line and re-point `[Unreleased]`
-   to `compare/v<version>...HEAD`). This section becomes the GitHub release notes
-   in step 5.
+   to `compare/v<version>...HEAD`). This section becomes the release notes.
 
-2. **Bump the version** in `package.json`, `src-tauri/tauri.conf.json`, and
-   `src-tauri/Cargo.toml` (keep them in sync), then commit (changelog + bump
-   together).
-
-3. **Build a signed bundle.** Use the helper script — it first runs the quality
-   gate (`pnpm check` — the build aborts on any svelte-check error or warning),
-   then loads the signing key, cleans stale DMG mounts, and sets `CI=true` so
-   create-dmg skips the flaky AppleScript window-styling step:
+2. **Bump the version** in `package.json`, `src-tauri/tauri.conf.json`,
+   `src-tauri/Cargo.toml` and `src-tauri/Cargo.lock`. Check they agree:
 
    ```bash
-   ./scripts/release-build.sh
-   # (set TAURI_SIGNING_PRIVATE_KEY_PASSWORD=... first if your key has a password)
+   node scripts/check-version-sync.mjs
    ```
 
-   It runs `pnpm tauri build` and then `make-latest-json.mjs` for you. The build
-   produces, in `src-tauri/target/release/bundle/`:
-   - `dmg/Elyra Conductor_<version>_aarch64.dmg` — installer for new users
-   - `macos/Elyra Conductor.app.tar.gz` — the updater payload
-   - `macos/Elyra Conductor.app.tar.gz.sig` — its signature
-
-   > The bundle name comes from `productName` ("Elyra Conductor"). Upload the
-   > updater tarball under the stable, space-free name **`elyra-conductor.app.tar.gz`**
-   > (that's what `latest.json` points to — the signature is over the file
-   > contents, not the name, so renaming is safe).
-
-4. **The update manifest** (`latest.json`) is generated automatically by the
-   release script. To regenerate it manually: `node scripts/make-latest-json.mjs`.
-
-5. **Create the GitHub release** for tag `v<version>` (use the new changelog
-   section as the release notes) and upload these assets (rename the tarball/sig
-   to the stable space-free name):
-   - `Elyra Conductor_<version>_aarch64.dmg`
-   - `elyra-conductor.app.tar.gz`  (the `Elyra Conductor.app.tar.gz`)
-   - `elyra-conductor.app.tar.gz.sig`
-   - `latest.json`
+3. **Commit, tag and push.** That is the release:
 
    ```bash
-   git tag -a v<version> -m "elyra-conductor v<version>" && git push origin v<version>
-   # then upload the four assets to the release (gh release upload / API / web UI)
+   git commit -am "Release v<version>: <summary>"
+   git tag -a v<version> -m "elyra-conductor v<version>"
+   git push origin main && git push origin v<version>
    ```
+
+The workflow then runs the quality gate (`pnpm check` + `cargo test`), builds,
+signs with Developer ID, notarizes and staples, generates `latest.json`, and
+publishes the release with the four assets. It **fails loudly** if the bundle
+turns out not to be notarized — Tauri only warns and carries on when the signing
+secrets are missing, which would otherwise ship a release nobody can open.
+
+### Required repository secrets
+
+| Secret | What it is |
+| --- | --- |
+| `APPLE_CERTIFICATE` | Developer ID Application `.p12`, base64-encoded (`base64 -i cert.p12 \| pbcopy`) |
+| `APPLE_CERTIFICATE_PASSWORD` | password for that `.p12` |
+| `APPLE_SIGNING_IDENTITY` | e.g. `Developer ID Application: GETS AS (7G383N3VY7)` |
+| `APPLE_ID` | Apple ID used for notarisation |
+| `APPLE_PASSWORD` | an **app-specific password**, not the account password |
+| `APPLE_TEAM_ID` | `7G383N3VY7` |
+| `TAURI_SIGNING_PRIVATE_KEY` | contents of `~/.tauri/elyra-conductor.key` |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | its passphrase (empty for the current key) |
+
+### Building locally instead
+
+[`scripts/release-build.sh`](scripts/release-build.sh) still does the whole thing
+on your own machine — useful for testing a bundle before tagging, or if Actions
+is unavailable. It notarizes through a local `notarytool` keychain profile
+(`elyra-notary`) rather than the secrets above:
+
+```bash
+./scripts/release-build.sh
+```
+
+It produces, in `src-tauri/target/release/bundle/`:
+- `dmg/Elyra Conductor_<version>_aarch64.dmg` — installer for new users
+- `macos/Elyra Conductor.app.tar.gz` — the updater payload
+- `macos/Elyra Conductor.app.tar.gz.sig` — its signature
+
+> The bundle name comes from `productName` ("Elyra Conductor"). The updater
+> tarball is uploaded under the stable, space-free name
+> **`elyra-conductor.app.tar.gz`** — that's what `latest.json` points to, and the
+> signature covers the file contents, not the name, so renaming is safe.
 
 ## How the update check works
 

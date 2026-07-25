@@ -52,7 +52,10 @@ mod tests {
             .build()
             .unwrap();
         let got = rt.block_on(async { block_on_future(async { 6 * 7 }) });
-        assert_eq!(got, 42, "blocking on a future inside a runtime must not panic");
+        assert_eq!(
+            got, 42,
+            "blocking on a future inside a runtime must not panic"
+        );
     }
 
     #[test]
@@ -71,7 +74,10 @@ mod tests {
         })
         .join();
         assert!(m.lock().is_err(), "mutex should be poisoned");
-        assert_eq!(lock_recover(&m).len(), 3, "recovered guard should still work");
+        assert_eq!(
+            lock_recover(&m).len(),
+            3,
+            "recovered guard should still work"
+        );
     }
 }
-

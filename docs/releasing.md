@@ -22,30 +22,33 @@ If the private key is lost, existing installs can no longer auto-update.
 
 ## Cutting a release
 
+Releases are built by **GitHub Actions**; pushing a tag is the whole process. The
+Developer ID certificate and the updater signing key live in repository secrets,
+so no signing material sits on a developer machine.
+
 1. **Update the changelog.** In [`CHANGELOG.md`](../CHANGELOG.md), rename `[Unreleased]`
    to `[<version>] — <YYYY-MM-DD>`, add a fresh empty `[Unreleased]`, and update the
-   comparison links at the bottom. This section becomes the GitHub release notes.
-2. **Bump the version** in `package.json`, `src-tauri/tauri.conf.json`, and
-   `src-tauri/Cargo.toml` (keep them in sync); commit the changelog + bump together.
-3. **Build a signed bundle:**
+   comparison links at the bottom. This section becomes the release notes.
+2. **Bump the version** in `package.json`, `src-tauri/tauri.conf.json`,
+   `src-tauri/Cargo.toml` and `src-tauri/Cargo.lock` — verify with
+   `node scripts/check-version-sync.mjs`.
+3. **Commit, tag, push:**
 
    ```bash
-   ./scripts/release-build.sh
-   # set TAURI_SIGNING_PRIVATE_KEY_PASSWORD=… first if your key has a password
+   git commit -am "Release v<version>: <summary>"
+   git tag -a v<version> -m "elyra-conductor v<version>"
+   git push origin main && git push origin v<version>
    ```
 
-   It runs `pnpm tauri build` and `make-latest-json.mjs`, producing (in
-   `src-tauri/target/release/bundle/`) the `.dmg` installer, the `.app.tar.gz` updater
-   payload, and its `.sig`.
-4. **Manifest:** `latest.json` is generated automatically (regenerate manually with
-   `node scripts/make-latest-json.mjs`).
-5. **Create the GitHub release** for tag `v<version>` (use the new changelog section as
-   the notes) and upload the four assets, renaming the tarball/sig to the stable,
-   space-free name `elyra-conductor.app.tar.gz`:
+CI runs the quality gate, builds, signs, notarizes and staples, generates
+`latest.json`, and publishes the release with all four assets. It fails the build
+if the result is not actually notarized, rather than shipping something users
+cannot open.
 
-   ```bash
-   git tag -a v<version> -m "elyra-conductor v<version>" && git push origin v<version>
-   ```
+`./scripts/release-build.sh` still performs the same build locally (using a
+`notarytool` keychain profile instead of the secrets) when you want to test a
+bundle before tagging. See [`RELEASING.md`](../RELEASING.md) for the secret list
+and the local path.
 
 ## How the update check works
 
