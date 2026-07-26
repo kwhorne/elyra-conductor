@@ -3,8 +3,8 @@
 // Conductor stays secret-free: connection details are read from the project's
 // existing `.env`, or supplied per-session by the user. Nothing new is persisted.
 
-use serde::{Deserialize, Serialize};
 use crate::util::lock_recover;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;

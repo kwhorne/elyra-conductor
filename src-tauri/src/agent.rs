@@ -4,11 +4,11 @@
 // external `elyra` process, streams its stdout JSON lines to the UI, and writes
 // command JSON lines to its stdin. No AI logic, keys, or model calls live here.
 
+use crate::util::lock_recover;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use crate::util::lock_recover;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
