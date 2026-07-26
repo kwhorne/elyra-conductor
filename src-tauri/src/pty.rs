@@ -111,8 +111,8 @@ pub fn pty_spawn(
     // the user's original so the shim can source it.
     if shell_integration.unwrap_or(false) && shell.rsplit('/').next() == Some("zsh") {
         if let Some(shim) = zsh_shim_dir() {
-            let user_zdotdir =
-                std::env::var("ZDOTDIR").unwrap_or_else(|_| std::env::var("HOME").unwrap_or_default());
+            let user_zdotdir = std::env::var("ZDOTDIR")
+                .unwrap_or_else(|_| std::env::var("HOME").unwrap_or_default());
             cmd.env("USER_ZDOTDIR", user_zdotdir);
             cmd.env("ZDOTDIR", shim);
         }

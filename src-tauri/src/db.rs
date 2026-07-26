@@ -79,7 +79,7 @@ enum Conn {
     Sqlite(String), // file path; opened per query (cheap, avoids !Sync issues)
     Postgres(Mutex<postgres::Client>),
     Clickhouse(klickhouse::Client), // native TCP protocol (port 9000)
-    SqlAnywhere(libsql::Database), // remote SQL Anywhere / libsql (sqld) over HTTP
+    SqlAnywhere(libsql::Database),  // remote SQL Anywhere / libsql (sqld) over HTTP
 }
 
 // SQL Anywhere is SQLite-compatible, so its values map like SQLite's.
@@ -131,7 +131,11 @@ fn ch_value_to_string(v: &klickhouse::Value) -> Option<String> {
 
 // Run a query via Postgres' simple protocol, which returns every value as text
 // (Option<&str>) — ideal for a generic browser (no per-type decoding needed).
-fn pg_query(client: &mut postgres::Client, sql: &str, max_rows: usize) -> Result<QueryRows, String> {
+fn pg_query(
+    client: &mut postgres::Client,
+    sql: &str,
+    max_rows: usize,
+) -> Result<QueryRows, String> {
     use postgres::SimpleQueryMessage::*;
     let msgs = client.simple_query(sql).map_err(|e| e.to_string())?;
     let mut columns: Vec<String> = Vec::new();
@@ -206,7 +210,11 @@ fn write_askpass(secret: &str) -> Result<std::path::PathBuf, String> {
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
     let mut path = std::env::temp_dir();
-    path.push(format!("ec-askpass-{}-{}.sh", std::process::id(), rand_suffix()));
+    path.push(format!(
+        "ec-askpass-{}-{}.sh",
+        std::process::id(),
+        rand_suffix()
+    ));
     let escaped = secret.replace('\'', "'\\''");
     let script = format!("#!/bin/sh\nprintf '%s\\n' '{escaped}'\n");
     let mut f = std::fs::File::create(&path).map_err(|e| e.to_string())?;
@@ -281,7 +289,11 @@ fn start_tunnel(config: &DbConfig) -> Result<SshTunnel, String> {
     } else {
         config.port
     };
-    let ssh_port = if config.ssh_port == 0 { 22 } else { config.ssh_port };
+    let ssh_port = if config.ssh_port == 0 {
+        22
+    } else {
+        config.ssh_port
+    };
 
     let mut cmd = std::process::Command::new("ssh");
     cmd.arg("-N")
@@ -303,7 +315,10 @@ fn start_tunnel(config: &DbConfig) -> Result<SshTunnel, String> {
 
     if password_auth {
         cmd.args(["-o", "PubkeyAuthentication=no"]);
-        cmd.args(["-o", "PreferredAuthentications=password,keyboard-interactive"]);
+        cmd.args([
+            "-o",
+            "PreferredAuthentications=password,keyboard-interactive",
+        ]);
     } else if !config.ssh_key_path.trim().is_empty() {
         cmd.args(["-i", &expand_tilde(config.ssh_key_path.trim())]);
         cmd.args(["-o", "IdentitiesOnly=yes"]);
@@ -325,7 +340,9 @@ fn start_tunnel(config: &DbConfig) -> Result<SshTunnel, String> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(|e| format!("failed to start ssh: {e}"))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to start ssh: {e}"))?;
     let res = wait_port(local_port, &mut child, std::time::Duration::from_secs(15));
     // Remove the askpass helper as soon as auth is done (success or fail).
     if let Some(p) = &askpass {
@@ -413,7 +430,9 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
 
     // First non-empty value among a list of candidate env keys.
     let first = |keys: &[&str]| -> String {
-        keys.iter().find_map(|k| env.get(*k).cloned()).unwrap_or_default()
+        keys.iter()
+            .find_map(|k| env.get(*k).cloned())
+            .unwrap_or_default()
     };
 
     match engine.as_str() {
@@ -488,7 +507,12 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             Some(DbConfig {
                 engine: "sqlanywhere".into(),
                 url,
-                token: first(&["DB_AUTH_TOKEN", "SQLANYWHERE_AUTH_TOKEN", "LIBSQL_AUTH_TOKEN", "DB_TOKEN"]),
+                token: first(&[
+                    "DB_AUTH_TOKEN",
+                    "SQLANYWHERE_AUTH_TOKEN",
+                    "LIBSQL_AUTH_TOKEN",
+                    "DB_TOKEN",
+                ]),
                 label,
                 ..Default::default()
             })
@@ -528,7 +552,12 @@ pub fn db_from_env(project: String) -> Option<DbConfig> {
             Some(DbConfig {
                 engine: "sqlanywhere".into(),
                 url,
-                token: first(&["SQLANYWHERE_AUTH_TOKEN", "LIBSQL_AUTH_TOKEN", "DB_AUTH_TOKEN", "DB_TOKEN"]),
+                token: first(&[
+                    "SQLANYWHERE_AUTH_TOKEN",
+                    "LIBSQL_AUTH_TOKEN",
+                    "DB_AUTH_TOKEN",
+                    "DB_TOKEN",
+                ]),
                 label,
                 ..Default::default()
             })
@@ -672,8 +701,7 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
                     .map_err(|e| e.to_string())?
             };
             // Validate eagerly.
-            crate::util::block_on_future(client.execute("SELECT 1"))
-                .map_err(|e| e.to_string())?;
+            crate::util::block_on_future(client.execute("SELECT 1")).map_err(|e| e.to_string())?;
             Conn::Clickhouse(client)
         }
         "sqlanywhere" | "libsql" => {
@@ -689,7 +717,9 @@ fn open_conn(config: &DbConfig) -> Result<Conn, String> {
                     .map_err(|e| e.to_string())?;
                 // Validate eagerly so errors surface at connect time.
                 let conn = db.connect().map_err(|e| e.to_string())?;
-                conn.query("SELECT 1", ()).await.map_err(|e| e.to_string())?;
+                conn.query("SELECT 1", ())
+                    .await
+                    .map_err(|e| e.to_string())?;
                 Ok::<_, String>(db)
             })?;
             Conn::SqlAnywhere(db)
@@ -788,7 +818,9 @@ pub fn db_tables(state: State<DbManager>, id: String) -> Result<Vec<String>, Str
                 .map_err(|e| e.to_string())?;
             let mut out = Vec::new();
             while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
-                if let Some(s) = libsql_value_to_string(&row.get_value(0).map_err(|e| e.to_string())?) {
+                if let Some(s) =
+                    libsql_value_to_string(&row.get_value(0).map_err(|e| e.to_string())?)
+                {
                     out.push(s);
                 }
             }
@@ -932,9 +964,14 @@ pub fn db_columns(
                 let mut out = Vec::new();
                 while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
                     // PRAGMA table_info: cid, name, type, notnull, dflt_value, pk
-                    let name = libsql_value_to_string(&row.get_value(1).map_err(|e| e.to_string())?).unwrap_or_default();
-                    let data_type = libsql_value_to_string(&row.get_value(2).map_err(|e| e.to_string())?).unwrap_or_default();
-                    let notnull = matches!(row.get_value(3), Ok(libsql::Value::Integer(n)) if n != 0);
+                    let name =
+                        libsql_value_to_string(&row.get_value(1).map_err(|e| e.to_string())?)
+                            .unwrap_or_default();
+                    let data_type =
+                        libsql_value_to_string(&row.get_value(2).map_err(|e| e.to_string())?)
+                            .unwrap_or_default();
+                    let notnull =
+                        matches!(row.get_value(3), Ok(libsql::Value::Integer(n)) if n != 0);
                     let pk = matches!(row.get_value(5), Ok(libsql::Value::Integer(n)) if n > 0);
                     out.push(ColumnInfo {
                         name,
@@ -1293,7 +1330,11 @@ pub fn db_query(
                             break;
                         }
                         let vals = (0..ncols)
-                            .map(|i| row.get_value(i).ok().and_then(|v| libsql_value_to_string(&v)))
+                            .map(|i| {
+                                row.get_value(i)
+                                    .ok()
+                                    .and_then(|v| libsql_value_to_string(&v))
+                            })
                             .collect();
                         rows.push(vals);
                     }
@@ -1375,7 +1416,11 @@ fn mask_value(kind: &str, fixed: Option<&str>, value: Option<String>) -> Option<
             v.hash(&mut h);
             format!("{:016x}", h.finish())
         }),
-        "redact" => value.map(|v| v.chars().map(|c| if c.is_whitespace() { c } else { '*' }).collect()),
+        "redact" => value.map(|v| {
+            v.chars()
+                .map(|c| if c.is_whitespace() { c } else { '*' })
+                .collect()
+        }),
         _ => value,
     }
 }
@@ -1550,7 +1595,12 @@ fn build_create_table(
     Ok(ddl)
 }
 
-fn build_insert(table: &str, columns: &[String], rows: &[Vec<Option<String>>], target_engine: &str) -> String {
+fn build_insert(
+    table: &str,
+    columns: &[String],
+    rows: &[Vec<Option<String>>],
+    target_engine: &str,
+) -> String {
     let ident = quote_ident(target_engine, table);
     let col_list = columns
         .iter()
@@ -1603,7 +1653,10 @@ pub fn db_transfer_tables(
 
             if options.structure {
                 if options.drop_existing {
-                    let drop_sql = format!("DROP TABLE IF EXISTS {}", quote_ident(&target_engine, table));
+                    let drop_sql = format!(
+                        "DROP TABLE IF EXISTS {}",
+                        quote_ident(&target_engine, table)
+                    );
                     let _ = db_query(state.clone(), target_id.clone(), drop_sql, Some(1));
                 }
                 let ddl = build_create_table(table, &cols, &target_engine, &source_engine)?;
@@ -1625,7 +1678,11 @@ pub fn db_transfer_tables(
                 let masks_by_col: HashMap<&str, &MaskRule> = options
                     .masks
                     .iter()
-                    .filter_map(|m| m.column.strip_prefix(&table_prefix as &str).map(|col| (col, m)))
+                    .filter_map(|m| {
+                        m.column
+                            .strip_prefix(&table_prefix as &str)
+                            .map(|col| (col, m))
+                    })
                     .collect();
                 let mut offset = 0usize;
                 loop {
@@ -1744,7 +1801,11 @@ pub fn db_schema_diff(
     let source_set: HashSet<&str> = source_tables.iter().map(|s| s.as_str()).collect();
     let target_set: HashSet<&str> = target_tables.iter().map(|s| s.as_str()).collect();
 
-    let mut all_tables: Vec<String> = source_tables.iter().chain(target_tables.iter()).cloned().collect();
+    let mut all_tables: Vec<String> = source_tables
+        .iter()
+        .chain(target_tables.iter())
+        .cloned()
+        .collect();
     all_tables.sort();
     all_tables.dedup();
 
@@ -1817,7 +1878,11 @@ pub fn db_schema_diff(
                         name: n.to_string(),
                         source_type: Some(s.data_type.clone()),
                         target_type: Some(tg.data_type.clone()),
-                        status: if same { "same".into() } else { "type_mismatch".into() },
+                        status: if same {
+                            "same".into()
+                        } else {
+                            "type_mismatch".into()
+                        },
                     });
                 }
                 (Some(s), None) => {
@@ -1853,7 +1918,11 @@ pub fn db_schema_diff(
         }
         tables.push(SchemaTableDiff {
             table: t,
-            status: if changed { "different".into() } else { "same".into() },
+            status: if changed {
+                "different".into()
+            } else {
+                "same".into()
+            },
             columns: coldiffs,
         });
     }
@@ -1869,7 +1938,11 @@ mod tests {
     use super::*;
 
     fn write_env(contents: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("conductor-dbenv-{}-{}", std::process::id(), contents.len()));
+        let dir = std::env::temp_dir().join(format!(
+            "conductor-dbenv-{}-{}",
+            std::process::id(),
+            contents.len()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(".env"), contents).unwrap();
         dir
@@ -1896,13 +1969,18 @@ mod tests {
 
     #[test]
     fn quote_literal_still_doubles_single_quotes_and_maps_null() {
-        assert_eq!(quote_literal("mysql", &Some("O'Brien".into())), "'O''Brien'");
+        assert_eq!(
+            quote_literal("mysql", &Some("O'Brien".into())),
+            "'O''Brien'"
+        );
         assert_eq!(quote_literal("postgres", &None), "NULL");
     }
 
     #[test]
     fn from_env_sqlanywhere_explicit() {
-        let dir = write_env("DB_CONNECTION=libsql\nDB_URL=libsql://app.example.com\nDB_AUTH_TOKEN=secret\n");
+        let dir = write_env(
+            "DB_CONNECTION=libsql\nDB_URL=libsql://app.example.com\nDB_AUTH_TOKEN=secret\n",
+        );
         let cfg = db_from_env(dir.to_string_lossy().to_string()).expect("config");
         assert_eq!(cfg.engine, "sqlanywhere");
         assert_eq!(cfg.url, "libsql://app.example.com");
@@ -1912,7 +1990,8 @@ mod tests {
 
     #[test]
     fn from_env_sqlanywhere_inferred_without_connection() {
-        let dir = write_env("SQLANYWHERE_URL=libsql://bi.example.com\nSQLANYWHERE_AUTH_TOKEN=tok\n");
+        let dir =
+            write_env("SQLANYWHERE_URL=libsql://bi.example.com\nSQLANYWHERE_AUTH_TOKEN=tok\n");
         let cfg = db_from_env(dir.to_string_lossy().to_string()).expect("config");
         assert_eq!(cfg.engine, "sqlanywhere");
         assert_eq!(cfg.url, "libsql://bi.example.com");

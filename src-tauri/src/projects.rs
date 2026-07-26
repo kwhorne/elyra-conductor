@@ -268,7 +268,8 @@ pub fn git_branches(path: String) -> Branches {
     // no commits yet) and only fails on a genuine detached HEAD — unlike
     // `rev-parse --abbrev-ref HEAD`, which reports "HEAD" for unborn branches and
     // made the panel wrongly show "(detached)".
-    let current = git(&path, &["symbolic-ref", "--quiet", "--short", "HEAD"]).filter(|b| !b.is_empty());
+    let current =
+        git(&path, &["symbolic-ref", "--quiet", "--short", "HEAD"]).filter(|b| !b.is_empty());
     let all = git(&path, &["branch", "--format=%(refname:short)"])
         .map(|s| {
             s.lines()
@@ -380,7 +381,13 @@ const EDITORS: &[(&str, EditorLauncher)] = &[
     ("zed", EditorLauncher::Cli("zed")),
     ("vscode", EditorLauncher::Cli("code")),
     ("cursor", EditorLauncher::Cli("cursor")),
-    ("e", EditorLauncher::App { app_name: "e", bundle_id: "dev.e.editor" }),
+    (
+        "e",
+        EditorLauncher::App {
+            app_name: "e",
+            bundle_id: "dev.e.editor",
+        },
+    ),
 ];
 
 /// Resolve a `.app` bundle to a path: common install locations first, then
@@ -467,7 +474,10 @@ pub fn detect_editors() -> Vec<String> {
         .iter()
         .filter(|(_, launcher)| match launcher {
             EditorLauncher::Cli(bin) => find_bin(bin).is_some(),
-            EditorLauncher::App { app_name, bundle_id } => find_app(app_name, bundle_id).is_some(),
+            EditorLauncher::App {
+                app_name,
+                bundle_id,
+            } => find_app(app_name, bundle_id).is_some(),
         })
         .map(|(name, _)| name.to_string())
         .collect()
@@ -573,8 +583,12 @@ pub fn open_in_editor(editor: String, path: String) -> Result<(), String> {
                 .spawn()
                 .map_err(|e| format!("failed to launch {editor}: {e}"))?;
         }
-        EditorLauncher::App { app_name, bundle_id } => {
-            let app = find_app(app_name, bundle_id).ok_or_else(|| format!("{app_name}.app not found in /Applications"))?;
+        EditorLauncher::App {
+            app_name,
+            bundle_id,
+        } => {
+            let app = find_app(app_name, bundle_id)
+                .ok_or_else(|| format!("{app_name}.app not found in /Applications"))?;
             // `open -a <app> <path>` routes through Launch Services' "open
             // documents" Apple Event, which macOS refuses for a folder unless
             // the app explicitly declares it handles the `public.folder` UTI
@@ -770,7 +784,11 @@ pub fn run_step(cwd: String, command: String, timeout_secs: Option<u64>) -> Step
     {
         Ok(c) => c,
         Err(e) => {
-            return StepResult { code: -1, output: format!("failed to spawn: {e}"), timed_out: false }
+            return StepResult {
+                code: -1,
+                output: format!("failed to spawn: {e}"),
+                timed_out: false,
+            }
         }
     };
 
@@ -816,11 +834,19 @@ pub fn run_step(cwd: String, command: String, timeout_secs: Option<u64>) -> Step
     // Keep the tail — that's where the error usually is.
     if output.len() > 8000 {
         let cut = output.len() - 8000;
-        let cut = output.char_indices().map(|(i, _)| i).find(|&i| i >= cut).unwrap_or(cut);
+        let cut = output
+            .char_indices()
+            .map(|(i, _)| i)
+            .find(|&i| i >= cut)
+            .unwrap_or(cut);
         output = output[cut..].to_string();
     }
 
-    StepResult { code, output, timed_out }
+    StepResult {
+        code,
+        output,
+        timed_out,
+    }
 }
 
 #[cfg(test)]
@@ -857,7 +883,12 @@ mod tests {
         std::fs::create_dir_all(&repo).unwrap();
         let r = repo.to_string_lossy().to_string();
         let run = |args: &[&str]| {
-            std::process::Command::new("git").arg("-C").arg(&r).args(args).output().unwrap();
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&r)
+                .args(args)
+                .output()
+                .unwrap();
         };
         run(&["init", "-q", "-b", "main"]);
         run(&["config", "user.email", "t@t.t"]);
@@ -874,7 +905,9 @@ mod tests {
         assert!(std::path::Path::new(&path).is_dir());
         let list = git_worktree_list(r.clone());
         assert_eq!(list.len(), 2);
-        assert!(list.iter().any(|w| w.branch.as_deref() == Some("feature/x") && !w.is_main));
+        assert!(list
+            .iter()
+            .any(|w| w.branch.as_deref() == Some("feature/x") && !w.is_main));
 
         git_worktree_remove(r.clone(), path, false).expect("remove");
         assert_eq!(git_worktree_list(r.clone()).len(), 1);
@@ -927,7 +960,9 @@ fn worktree_location(repo: &str, branch: &str) -> std::path::PathBuf {
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("repo");
-    let parent = repo_path.parent().unwrap_or_else(|| std::path::Path::new("/tmp"));
+    let parent = repo_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("/tmp"));
     let safe: String = branch
         .chars()
         .map(|c| if c == '/' || c == ' ' { '-' } else { c })
@@ -975,10 +1010,26 @@ pub fn git_worktree_list(path: String) -> Vec<Worktree> {
         } else if line.starts_with("locked") {
             locked = true;
         } else if line.trim().is_empty() {
-            flush(&mut res, &mut wt_path, &mut head, &mut branch, &mut locked, &mut have, &mut first);
+            flush(
+                &mut res,
+                &mut wt_path,
+                &mut head,
+                &mut branch,
+                &mut locked,
+                &mut have,
+                &mut first,
+            );
         }
     }
-    flush(&mut res, &mut wt_path, &mut head, &mut branch, &mut locked, &mut have, &mut first);
+    flush(
+        &mut res,
+        &mut wt_path,
+        &mut head,
+        &mut branch,
+        &mut locked,
+        &mut have,
+        &mut first,
+    );
     res
 }
 
@@ -998,7 +1049,8 @@ pub fn git_worktree_conflicts(path: String) -> Vec<WorktreeConflict> {
     if trees.len() < 2 {
         return vec![];
     }
-    let mut by_file: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut by_file: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
     for t in &trees {
         let Some(out) = git(&t.path, &["status", "--porcelain"]) else {
             continue;
@@ -1009,7 +1061,12 @@ pub fn git_worktree_conflicts(path: String) -> Vec<WorktreeConflict> {
                 continue;
             }
             // Porcelain v1 short format: "XY path" or "XY orig -> new" for renames.
-            let file = line[3..].rsplit(" -> ").next().unwrap_or("").trim().to_string();
+            let file = line[3..]
+                .rsplit(" -> ")
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
             if file.is_empty() {
                 continue;
             }
@@ -1029,7 +1086,11 @@ pub fn git_worktree_conflicts(path: String) -> Vec<WorktreeConflict> {
 }
 
 #[tauri::command(async)]
-pub fn git_worktree_add(repo: String, branch: String, base: Option<String>) -> Result<String, String> {
+pub fn git_worktree_add(
+    repo: String,
+    branch: String,
+    base: Option<String>,
+) -> Result<String, String> {
     let branch = branch.trim().to_string();
     if branch.is_empty() {
         return Err("Branch name is required".into());
@@ -1042,7 +1103,16 @@ pub fn git_worktree_add(repo: String, branch: String, base: Option<String>) -> R
     if let Some(parent) = dir.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let local = git(&repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_some();
+    let local = git(
+        &repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}"),
+        ],
+    )
+    .is_some();
     let remote_ref = format!("refs/remotes/origin/{branch}");
     let remote = git(&repo, &["rev-parse", "--verify", "--quiet", &remote_ref]).is_some();
     if local {
@@ -1051,10 +1121,28 @@ pub fn git_worktree_add(repo: String, branch: String, base: Option<String>) -> R
     } else if remote {
         // Branch exists on origin only (e.g. a PR branch): create a local branch
         // that tracks it, so the worktree has the real PR contents.
-        git_result(&repo, &["worktree", "add", "--track", "-b", &branch, &dir_str, &format!("origin/{branch}")])?;
+        git_result(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "--track",
+                "-b",
+                &branch,
+                &dir_str,
+                &format!("origin/{branch}"),
+            ],
+        )?;
     } else {
-        let base_ref = base.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("HEAD");
-        git_result(&repo, &["worktree", "add", "-b", &branch, &dir_str, base_ref])?;
+        let base_ref = base
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("HEAD");
+        git_result(
+            &repo,
+            &["worktree", "add", "-b", &branch, &dir_str, base_ref],
+        )?;
     }
     Ok(dir_str)
 }
@@ -1123,8 +1211,7 @@ pub fn gh_pr_list(repo: String) -> Result<Vec<PrInfo>, String> {
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
-    let json: serde_json::Value =
-        serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?;
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?;
     let mut res = Vec::new();
     for pr in json.as_array().into_iter().flatten() {
         let (mut passed, mut failed, mut pending) = (0u32, 0u32, 0u32);
@@ -1144,19 +1231,43 @@ pub fn gh_pr_list(repo: String) -> Result<Vec<PrInfo>, String> {
                     failed += 1;
                 } else if ok {
                     passed += 1;
-                } else if status == "COMPLETED" || state == "EXPECTED" || !state.is_empty() || !status.is_empty() {
+                } else if status == "COMPLETED"
+                    || state == "EXPECTED"
+                    || !state.is_empty()
+                    || !status.is_empty()
+                {
                     pending += 1;
                 }
             }
         }
         res.push(PrInfo {
-            branch: pr.get("headRefName").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            branch: pr
+                .get("headRefName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
             number: pr.get("number").and_then(|v| v.as_u64()).unwrap_or(0),
-            title: pr.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            state: pr.get("state").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            title: pr
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            state: pr
+                .get("state")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
             is_draft: pr.get("isDraft").and_then(|v| v.as_bool()).unwrap_or(false),
-            url: pr.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            review_decision: pr.get("reviewDecision").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            url: pr
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            review_decision: pr
+                .get("reviewDecision")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
             checks_passed: passed,
             checks_failed: failed,
             checks_pending: pending,
@@ -1184,7 +1295,11 @@ pub fn gh_pr_merge(repo: String, number: u64, method: Option<String>) -> Result<
         .map_err(|e| e.to_string())?;
     if !out.status.success() {
         let msg = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        return Err(if msg.is_empty() { "gh pr merge failed".to_string() } else { msg });
+        return Err(if msg.is_empty() {
+            "gh pr merge failed".to_string()
+        } else {
+            msg
+        });
     }
     Ok(())
 }

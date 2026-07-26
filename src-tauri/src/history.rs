@@ -179,7 +179,11 @@ pub fn history_stats(
     let (total_runs, total_ms, failed): (i64, i64, i64) = {
         let row = |params: &[&dyn rusqlite::ToSql]| {
             conn.query_row(&totals_sql, params, |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, Option<i64>>(2)?.unwrap_or(0)))
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, Option<i64>>(2)?.unwrap_or(0),
+                ))
             })
         };
         match &proj_param {
@@ -214,7 +218,12 @@ pub fn history_stats(
     .collect::<Result<Vec<_>, _>>()
     .map_err(|e| e.to_string())?;
 
-    Ok(FlowStats { total_runs, total_ms, failed, top })
+    Ok(FlowStats {
+        total_runs,
+        total_ms,
+        failed,
+        top,
+    })
 }
 
 /// Delete history, optionally only for one project.
@@ -272,8 +281,15 @@ mod tests {
         let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|b| b.as_ref()).collect();
         stmt.query_map(refs.as_slice(), |r| {
             Ok(HistoryRow {
-                id: r.get(0)?, ts: r.get(1)?, project_path: r.get(2)?, label: r.get(3)?,
-                proc: r.get(4)?, command: r.get(5)?, exit_code: r.get(6)?, duration: r.get(7)?, output: r.get(8)?,
+                id: r.get(0)?,
+                ts: r.get(1)?,
+                project_path: r.get(2)?,
+                label: r.get(3)?,
+                proc: r.get(4)?,
+                command: r.get(5)?,
+                exit_code: r.get(6)?,
+                duration: r.get(7)?,
+                output: r.get(8)?,
             })
         })
         .unwrap()

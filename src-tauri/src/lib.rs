@@ -59,8 +59,15 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::close_window(app, None)?,
         ],
     )?;
-    let data_transfer = MenuItem::with_id(app, "data-transfer", "Data Transfer…", true, None::<&str>)?;
-    let compare_schemas = MenuItem::with_id(app, "compare-schemas", "Compare Schemas…", true, None::<&str>)?;
+    let data_transfer =
+        MenuItem::with_id(app, "data-transfer", "Data Transfer…", true, None::<&str>)?;
+    let compare_schemas = MenuItem::with_id(
+        app,
+        "compare-schemas",
+        "Compare Schemas…",
+        true,
+        None::<&str>,
+    )?;
     let tools_menu = Submenu::with_items(app, "Tools", true, &[&data_transfer, &compare_schemas])?;
     Menu::with_items(app, &[&app_menu, &edit_menu, &window_menu, &tools_menu])
 }
