@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-07-26
+
+Housekeeping only — **no user-facing changes**. This release exists to give the
+next round of work a clean, tagged baseline.
+
+### Changed
+
+- The Rust tree is now formatted with `rustfmt` (it had drifted since before
+  0.9.0). Formatting only: verified by normalising both trees and comparing, and
+  `cargo test` and Clippy are unchanged. Kept in its own commit so it never has
+  to be read alongside a behavioural change.
+- Documented the pre-push checks in
+  [`docs/development.md`](docs/development.md), including what the security
+  suite in `pnpm check` actually guards.
+
 ## [0.9.1] — 2026-07-25
 
 ### Security
@@ -896,7 +911,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.8...v0.9.0
 [0.8.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.8.7...v0.8.8

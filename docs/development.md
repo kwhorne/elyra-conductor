@@ -73,6 +73,25 @@ never an AI agent — no model calls, no API keys, no prompts/tools.
 - Update the docs and [`CHANGELOG.md`](../CHANGELOG.md) (`[Unreleased]`) with notable
   changes.
 
+### Checks before you push
+
+```bash
+pnpm check                        # svelte-check (errors *and* warnings) + security suite
+cd src-tauri
+cargo test                        # includes the SQL-escaping and locking regressions
+cargo clippy --all-targets        # expected to be warning-free
+cargo fmt                         # the tree is rustfmt-clean as of 0.9.2 — keep it that way
+```
+
+`pnpm check` also runs [`scripts/check-security.mjs`](../scripts/check-security.mjs),
+which asserts that HTML sanitising still strips attacks while preserving runbook
+`cfile:`/`ctask:` links, and that scrollback redaction masks credentials without touching
+ordinary output. If you change `lib/sanitize.js` or `lib/redact.js`, expect that suite to
+have an opinion.
+
+> Keep formatting commits separate from behavioural ones. A reviewer should never have to
+> pick a logic change out of a few hundred reflowed lines.
+
 ## Related
 
 - [Architecture & boundaries](architecture.md)
