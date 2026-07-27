@@ -303,13 +303,17 @@
     });
     cleanup.push(unExit);
 
-    term.onData((d) => {
-      invoke("pty_write", { id, data: d }).catch(() => {});
-      onuserinput?.(id, d);
-    });
-
     // Replay last session's scrollback as read-only history before the new
     // shell starts, so context isn't lost across restarts.
+    //
+    // Deliberately *before* onData is wired up. `onData` fires for terminal
+    // replies as well as keystrokes: a query sequence in the written stream
+    // (e.g. ESC[6n, cursor-position report) makes xterm emit an answer, which
+    // would otherwise be forwarded straight into the shell's stdin as if typed.
+    // Two things happen to make that unreachable today — the serialize addon
+    // stores buffer *state*, so query sequences never survive persistence, and
+    // the pty does not exist yet at this point. Both are incidental, though, so
+    // keep the ordering: it is the one guard that survives a change to either.
     if (SB_KEY && persistScrollback) {
       try {
         const prev = localStorage.getItem(SB_KEY);
@@ -319,6 +323,11 @@
         }
       } catch {}
     }
+
+    term.onData((d) => {
+      invoke("pty_write", { id, data: d }).catch(() => {});
+      onuserinput?.(id, d);
+    });
 
     // The command (if any) is run by the shell itself at startup (see pty.rs),
     // which avoids the race of typing into a not-yet-ready interactive shell.

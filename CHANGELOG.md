@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Hardened scrollback replay against terminal-reply injection.** `onData` fires for
+  terminal *replies* as well as keystrokes, so a query sequence (e.g. `ESC[6n`) in
+  replayed scrollback could have its answer forwarded into the fresh shell's stdin as
+  though typed. Verified unreachable today — the serialize addon stores buffer state, so
+  query sequences never survive persistence, and the pty does not exist yet during replay
+  — but both protections were incidental. `onData` is now wired up *after* the replay, so
+  the guarantee holds even if either changes.
+
 ### Fixed
 
 - **Breathing room at the bottom of the window.** Terminal output, the file tree,
