@@ -419,7 +419,11 @@
   .term {
     width: 100%;
     height: 100%;
-    padding: 6px 8px;
+    /* Extra room at the bottom so the last line never sits flush against the
+       window edge — matches the 10px the sidebar and DB panel already use.
+       xterm's fit addon subtracts this from the available height, so it costs
+       a row rather than clipping one. */
+    padding: 6px 8px 10px;
     background: var(--bg-2);
   }
   .search {

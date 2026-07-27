@@ -225,7 +225,7 @@
   .x { margin-left: auto; background: transparent; border: 1px solid var(--border); border-radius: 7px; color: var(--text-dim); font-size: 11px; padding: 4px 8px; cursor: pointer; }
   .err { background: rgba(192,57,43,0.15); color: #e06c5a; font-size: 12px; padding: 6px 12px; white-space: pre-wrap; }
   .body { flex: 1; display: flex; min-height: 0; }
-  .side { width: 340px; min-width: 340px; border-right: 1px solid var(--border); overflow: auto; padding: 4px 0; }
+  .side { width: 340px; min-width: 340px; border-right: 1px solid var(--border); overflow: auto; padding: 4px 0 10px; }
   .grouphead { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px 3px; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
   .link { background: transparent; border: none; color: var(--accent); font-size: 11px; cursor: pointer; }
   .frow { display: flex; align-items: center; gap: 6px; padding: 2px 10px; }

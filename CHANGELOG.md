@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Breathing room at the bottom of the window.** Terminal output, the file tree,
+  the Git panel's file list and database result grids all sat flush against the
+  bottom edge, so the last line looked cramped against the window frame. They now
+  leave 10px, matching what the project sidebar and database panel already did.
+  For the terminal this costs a row rather than clipping one — xterm's fit addon
+  subtracts the padding when it works out how many rows fit.
+
 ## [0.9.2] — 2026-07-26
 
 Housekeeping only — **no user-facing changes**. This release exists to give the

@@ -711,7 +711,9 @@
   .status { padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-dim); background: var(--bg-3); border-bottom: 1px solid var(--border); }
   .status .err { color: #f7768e; }
   .status .ok { color: var(--green); }
-  .grid-wrap { flex: 1; min-height: 0; overflow: auto; }
+  /* 10px below the last row so it clears the window edge when scrolled to the
+     bottom — same allowance as the sidebar, DB panel and file tree. */
+  .grid-wrap { flex: 1; min-height: 0; overflow: auto; padding-bottom: 10px; }
   .grid { border-collapse: collapse; font-size: 12px; font-family: var(--font-mono); width: max-content; min-width: 100%; }
   .grid th, .grid td {
     border: 1px solid var(--border); padding: 3px 8px; text-align: left;

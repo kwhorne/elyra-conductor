@@ -129,7 +129,9 @@
   .list {
     flex: 1;
     overflow: auto;
-    padding: 4px 0;
+    /* 10px at the bottom so the last entry clears the window edge when the
+       tree is scrolled to the end — same as the sidebar and DB panel. */
+    padding: 4px 0 10px;
   }
   .list.dropping {
     box-shadow: inset 0 0 0 2px var(--accent);
