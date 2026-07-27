@@ -144,6 +144,7 @@ pub fn run() {
             projects::run_step,
             projects::git_worktree_list,
             projects::git_worktree_conflicts,
+            projects::git_decay,
             projects::git_worktree_add,
             projects::git_worktree_remove,
             projects::detect_gh,

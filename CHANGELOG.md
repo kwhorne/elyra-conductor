@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **🌱 Garden — unpushed and forgotten work across every repo.** A new view (top actions,
+  or `⌘K` → *Garden*) aggregates git state over all your projects to answer one question:
+  is there work here that exists nowhere but this machine? Lists unpushed commits, branches
+  never pushed, branches whose remote is gone, and branches untouched for 60+ days — sorted
+  worst-first, with one click through to the project or its Git panel. Read-only.
+
+  Uncommitted files appear as context (`+29 uncommitted`) but deliberately never cause a
+  listing: measured against a real machine, qualifying on them listed **46 of 98**
+  repositories — mostly build output — which buried the findings that mattered. Requiring
+  the repo to also be dormant barely helped (44). The rule as shipped gives **16 of 98**,
+  and every row is actionable. Costs two `git` calls per repo, scanned through the same
+  worker pool as the sidebar so it cannot cause a process storm.
+
 - **A failed command now marks its tab red, and the marker persists.** The *Fix it* toast
   expires after 18 seconds so it never nags — which meant a failure that happened while
   you were looking at another tab was simply lost. The tab now pulses red and keeps a

@@ -20,6 +20,7 @@
   import DataTransferDialog from "./lib/DataTransferDialog.svelte";
   import SchemaDiffDialog from "./lib/SchemaDiffDialog.svelte";
   import AgentDashboard from "./lib/AgentDashboard.svelte";
+  import GardenModal from "./lib/GardenModal.svelte";
   import MorningBrief from "./lib/MorningBrief.svelte";
   import { listen } from "@tauri-apps/api/event";
   import RunModal from "./lib/RunModal.svelte";
@@ -887,6 +888,125 @@
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker));
   }
 
+  // ---------- garden: what have I left lying around? ----------
+  // The sidebar shows dirty/ahead/behind for one project at a time. This asks
+  // the same question across every repo, and mostly one question in particular:
+  // is there work here that exists nowhere but this machine?
+  //
+  // Thresholds are named rather than inlined because they are judgement calls,
+  // not facts — they decide what counts as "neglected" and are worth arguing
+  // about in one place.
+  const DAY = 86400;
+  const NEGLECT_DAYS = 7; // unpushed/uncommitted longer than this is worth a nudge
+  const STALE_BRANCH_DAYS = 60; // a branch nobody has touched in two months
+  const MAINISH = new Set(["main", "master", "develop", "trunk"]);
+
+  let gardenOpen = $state(false);
+  let gardenRows = $state([]);
+  let gardenLoading = $state(false);
+
+  function decayFindings(decay, nowSec) {
+    const findings = [];
+    let severity = "low";
+    let oldest = nowSec;
+    const bump = (level) => {
+      if (level === "high") severity = "high";
+      else if (level === "medium" && severity !== "high") severity = "medium";
+    };
+
+    for (const b of decay.branches) {
+      const ageDays = b.last_commit ? (nowSec - b.last_commit) / DAY : 0;
+      // Work that exists only here. This is the finding the whole view is for.
+      if (b.has_upstream && b.ahead > 0) {
+        findings.push({
+          kind: "unpushed",
+          text: `${b.ahead} unpushed on ${b.name}`,
+        });
+        if (ageDays >= NEGLECT_DAYS) bump("high");
+        else bump("medium");
+        oldest = Math.min(oldest, b.last_commit || nowSec);
+      } else if (!b.has_upstream && ageDays >= NEGLECT_DAYS) {
+        // Never pushed at all. We deliberately don't count its commits (that
+        // would cost a git call per branch); the age is the signal.
+        findings.push({ kind: "never-pushed", text: `${b.name} never pushed` });
+        bump("high");
+        oldest = Math.min(oldest, b.last_commit || nowSec);
+      }
+      if (b.upstream_gone) {
+        findings.push({ kind: "gone", text: `${b.name}: remote branch gone` });
+      }
+      if (!b.is_current && !MAINISH.has(b.name) && ageDays >= STALE_BRANCH_DAYS) {
+        findings.push({ kind: "stale", text: `${b.name} stale (${Math.round(ageDays)}d)` });
+      }
+    }
+
+    // Uncommitted files are deliberately *not* a reason for a repo to appear.
+    //
+    // Measured against a real machine: qualifying on dirty files listed 46 of 98
+    // repositories, mostly build output and scratch state, which buried the
+    // findings that matter. Requiring the repo to also be quiet barely helped
+    // (44) — dormant repos tend to be both. Restricting the list to work that
+    // exists nowhere else, plus stale branches, gives 16 of 98, and every row is
+    // something you would actually act on.
+    //
+    // The count is still carried as context on rows that qualify for a real
+    // reason: "main never pushed (+29 uncommitted)" tells you what is at stake.
+    return { findings, severity, oldest, dirtyFiles: decay.dirty_files };
+  }
+
+  async function loadGarden() {
+    gardenLoading = true;
+    const seen = new Set();
+    const candidates = [...pinned, ...projects].filter((p) => {
+      if (!p.is_git || seen.has(p.path)) return false;
+      seen.add(p.path);
+      return true;
+    });
+    const nowSec = Math.floor(Date.now() / 1000);
+    const found = [];
+    const scan = async (p) => {
+      try {
+        const decay = await invoke("git_decay", { path: p.path });
+        const { findings, severity, oldest, dirtyFiles } = decayFindings(decay, nowSec);
+        if (findings.length === 0) return;
+        found.push({
+          path: p.path,
+          name: p.name,
+          branch: decay.branches.find((b) => b.is_current)?.name ?? p.branch ?? null,
+          lastCommit: decay.last_commit,
+          findings,
+          severity,
+          oldest,
+          dirtyFiles,
+        });
+      } catch {}
+    };
+    // Same worker pool as the git_status enrichment: scanning dozens of repos at
+    // once spawned a process storm and froze the UI (see loadGitStatus).
+    const CONCURRENCY = 6;
+    let i = 0;
+    const worker = async () => {
+      while (i < candidates.length) await scan(candidates[i++]);
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, candidates.length) }, worker));
+    gardenRows = found;
+    gardenLoading = false;
+  }
+
+  function openGarden() {
+    gardenOpen = true;
+    loadGarden();
+  }
+  function gardenOpenProject(row) {
+    const p = [...pinned, ...projects].find((x) => x.path === row.path);
+    if (p) selectProject(p);
+    gardenOpen = false;
+  }
+  function gardenOpenGit(row) {
+    gitPanel = { open: true, path: row.path, name: row.name };
+    gardenOpen = false;
+  }
+
   function makeLeaf(cwd, title, runOnce = null, key = null) {
     // `key` is a stable per-pane id that survives serialize/restore, so the
     // saved scrollback can be matched back to the right pane after restart.
@@ -1617,6 +1737,7 @@
     list.push({ id: "act:about", title: "About Elyra Conductor", group: "action", icon: "\u2139", action: () => (aboutOpen = true) });
     list.push({ id: "act:data-transfer", title: "Tools: Data Transfer…", group: "action", icon: "⇄", action: () => (dataTransferOpen = true) });
     list.push({ id: "act:compare-schemas", title: "Tools: Compare Schemas…", group: "action", icon: "⇄", action: () => (schemaDiffOpen = true) });
+    list.push({ id: "act:garden", title: "Garden — what have I left lying around?", hint: "unpushed & forgotten work across all repos", group: "action", icon: "\u{1F331}", action: openGarden });
     if (tabs.some((t) => t.kind === "agent")) list.push({ id: "act:agent-dashboard", title: "Agent dashboard…", group: "action", icon: "🎛", action: () => (agentDashboardOpen = true) });
     list.push({ id: "act:check-update", title: "Check for updates\u2026", group: "action", icon: "\u21BB", action: () => checkForUpdate(true) });
     list.push({ id: "act:reset-layout", title: "Reset saved layout", group: "action", icon: "\u21BA", action: () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} location.reload(); } });
@@ -2113,6 +2234,7 @@
       <span class="tgroup">Tools</span>
       <button title="Listening ports" onclick={() => (portsOpen = true)}>⚡ Ports</button>
       <button title="Command timeline — what ran, where, how long" onclick={() => (timelineOpen = true)}>🕘 Timeline</button>
+      <button title="Garden — unpushed and forgotten work across all repos" onclick={openGarden}>🌱 Garden</button>
       <button class:rec={recording} title={recording ? "Stop recording — turn captured commands into a runbook" : "Record commands into a runbook (needs shell integration)"} onclick={toggleRecording}>{recording ? `⏺ Rec ${recordedCmds.length}` : "⏺ Record"}</button>
       {#if projectTasks.length}<button title="Run a project task (npm/composer/make/just)" onclick={() => (tasksOpen = true)}>☰ Tasks</button>{/if}
       {#if activeProject}<button title="View & edit .env (masked)" onclick={() => (envOpen = true)}>🔑 Env</button>{/if}
@@ -2412,6 +2534,16 @@
   <AboutModal open={aboutOpen} onclose={() => (aboutOpen = false)} />
   <DataTransferDialog open={dataTransferOpen} conns={dbConns} onconnect={dbConnectEntry} onclose={() => (dataTransferOpen = false)} />
   <SchemaDiffDialog open={schemaDiffOpen} conns={dbConns} onconnect={dbConnectEntry} onclose={() => (schemaDiffOpen = false)} />
+  <GardenModal
+    open={gardenOpen}
+    rows={gardenRows}
+    loading={gardenLoading}
+    staleDays={STALE_BRANCH_DAYS}
+    onopen={gardenOpenProject}
+    ongit={gardenOpenGit}
+    onrefresh={loadGarden}
+    onclose={() => (gardenOpen = false)}
+  />
   <AgentDashboard
     open={agentDashboardOpen}
     {tabs}

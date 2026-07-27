@@ -60,6 +60,38 @@ For rebases, interactive staging, history browsing, and the rest, use a terminal
 (`git …`) or open the project in your editor. Conductor intentionally keeps the built-in
 git surface small — commit + status are the high-frequency actions.
 
+## 🌱 Garden — what have I left lying around?
+
+The sidebar shows dirty/ahead/behind for one project at a time. **🌱 Garden** in the top
+actions (or `⌘K` → *Garden*) asks the same question across every project at once, and
+mostly one question in particular: **is there work here that exists nowhere but this
+machine?**
+
+A repository is listed when it has:
+
+- **unpushed commits** — `N unpushed on <branch>`
+- **a branch that has never been pushed** at all (older than 7 days)
+- **a branch whose remote is gone** — usually a merged PR, so the local copy can go
+- **a stale branch** — untouched for 60+ days, excluding the one you have checked out and
+  `main`/`master`/`develop`/`trunk`
+
+Rows are sorted worst-first and colour-coded by severity. Clicking a name opens the
+project; **⎇ Git** opens the [Git panel](#the-git-panel-g) for it.
+
+### Why uncommitted files don't put a repo on the list
+
+They do show up — as `+29 uncommitted` context on rows that qualify for another reason,
+because that tells you what is at stake. But they never *cause* a listing, and that was a
+deliberate change after measuring against a real machine: qualifying on dirty files listed
+**46 of 98** repositories, mostly build output and scratch state, which buried the findings
+that mattered. Requiring the repo to also be dormant barely helped (44) — neglected repos
+tend to be both. Restricting the list to work that exists nowhere else, plus stale
+branches, gives **16 of 98**, and every row is something you would act on.
+
+The view is **read-only**: it never pushes, commits or deletes anything for you. It also
+costs exactly two `git` invocations per repository and scans through a small worker pool —
+enriching every project at once previously caused a process storm that froze the UI.
+
 ## Worktrees
 
 For parallel branches — each an isolated checkout you can open as a terminal or an Elyra

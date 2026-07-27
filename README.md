@@ -147,6 +147,12 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   float to the top. A **Ready to merge** queue lists PRs behind those agents whose
   checks are all green; **Squash & merge** runs `gh pr merge`, closes the agent tab, and
   removes the worktree in one click.
+- 🌱 **Garden — what have I left lying around?** One view over *every* project that
+  answers the question you never think to ask: is there work here that exists nowhere but
+  this machine? Lists unpushed commits, branches never pushed, branches whose remote is
+  gone, and branches nobody has touched in 60 days — worst first. Uncommitted files show as
+  context but never cause a listing (measured: that would have listed 46 of 98 repos
+  instead of 16). Read-only; nothing is pushed or deleted for you.
 - ✅ **GitHub PR status** — with an authenticated `gh`, each worktree shows its open
   PR (number, CI check rollup, review state) linking to GitHub. Open PRs without a
   worktree are listed too, so you can **check a PR out as a worktree** (terminal or

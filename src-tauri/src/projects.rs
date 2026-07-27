@@ -854,6 +854,50 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parse_track_handles_every_shape_git_emits() {
+        assert_eq!(parse_track(""), (0, 0, false), "no upstream / in sync");
+        assert_eq!(parse_track("[ahead 2]"), (2, 0, false));
+        assert_eq!(parse_track("[behind 3]"), (0, 3, false));
+        assert_eq!(parse_track("[ahead 2, behind 3]"), (2, 3, false));
+        assert_eq!(parse_track("[gone]"), (0, 0, true));
+        // Defensive: unexpected content must not panic or misreport.
+        assert_eq!(parse_track("[ahead x]"), (0, 0, false));
+    }
+
+    #[test]
+    fn git_decay_sees_local_only_work() {
+        let base = std::env::temp_dir().join(format!("conductor-decay-{}", std::process::id()));
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let r = repo.to_string_lossy().to_string();
+        let run = |args: &[&str]| {
+            std::process::Command::new("git").arg("-C").arg(&r).args(args).output().unwrap();
+        };
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "t@t.t"]);
+        run(&["config", "user.name", "t"]);
+        std::fs::write(repo.join("a.txt"), "one").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-qm", "first"]);
+        run(&["branch", "side"]);
+        // Leave an uncommitted change behind.
+        std::fs::write(repo.join("b.txt"), "dirty").unwrap();
+
+        let d = git_decay(r.clone());
+        assert_eq!(d.dirty_files, 1, "the untracked file should count as dirty");
+        assert!(d.last_commit > 0, "should report the tip commit date");
+        assert_eq!(d.branches.len(), 2, "main + side");
+        let main = d.branches.iter().find(|b| b.name == "main").unwrap();
+        assert!(main.is_current, "main is checked out");
+        assert!(!main.has_upstream, "no remote configured, so nothing is pushed");
+        let side = d.branches.iter().find(|b| b.name == "side").unwrap();
+        assert!(!side.is_current);
+        assert!(!side.has_upstream);
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
     fn run_step_success() {
         let r = run_step("/tmp".into(), "echo hello".into(), Some(10));
         assert_eq!(r.code, 0);
@@ -1031,6 +1075,123 @@ pub fn git_worktree_list(path: String) -> Vec<Worktree> {
         &mut first,
     );
     res
+}
+
+// ── repo decay (“garden tending”) ────────────────────────────────────
+// Everything needed to answer “what have I left lying around?” for one repo:
+// work that exists only on this machine, and branches nobody has touched in
+// months.
+//
+// Deliberately **two** git invocations per repo, no more. Enriching every
+// project with `git_status` alone once caused a process storm on window focus
+// (see the comment there), and this runs over the same set of repositories.
+// `for-each-ref` yields every branch's date *and* its ahead/behind in one go,
+// so per-branch data costs nothing extra.
+
+#[derive(serde::Serialize)]
+pub struct DecayBranch {
+    pub name: String,
+    /// Commits that exist only here (no upstream, or ahead of it).
+    pub ahead: u32,
+    pub behind: u32,
+    /// Unix seconds of the branch tip's commit.
+    pub last_commit: i64,
+    pub has_upstream: bool,
+    /// The upstream branch is gone from the remote (`[gone]`).
+    pub upstream_gone: bool,
+    pub is_current: bool,
+}
+
+#[derive(serde::Serialize)]
+pub struct Decay {
+    /// Number of paths with uncommitted changes.
+    pub dirty_files: u32,
+    /// Unix seconds of the most recent commit anywhere in the repo (0 if none).
+    pub last_commit: i64,
+    pub branches: Vec<DecayBranch>,
+}
+
+/// Parse git's `%(upstream:track)` field.
+///
+/// Its shapes are `[ahead 2]`, `[behind 1]`, `[ahead 2, behind 1]`, `[gone]`,
+/// or empty. Kept separate from the command so every variant can be tested
+/// without constructing a repository in each state.
+fn parse_track(track: &str) -> (u32, u32, bool) {
+    let mut ahead = 0u32;
+    let mut behind = 0u32;
+    let gone = track.contains("gone");
+    for part in track.trim_matches(|c| c == '[' || c == ']').split(',') {
+        let part = part.trim();
+        if let Some(n) = part.strip_prefix("ahead ") {
+            ahead = n.trim().parse().unwrap_or(0);
+        } else if let Some(n) = part.strip_prefix("behind ") {
+            behind = n.trim().parse().unwrap_or(0);
+        }
+    }
+    (ahead, behind, gone)
+}
+
+#[tauri::command(async)]
+pub fn git_decay(path: String) -> Decay {
+    let mut dirty_files = 0u32;
+    let mut current: Option<String> = None;
+
+    // Call 1: current branch + how many paths are dirty.
+    if let Some(out) = git(&path, &["status", "--porcelain=v2", "--branch"]) {
+        for line in out.lines() {
+            if let Some(rest) = line.strip_prefix("# branch.head ") {
+                current = Some(rest.trim().to_string()).filter(|b| !b.is_empty() && b != "(detached)");
+            } else if !line.starts_with('#') && !line.is_empty() {
+                dirty_files += 1;
+            }
+        }
+    }
+
+    // Call 2: every local branch with its tip date and tracking state. Tab
+    // separated so branch names containing spaces survive.
+    let mut branches = Vec::new();
+    let mut last_commit = 0i64;
+    if let Some(out) = git(
+        &path,
+        &[
+            "for-each-ref",
+            "--format=%(refname:short)\t%(committerdate:unix)\t%(upstream)\t%(upstream:track)",
+            "refs/heads",
+        ],
+    ) {
+        for line in out.lines() {
+            let mut f = line.split('\t');
+            let (Some(name), Some(date)) = (f.next(), f.next()) else {
+                continue;
+            };
+            let upstream = f.next().unwrap_or("");
+            let track = f.next().unwrap_or("");
+            let ts: i64 = date.trim().parse().unwrap_or(0);
+            last_commit = last_commit.max(ts);
+
+            let (ahead, behind, upstream_gone) = parse_track(track);
+            // A branch with no upstream has never been pushed at all. That fact
+            // is the signal on its own — counting its commits would cost one
+            // `rev-list` per branch, and the branch's age matters more than the
+            // number, so `has_upstream: false` is left to speak for itself.
+            let has_upstream = !upstream.is_empty();
+            branches.push(DecayBranch {
+                is_current: current.as_deref() == Some(name),
+                name: name.to_string(),
+                ahead,
+                behind,
+                last_commit: ts,
+                has_upstream,
+                upstream_gone,
+            });
+        }
+    }
+
+    Decay {
+        dirty_files,
+        last_commit,
+        branches,
+    }
 }
 
 /// Files with **uncommitted** changes in more than one worktree of the same
