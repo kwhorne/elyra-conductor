@@ -154,7 +154,10 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
 - ⚡ **"Fix it" — self-healing terminal** — when a command fails in a shell-integrated
   terminal, a quiet toast offers a one-click handoff to an Elyra agent with the full
   context (command, exit code, output tail, git branch) and a fix-oriented prompt. Never
-  nags: interrupts are ignored and the offer expires on its own.
+  nags: interrupts are ignored and the offer expires on its own. Because the toast is
+  deliberately short-lived, the tab itself also **turns red and keeps a clickable marker**
+  — so a failure that happened while you were looking elsewhere is still there when you
+  get back, one click from the same handoff.
 - 🌅 **Morning brief** — open Conductor after a real break and a welcome-back card shows
   where you left off: last project with git state, container health, and your last
   commands (failures flagged). One click to resume or have Elyra plan your day.

@@ -62,6 +62,19 @@ Background tabs **pulse green** when their terminal produces new output, and the
 indicator clears when you switch to the tab. All tabs stay alive in the background, so
 nothing is lost when you switch away from a long-running process.
 
+A tab whose last command **failed** pulses **red** instead, and its border turns red — a
+failure outranks “there is new output”. Unlike the green ring it does **not** clear when
+you look at the tab, because noticing it is the whole point. It clears when you either:
+
+- **click the red dot**, which hands the command, exit code, output tail and git branch to
+  an [Elyra agent](elyra-agent.md) for diagnosis (the same context as the *Fix it* toast,
+  but available long after the toast has gone), or
+- **run something that succeeds** in the same tab, which supersedes the old failure.
+
+Requires [shell integration](#shell-integration-zsh) for exit codes. Interrupts and
+signals you caused yourself (`Ctrl-C`, `SIGPIPE`, `SIGTERM`, job control) never raise it.
+Without the Elyra CLI installed the dot is still shown, and clicking it opens the tab.
+
 ## Finished-command notifications
 
 When a long-running command in a **background** tab returns to the shell — a build,

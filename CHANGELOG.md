@@ -17,6 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   — but both protections were incidental. `onData` is now wired up *after* the replay, so
   the guarantee holds even if either changes.
 
+### Added
+
+- **A failed command now marks its tab red, and the marker persists.** The *Fix it* toast
+  expires after 18 seconds so it never nags — which meant a failure that happened while
+  you were looking at another tab was simply lost. The tab now pulses red and keeps a
+  clickable dot until you deal with it: clicking hands the command, exit code, output tail
+  and branch to an Elyra agent (the same context as the toast, available long after it has
+  gone). A failure outranks the green "new output" ring, and unlike that ring it does not
+  clear just because you looked at the tab — only acting on it, or a later command in the
+  same tab succeeding, clears it. Interrupts you caused yourself (`Ctrl-C`, `SIGPIPE`,
+  `SIGTERM`, job control) never raise it.
+
 ### Fixed
 
 - **Breathing room at the bottom of the window.** Terminal output, the file tree,

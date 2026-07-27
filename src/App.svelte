@@ -563,6 +563,7 @@
     };
     pushCommand(entry);
     offerFix(entry);
+    markFailure(entry);
     // Persist real commands to the flight recorder (SQLite) for cross-session
     // recall. Best-effort; skip trivial entries.
     if (cmd && cmd !== "clear") {
@@ -607,6 +608,34 @@
     clearTimeout(fixTimer);
     fixTimer = setTimeout(() => (fixOffer = null), 18000);
   }
+  // The toast above expires after 18s so it never nags — which means a failure
+  // that happens while you are looking at another tab is simply lost. This keeps
+  // the signal where you will see it: a red dot on the tab, until you act on it.
+  // Cleared by dealing with it, or by a later command in the same tab succeeding.
+  let failedCmd = $state({}); // tabId -> the failing command entry
+  function markFailure(entry) {
+    if (!entry.tabId || !entry.command || entry.command === "clear") return;
+    if (entry.exitCode == null || FIX_IGNORED_EXITS.has(entry.exitCode)) {
+      clearFailure(entry.tabId); // a later success supersedes the old failure
+      return;
+    }
+    failedCmd = { ...failedCmd, [entry.tabId]: entry };
+  }
+  function clearFailure(tabId) {
+    if (!(tabId in failedCmd)) return;
+    const next = { ...failedCmd };
+    delete next[tabId];
+    failedCmd = next;
+  }
+  // Clicking the dot hands the context to Elyra when it's available; without it
+  // the dot is still a useful marker, so fall back to just opening the tab.
+  function onFailedDot(tab) {
+    const entry = failedCmd[tab.id];
+    clearFailure(tab.id);
+    if (entry && elyraVersion) askElyraToFix(entry);
+    else focusTab(tab);
+  }
+
   function askElyraToFix(entry) {
     fixOffer = null;
     clearTimeout(fixTimer);
@@ -1439,6 +1468,7 @@
   function closeTab(id) {
     tabs = tabs.filter((t) => t.id !== id);
     clearAgentPresence(id);
+    clearFailure(id);
     if (activeTabId === id) {
       const next = tabs.at(-1) ?? null;
       if (next) focusTab(next);
@@ -2103,7 +2133,8 @@
             class="tab"
             class:active={t.id === activeTabId}
             class:running={!!proc}
-            class:ring={activity[t.id]}
+            class:ring={activity[t.id] && !failedCmd[t.id]}
+            class:failed={!!failedCmd[t.id]}
             class:drop-left={dragOver === i}
             class:drop-right={dragOver === tabs.length && i === tabs.length - 1}
             class:dragging={tabDrag && tabDrag.moved && tabDrag.fromIndex === i}
@@ -2114,7 +2145,17 @@
             {#if tabPrStatus[t.id]}
               <span class="pr-dot {tabPrStatus[t.id].cls}" title={tabPrStatus[t.id].title}></span>
             {/if}
-            {#if t.kind === "agent" && agentPresence[t.id] && agentPresence[t.id] !== "idle"}
+            {#if failedCmd[t.id]}
+              <span
+                class="fail-dot"
+                role="button"
+                tabindex="0"
+                title={`${failedCmd[t.id].command} exited ${failedCmd[t.id].exitCode}${elyraVersion ? " — click to ask Elyra" : " — click to open"}`}
+                onpointerdown={(e) => e.stopPropagation()}
+                onclick={(e) => { e.stopPropagation(); onFailedDot(t); }}
+                onkeydown={(e) => (e.key === "Enter" || e.key === " ") && onFailedDot(t)}
+              ></span>
+            {:else if t.kind === "agent" && agentPresence[t.id] && agentPresence[t.id] !== "idle"}
               <span class="agent-dot {agentPresence[t.id]}" title={PRESENCE_LABEL[agentPresence[t.id]]}></span>
             {:else if proc}<span class="run-dot" title={`Running ${proc}`}></span>{:else if activity[t.id]}<span class="ring-dot" title="New activity"></span>{/if}
             <span
@@ -2453,6 +2494,12 @@
   .tab.dragging { opacity: 0.5; }
   .ring-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-left: 6px; flex: none; animation: ring-pulse 1.2s ease-in-out infinite; }
   @keyframes ring-pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(158, 206, 106, 0.6); } 50% { opacity: 0.5; box-shadow: 0 0 0 4px rgba(158, 206, 106, 0); } }
+  /* A failed command outranks the green "new output" ring: it stays until you
+     act on it, and it is clickable (hands the context to Elyra). */
+  .tab.failed { border-color: var(--red); }
+  .fail-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); margin-left: 6px; flex: none; cursor: pointer; animation: fail-pulse 1.6s ease-in-out infinite; }
+  .fail-dot:hover { transform: scale(1.35); animation: none; }
+  @keyframes fail-pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(214, 67, 91, 0.65); } 50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(214, 67, 91, 0); } }
   /* Running marker: a tab actively running a foreground command (npm run dev, etc). */
   .run-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 6px; flex: none; animation: run-spin 1s ease-in-out infinite; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
   @keyframes run-spin { 0% { transform: scale(0.7); opacity: 0.6; } 50% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.7); opacity: 0.6; } }
