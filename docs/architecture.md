@@ -97,6 +97,16 @@ This has been reviewed and **settled**, not left undone: a security audit will f
 a third-party plugin, or rendered anything that escaped the sanitiser, then “the webview is
 trustworthy” stops being true and scoping becomes worth its cost in broken features.
 
+### One ordering invariant worth keeping
+
+`Terminal.svelte` writes any restored scrollback **before** it registers `term.onData`.
+That is not cosmetic. `onData` fires for terminal *replies* as well as keystrokes, so a
+query sequence in the replayed bytes (`ESC[6n`, say) would have its answer forwarded
+straight into the shell's stdin as though you had typed it. Two things happen to make that
+unreachable — the serialize addon stores buffer *state*, so query sequences never survive
+persistence, and the pty does not exist yet at that point — but both are incidental. The
+ordering is the one guard that still holds if either changes.
+
 ## Threading model for commands
 
 Commands that spawn a process, hit the network, walk the filesystem or query a database
