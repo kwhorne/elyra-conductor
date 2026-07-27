@@ -91,6 +91,12 @@ scan, and “Reveal in Finder”. Their safety rests on the webview being trustw
 is what the two layers above exist to guarantee — the fix for “script could touch any
 file” is to stop script from running at all, not to fence off a file manager.
 
+This has been reviewed and **settled**, not left undone: a security audit will flag
+“unscoped filesystem access” every time, and the answer is the paragraph above. What
+*would* reopen it is the premise changing — if the webview ever loaded remote content, ran
+a third-party plugin, or rendered anything that escaped the sanitiser, then “the webview is
+trustworthy” stops being true and scoping becomes worth its cost in broken features.
+
 ## Threading model for commands
 
 Commands that spawn a process, hit the network, walk the filesystem or query a database
