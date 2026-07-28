@@ -49,11 +49,14 @@ or defines prompts/tools/models. See [Architecture & boundaries](architecture.md
 - [Worktrees & parallel agents](worktrees.md) — isolated branches, the agent command center, and GitHub PR status.
 - [Database browser](database.md) — connect (MySQL/SQLite) from `.env`, browse tables, run queries, export to Excel.
 - [Command palette](command-palette.md) — the `⌘K` fuzzy launcher.
+- [Settings](settings.md) — the `⌘,` window, and why there is no AI configuration in it.
 - [Keyboard shortcuts](keybindings.md) — every shortcut, and how editor focus changes them.
 
 ## Elyra integration
 
 - [Elyra agent](elyra-agent.md) — host a native agent panel driven by `elyra --mode rpc`.
+- [Ask about this terminal](terminals.md#ask-about-this-terminal-) — `⌘↵` inline help in any
+  pane, including over SSH. Advises without acting; no keys in Conductor.
 - [Worktrees & parallel agents](worktrees.md) — run several agents at once, one isolated branch each, with PR status.
 
 ## Architecture

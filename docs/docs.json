@@ -65,6 +65,10 @@
           "path": "command-palette.md"
         },
         {
+          "title": "Settings",
+          "path": "settings.md"
+        },
+        {
           "title": "Keyboard shortcuts",
           "path": "keybindings.md"
         }

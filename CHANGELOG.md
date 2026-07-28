@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.4] — 2026-07-28
+
+AI help inside the terminal — including over SSH — and a Settings window, without a single
+API key entering Conductor.
+
 ### Added
 
 - **✦ Ask about this terminal (`⌘↵`, `Esc` to dismiss).** An inline bar in any terminal pane.
@@ -36,7 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   It also has an *AI assistance* section that answers the obvious question — where do the API
   keys go? — instead of leaving an unexplained gap, and shows which `elyra` binary was
   resolved (read-only: a configurable path is a support burden, and `find_bin` already
-  handles the PATH case it would exist to fix).
+  handles the PATH case it would exist to fix). Documented in
+  [docs/settings.md](docs/settings.md).
 
 ### Fixed
 
@@ -1001,7 +1007,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.0...v0.9.1
