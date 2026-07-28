@@ -30,6 +30,42 @@ is versioned and reusable.
 > **Rule of thumb:** if a feature needs an API key or a model call, it belongs in Elyra,
 > not in Conductor.
 
+### A worked example: terminal help (`⌘↵`)
+
+This boundary gets tested by real requests. The most natural one is *"put AI in the
+terminal — add a Settings pane for providers and an API key."* The feature is worth having;
+the mechanism would break the rule. Here is how it was resolved, as a template for the next
+time.
+
+What was kept:
+
+- ✅ a UI affordance — `⌘↵` opens a bar, `Esc` closes it
+- ✅ **context assembly** from data Conductor already holds: cwd, git branch, recent
+  commands and exit codes, and the redacted scrollback tail
+- ✅ spawning `elyra --print` and streaming its stdout (`ask.rs`)
+
+What was refused:
+
+- ❌ a provider/API-key section in Settings
+- ❌ a model picker, thinking level, or system prompt
+
+Conductor supplies **facts**; the user supplies the **question**. There is no persona and no
+system prompt — that is what keeps context assembly on the "convenience command" side of
+the line rather than "defining prompts".
+
+Two arguments settled it:
+
+1. **Preferences live in `localStorage`, i.e. inside the webview.** The v0.9.1 hardening
+   (CSP, DOMPurify, redaction) was written on the assumption that a sanitiser bypass gets
+   an attacker nothing worth having. Storing credentials there would retroactively
+   invalidate that assumption.
+2. **For the SSH case, keys in Conductor buy nothing.** Conductor runs locally either way,
+   so a local API call and a local `elyra --print` have identical access to the remote
+   context — and that context is the scrollback, which Conductor already has.
+
+The cost is real and accepted: terminal help does nothing without `elyra` on `PATH`. That
+dependency already existed for the agent panel.
+
 ## Layering
 
 ```
@@ -42,6 +78,7 @@ is versioned and reusable.
 │  projects.rs  scan folder, git, detect/launch editors          │
 │  fs.rs        list_dir / read_file / write_file / list_tasks   │
 │  agent.rs     JSONL transport to `elyra --mode rpc` (host only) │
+│  ask.rs       one-shot transport to `elyra --print` (⌘↵ bar)     │
 └───────────────────────────────────────────────────────────────┘
         │  child processes
 External tools — your shell, Zed/VS Code/Cursor, iTerm/Terminal, elyra

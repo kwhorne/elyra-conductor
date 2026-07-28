@@ -147,6 +147,13 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   float to the top. A **Ready to merge** queue lists PRs behind those agents whose
   checks are all green; **Squash & merge** runs `gh pr merge`, closes the agent tab, and
   removes the worktree in one click.
+- ✦ **Ask about this terminal (`⌘↵`).** An inline bar in any pane — local zsh, SSH session,
+  `docker exec`, a REPL. It sends that pane's recent output (secrets masked), the last
+  commands and their exit codes, and answers in place. It *advises*: suggested commands are
+  put on the prompt line for you to review, never run. **No API keys or model settings live
+  in Conductor** — it pipes to the `elyra` CLI, which already owns all of that.
+- ⚙ **Settings (`⌘,`).** Theme, terminal font size, shell integration, scrollback
+  persistence, notifications, and scan folder in one window.
 - 🌱 **Garden — what have I left lying around?** One view over *every* project that
   answers the question you never think to ask: is there work here that exists nowhere but
   this machine? Lists unpushed commits, branches never pushed, branches whose remote is

@@ -483,6 +483,18 @@ pub fn detect_editors() -> Vec<String> {
         .collect()
 }
 
+/// Resolved path to the `elyra` binary, for display in Settings.
+///
+/// Read-only on purpose. Conductor could let you *configure* this path, but a
+/// setting that can be wrong is a support burden, and `find_bin` +
+/// `login_shell_path` already handle the case this would exist to fix (a
+/// GUI-launched app whose PATH lacks nvm/volta). Showing what was resolved
+/// answers "which elyra is this using?" without adding a way to break it.
+#[tauri::command(async)]
+pub fn elyra_path() -> Option<String> {
+    find_bin("elyra")
+}
+
 /// Detect the Elyra coding agent CLI (returns its version string if present).
 #[tauri::command(async)]
 pub fn detect_elyra() -> Option<String> {
@@ -871,7 +883,12 @@ mod tests {
         std::fs::create_dir_all(&repo).unwrap();
         let r = repo.to_string_lossy().to_string();
         let run = |args: &[&str]| {
-            std::process::Command::new("git").arg("-C").arg(&r).args(args).output().unwrap();
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&r)
+                .args(args)
+                .output()
+                .unwrap();
         };
         run(&["init", "-q", "-b", "main"]);
         run(&["config", "user.email", "t@t.t"]);
@@ -889,7 +906,10 @@ mod tests {
         assert_eq!(d.branches.len(), 2, "main + side");
         let main = d.branches.iter().find(|b| b.name == "main").unwrap();
         assert!(main.is_current, "main is checked out");
-        assert!(!main.has_upstream, "no remote configured, so nothing is pushed");
+        assert!(
+            !main.has_upstream,
+            "no remote configured, so nothing is pushed"
+        );
         let side = d.branches.iter().find(|b| b.name == "side").unwrap();
         assert!(!side.is_current);
         assert!(!side.has_upstream);
@@ -1140,7 +1160,8 @@ pub fn git_decay(path: String) -> Decay {
     if let Some(out) = git(&path, &["status", "--porcelain=v2", "--branch"]) {
         for line in out.lines() {
             if let Some(rest) = line.strip_prefix("# branch.head ") {
-                current = Some(rest.trim().to_string()).filter(|b| !b.is_empty() && b != "(detached)");
+                current =
+                    Some(rest.trim().to_string()).filter(|b| !b.is_empty() && b != "(detached)");
             } else if !line.starts_with('#') && !line.is_empty() {
                 dirty_files += 1;
             }

@@ -8,6 +8,8 @@ Conductor is keyboard-first. The shortcuts below use `⌘` on macOS; on Linux/Wi
 | Shortcut | Action |
 |----------|--------|
 | `⌘K` | Open / close the command palette |
+| `⌘,` | Open / close Settings |
+| `⌘↵` | Ask about the focused terminal ([details](terminals.md#ask-about-this-terminal-)) |
 | `⌘1`–`⌘9` | Switch to tab 1–9 by its position in the tab bar |
 | `⌘R` | Start the active project's dev command |
 | `⇧⌘F` | Search all terminals (global scrollback search) |

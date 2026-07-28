@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **✦ Ask about this terminal (`⌘↵`, `Esc` to dismiss).** An inline bar in any terminal pane.
+  It works wherever the shell is — local zsh, SSH, `docker exec`, a REPL — because the
+  context that matters is the scrollback, which Conductor holds locally regardless of where
+  the shell runs. Sends the pane's cwd, git branch, last 5 commands with exit codes, and the
+  last 120 output lines **with credential-shaped text masked**.
+
+  It answers; it does not act. Tools are disabled, and a suggested command gets an **Insert**
+  button that places it on the prompt line *without* pressing Enter — an LLM suggestion is
+  not consent. Only fenced shell blocks are offered; commands mentioned in prose are
+  ignored. **Open in Elyra ▸** escalates to a full agent tab when you want something that
+  can actually change files.
+
+  **No provider, model, or API-key settings were added anywhere.** Conductor pipes the
+  prompt to `elyra --print` over stdin (never argv — that would leak context via `ps` and
+  hit ARG_MAX). Two things settled it: preferences live in `localStorage`, i.e. inside the
+  webview that 0.9.1 hardened on the assumption nothing there was worth stealing; and for
+  SSH sessions, keys in Conductor buy nothing, since a local API call and a local `elyra`
+  have identical access to the remote context. See
+  [ARCHITECTURE.md](ARCHITECTURE.md) § Level 2.
+
+- **⚙ Settings window (`⌘,`).** Consolidates preferences that were previously palette-only
+  toggles: theme, terminal font size, shell integration, scrollback persistence,
+  finished-command notifications, and the scan folder. The palette entries still work.
+
+  It also has an *AI assistance* section that answers the obvious question — where do the API
+  keys go? — instead of leaving an unexplained gap, and shows which `elyra` binary was
+  resolved (read-only: a configurable path is a support burden, and `find_bin` already
+  handles the PATH case it would exist to fix).
+
+### Fixed
+
+- **`⌘↵` no longer risks running whatever was on the prompt line.** xterm's Kitty
+  modifier bitmask covers shift/alt/ctrl but not meta, so meta+Enter previously fell through
+  and xterm sent a bare CR. It is now intercepted explicitly.
+
+### Internal
+
+- `cargo fmt` on `git_decay` and its tests, which went out unformatted in 0.9.3.
+
 ## [0.9.3] — 2026-07-27
 
 Two things you'll notice: a view that finds work stranded on this machine, and a

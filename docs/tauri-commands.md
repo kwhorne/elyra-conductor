@@ -21,6 +21,9 @@ registered in `src-tauri/src/lib.rs`.
 | `git_changes` | `projects.rs` | List working-tree changes for the commit dialog. |
 | `git_commit` | `projects.rs` | Stage, commit, and optionally push. |
 | `git_worktree_list` / `git_worktree_add` / `git_worktree_remove` | `projects.rs` | Parallel isolated worktrees per branch. See [Worktrees](worktrees.md). |
+| `elyra_ask` | `ask.rs` | Pipe a prompt to `elyra --print` over **stdin** and stream stdout. Pure transport: no keys, no model choice, tools disabled. |
+| `elyra_ask_cancel` | `ask.rs` | Kill and reap a running ask. |
+| `elyra_path` | `projects.rs` | Resolved path to the `elyra` binary, shown read-only in Settings. |
 | `git_decay` | `projects.rs` | Per-repo neglect data — dirty count, branch dates, ahead/behind, upstream-gone — in two git calls. Backs [🌱 Garden](git.md#-garden--what-have-i-left-lying-around). |
 | `git_worktree_conflicts` | `projects.rs` | Files with uncommitted changes in more than one worktree of a repo (read-only heads-up). See [Worktrees](worktrees.md#conflict-warning--two-worktrees-touching-the-same-file). |
 | `detect_gh` / `gh_pr_list` | `projects.rs` | GitHub PR + CI status per branch via the `gh` CLI. |

@@ -1,4 +1,5 @@
 mod agent;
+mod ask;
 mod db;
 mod fs;
 mod history;
@@ -7,6 +8,7 @@ mod pty;
 mod util;
 
 use agent::AgentManager;
+use ask::AskManager;
 use db::DbManager;
 use pty::PtyManager;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -81,6 +83,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(PtyManager::default())
         .manage(AgentManager::default())
+        .manage(AskManager::default())
         .manage(DbManager::default())
         .setup(|app| {
             let handle = app.handle();
@@ -112,6 +115,9 @@ pub fn run() {
             agent::agent_spawn,
             agent::agent_send,
             agent::agent_kill,
+            projects::elyra_path,
+            ask::elyra_ask,
+            ask::elyra_ask_cancel,
             projects::list_projects,
             projects::git_status,
             projects::git_changes,

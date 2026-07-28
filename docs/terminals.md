@@ -129,6 +129,44 @@ resets it to the default (13px). The chosen size persists across restarts (it's 
 the saved layout). Emoji and wide CJK glyphs are measured at their correct width
 (Unicode 11), so box-drawing in TUIs stays aligned.
 
+## Ask about this terminal (`⌘↵`)
+
+Press `⌘↵` in any terminal pane to open an inline ask bar; `Esc` dismisses it. Type a
+question and Elyra answers in place.
+
+It works **wherever the shell is** — a local zsh, an SSH session, `docker exec`, a REPL —
+for one reason: the context that matters is the *scrollback*, and Conductor holds that
+locally regardless of where the shell actually runs.
+
+### What gets sent
+
+- the pane's working directory, and the git branch if there is one
+- the last 5 commands in that pane with their exit codes (needs
+  [shell integration](#shell-integration-zsh))
+- the last 120 lines of output, **with credential-shaped text masked** by the same
+  redaction used for [persisted scrollback](#shell-integration-zsh)
+
+Redaction is not optional here. Terminal output routinely contains tokens, and unlike
+saved scrollback — which stays on your disk — this text leaves the machine for a model
+provider.
+
+### It answers; it does not act
+
+Tools are disabled, so the bar cannot edit files or run commands. Where the answer contains
+a shell command, you get an **Insert** button that places it on the prompt line *without*
+pressing Enter, so you read it and run it yourself. An LLM suggestion is not consent.
+
+Only fenced `bash`/`sh`/`zsh` blocks are offered — a command mentioned in prose is
+deliberately ignored. When you want an agent that can actually change things, **Open in
+Elyra ▸** escalates to a full agent tab where there is a transcript to review.
+
+### No keys in Conductor
+
+There is no provider or API-key setting for this, in Settings or anywhere else. Conductor
+pipes your question to `elyra --print`, which already owns providers, models, and
+credentials. Configure them with `elyra config`. See
+[Architecture](architecture.md#the-core-boundary-conductor-orchestrates-elyra-reasons).
+
 ## Newline vs. submit (`⇧↵`)
 
 Many TUIs use `⇧↵` to insert a newline while `↵` submits. Plain xterm.js can't send a

@@ -51,6 +51,23 @@ Conductor acts strictly as a **host/renderer**:
 
 Think of it as being a terminal emulator *for* an agent — not the agent.
 
+### Level 2 (implemented) — one-shot ask, still transport
+The inline terminal bar (`⌘↵`, `ask.rs`) pipes a prompt to `elyra --print` over **stdin**
+and streams the answer back. Conductor assembles *context* — cwd, branch, recent commands
+with exit codes, redacted scrollback — and the user supplies the question. No system prompt,
+no model choice, no key. Tools are disabled, so it advises and the user acts: suggested
+commands are *inserted* on the prompt line, never executed.
+
+This is the boundary's stress test, because the obvious way to build it — a Settings pane
+with providers and an API key — is exactly what the rule forbids. Two reasons it stayed out:
+preferences live in `localStorage` (inside the webview we hardened in 0.9.1 precisely
+*because* there was nothing there worth stealing), and for SSH sessions keys in Conductor
+buy nothing, since the useful context is the local scrollback either way. Full reasoning in
+[docs/architecture.md](docs/architecture.md#a-worked-example-terminal-help-).
+
+> If someone asks for "AI providers in Conductor settings" again: the answer is a passthrough
+> to `elyra`, not a second copy of its model registry.
+
 ## Layering (today)
 
 ```

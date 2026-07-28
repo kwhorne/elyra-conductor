@@ -12,7 +12,7 @@
   import { invoke, Channel } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
-  let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark", fontSize = 13, persistScrollback = true, active = false, register = null, unregister = null, shellIntegration = false, oncommand = null } = $props();
+  let { id, cwd, runCommand = null, onexit = null, onactivity = null, onuserinput = null, persistKey = null, theme = "dark", fontSize = 13, persistScrollback = true, active = false, register = null, unregister = null, shellIntegration = false, oncommand = null, onask = null } = $props();
 
   // Focus the xterm when this pane becomes active (e.g. via keyboard pane-nav).
   $effect(() => {
@@ -231,6 +231,21 @@
       // the browser still fires a keypress for Enter (charCode 13) which xterm
       // would otherwise turn into a plain CR. Send the sequence once on
       // keydown, and suppress every related event so no stray \r leaks through.
+      // ⌘+Enter opens the inline ask bar instead of reaching the shell.
+      //
+      // This must come before the Kitty block below, and it has to exist at all:
+      // the Kitty bitmask covers shift/alt/ctrl but *not* meta, so ⌘+Enter would
+      // otherwise fall through to `return true` and xterm would send a bare CR —
+      // running whatever was on the prompt line the moment you asked a question.
+      if (e.key === "Enter" && e.metaKey) {
+        if (e.type === "keydown") {
+          e.preventDefault();
+          onask?.();
+        }
+        // Suppress keydown/keypress/keyup alike. Returning false makes xterm bail
+        // without calling preventDefault(), so a keypress would still slip a \r in.
+        return false;
+      }
       if (e.key === "Enter") {
         // Kitty modifier value is a 1-based bitmask: shift=1, alt=2, ctrl=4.
         let mod = 1;

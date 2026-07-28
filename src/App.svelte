@@ -20,6 +20,8 @@
   import DataTransferDialog from "./lib/DataTransferDialog.svelte";
   import SchemaDiffDialog from "./lib/SchemaDiffDialog.svelte";
   import AgentDashboard from "./lib/AgentDashboard.svelte";
+  import AskBar from "./lib/AskBar.svelte";
+  import SettingsModal from "./lib/SettingsModal.svelte";
   import GardenModal from "./lib/GardenModal.svelte";
   import MorningBrief from "./lib/MorningBrief.svelte";
   import { listen } from "@tauri-apps/api/event";
@@ -34,6 +36,7 @@
   import { relaunch } from "@tauri-apps/plugin-process";
   import { marked } from "marked";
   import { sanitizeMarkdownHtml } from "./lib/sanitize.js";
+  import { redactSecrets } from "./lib/redact.js";
   import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
   import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf, allLeaves } from "./lib/layout.js";
   import { dirOf, baseOf, detectRunCommand, isIdleProc, rankDevTasks, scoreDevTask } from "./lib/util.js";
@@ -649,6 +652,183 @@
     if (proj?.branch) b += `\nBranch: ${proj.branch}${proj.dirty ? " (uncommitted changes)" : ""}`;
     if (entry.output) b += `\n\nOutput (tail):\n\`\`\`\n${entry.output}\n\`\`\``;
     sendToElyra(entry.projectPath || activeProject?.path || root, b);
+  }
+
+  // ---------- settings (⌘,) ----------
+  // Consolidates preferences that were previously palette-only toggles. The
+  // palette entries stay — muscle memory shouldn't break — they now just point
+  // at the same state.
+  let settingsOpen = $state(false);
+  let elyraBin = $state(null);
+  async function openSettings() {
+    settingsOpen = true;
+    // Resolve lazily: it shells out, and it is only ever shown here.
+    if (elyraBin === null) elyraBin = await invoke("elyra_path").catch(() => null);
+  }
+
+  // ---------- inline ask (⌘+Enter in a terminal pane) ----------
+  //
+  // "I'm stuck here, help" — without leaving the pane, and without Conductor
+  // becoming an AI client. It gathers context it *already has* and pipes it to
+  // `elyra --print`; see src-tauri/src/ask.rs and ARCHITECTURE.md.
+  //
+  // This works over SSH, `docker exec`, or inside a REPL for one reason: the
+  // context that matters is the scrollback, and Conductor holds that locally no
+  // matter where the shell is actually running.
+  const ASK_SCROLLBACK_LINES = 120;
+  const ASK_RECENT_COMMANDS = 5;
+
+  let ask = $state({ open: false, termId: null, busy: false, answer: "", error: null, note: "" });
+  let askId = null;
+  let askUnlisten = [];
+  let askStderr = "";
+
+  // Assemble *facts*, not instructions. Conductor states what is on screen and
+  // what just ran; the user's question is the only instruction. That keeps this
+  // on the right side of "Conductor must not define prompts" — it is the same
+  // convenience-command role as askElyraToFix.
+  function askCwd(termId) {
+    const tab = tabForTerm(termId);
+    const leaf = tab ? allLeaves(tab.root).find((l) => l.termId === termId) : null;
+    return leaf?.cwd || tab?.projectPath || root;
+  }
+
+  function buildAskContext(termId, question) {
+    const tab = tabForTerm(termId);
+    const cwd = askCwd(termId);
+    const proj = projects.find((p) => p.path === tab?.projectPath) || pinned.find((p) => p.path === tab?.projectPath);
+
+    let ctx = `Working directory: ${cwd}\n`;
+    if (proj?.branch) ctx += `Git branch: ${proj.branch}${proj.dirty ? " (uncommitted changes)" : ""}\n`;
+
+    const recent = commandLog.filter((c) => c.termId === termId && c.command).slice(0, ASK_RECENT_COMMANDS);
+    if (recent.length > 0) {
+      ctx += `\nRecent commands in this pane (newest first):\n`;
+      for (const c of recent) {
+        ctx += `- \`${c.command}\`${c.exitCode != null ? ` → exit ${c.exitCode}` : ""}\n`;
+      }
+    }
+
+    // Trailing blank lines are stripped so the tail is actual output rather than
+    // the empty rows xterm keeps below the cursor.
+    const lines = termApis[termId]?.getLines?.() ?? [];
+    let end = lines.length;
+    while (end > 0 && !lines[end - 1].trim()) end--;
+    const tail = lines.slice(Math.max(0, end - ASK_SCROLLBACK_LINES), end).join("\n").trim();
+    if (tail) {
+      // Redaction is NOT optional here. Terminal output routinely contains
+      // tokens, and unlike persisted scrollback (which stays on this disk) this
+      // text leaves the machine for a model provider. redactSecrets is applied to
+      // persisted scrollback in Terminal.svelte, but not to the live buffer that
+      // getLines() reads, so it has to happen here.
+      ctx += `\nTerminal output (last ${ASK_SCROLLBACK_LINES} lines, secrets masked):\n\`\`\`\n${redactSecrets(tail)}\n\`\`\`\n`;
+    }
+
+    return `${ctx}\nQuestion: ${question}\n\nAnswer briefly. If a shell command is the answer, put it in a bash code block.`;
+  }
+
+  function openAsk(termId) {
+    stopAsk();
+    if (!elyraVersion) {
+      // Explain in place rather than firing an OS notification — you pressed a
+      // key expecting a panel, so the panel should be what answers you.
+      ask = {
+        open: true,
+        termId,
+        busy: false,
+        answer: "",
+        error: "Elyra CLI not found on PATH. Terminal help delegates to `elyra`, which owns all provider and model configuration.",
+        note: "",
+      };
+      return;
+    }
+    const lines = termApis[termId]?.getLines?.() ?? [];
+    const n = lines.filter((l) => l.trim()).length;
+    ask = {
+      open: true,
+      termId,
+      busy: false,
+      answer: "",
+      error: null,
+      note: `Sends this pane's last ${ASK_SCROLLBACK_LINES} lines (${n} non-empty on screen) with secrets masked, plus recent commands and exit codes.`,
+    };
+  }
+
+  async function sendAsk(question) {
+    const termId = ask.termId;
+    if (!termId) return;
+    const cwd = askCwd(termId);
+
+    askId = `ask-${++idSeq}`;
+    askStderr = "";
+    ask = { ...ask, busy: true, answer: "", error: null };
+
+    const id = askId;
+    askUnlisten = await Promise.all([
+      listen(`ask://chunk/${id}`, (e) => {
+        if (askId !== id) return; // a stale run that was cancelled
+        ask = { ...ask, answer: ask.answer + e.payload };
+      }),
+      listen(`ask://stderr/${id}`, (e) => {
+        askStderr += e.payload + "\n";
+      }),
+      listen(`ask://done/${id}`, () => {
+        if (askId !== id) return;
+        // stderr is only worth showing when there is no answer — otherwise a
+        // harmless warning would look like a failure.
+        const err = ask.answer.trim() ? null : askStderr.trim() || "Elyra returned nothing.";
+        ask = { ...ask, busy: false, error: err };
+        invoke("elyra_ask_cancel", { id }).catch(() => {}); // reap the child
+      }),
+    ]);
+
+    try {
+      await invoke("elyra_ask", { id, cwd, prompt: buildAskContext(termId, question) });
+    } catch (e) {
+      ask = { ...ask, busy: false, error: String(e) };
+    }
+  }
+
+  function stopAsk() {
+    for (const un of askUnlisten) {
+      try {
+        un();
+      } catch {}
+    }
+    askUnlisten = [];
+    if (askId) {
+      invoke("elyra_ask_cancel", { id: askId }).catch(() => {});
+      askId = null;
+    }
+  }
+
+  function cancelAsk() {
+    stopAsk();
+    ask = { ...ask, busy: false };
+  }
+
+  function closeAsk() {
+    stopAsk();
+    const termId = ask.termId;
+    ask = { open: false, termId: null, busy: false, answer: "", error: null, note: "" };
+    termApis[termId]?.focus?.();
+  }
+
+  // Insert, never run. The command lands on the prompt line without a newline so
+  // you read it and press Enter yourself. An LLM suggestion is not consent.
+  function insertAskCommand(cmd) {
+    const termId = ask.termId;
+    if (!termId) return;
+    invoke("pty_write", { id: termId, data: cmd }).catch(() => {});
+    closeAsk();
+  }
+
+  // Escalate to a full Elyra tab, where there are tools and a transcript.
+  function escalateAsk() {
+    const cwd = askCwd(ask.termId);
+    const body = ask.answer.trim();
+    closeAsk();
+    sendToElyra(cwd, body ? `Continue from this analysis:\n\n${body}` : "Help me with what's on screen in this terminal.");
   }
 
   // ---------- runbook recorder ----------
@@ -1737,6 +1917,9 @@
     list.push({ id: "act:about", title: "About Elyra Conductor", group: "action", icon: "\u2139", action: () => (aboutOpen = true) });
     list.push({ id: "act:data-transfer", title: "Tools: Data Transfer…", group: "action", icon: "⇄", action: () => (dataTransferOpen = true) });
     list.push({ id: "act:compare-schemas", title: "Tools: Compare Schemas…", group: "action", icon: "⇄", action: () => (schemaDiffOpen = true) });
+    list.push({ id: "act:settings", title: "Settings\u2026", hint: "\u2318,", group: "action", icon: "\u2699", action: openSettings });
+    if (activeTab?.kind === "term" && activeTermId)
+      list.push({ id: "act:ask", title: "Ask about this terminal\u2026", hint: "\u2318\u21b5", group: "action", icon: "\u2726", action: () => openAsk(activeTermId) });
     list.push({ id: "act:garden", title: "Garden — what have I left lying around?", hint: "unpushed & forgotten work across all repos", group: "action", icon: "\u{1F331}", action: openGarden });
     if (tabs.some((t) => t.kind === "agent")) list.push({ id: "act:agent-dashboard", title: "Agent dashboard…", group: "action", icon: "🎛", action: () => (agentDashboardOpen = true) });
     list.push({ id: "act:check-update", title: "Check for updates\u2026", group: "action", icon: "\u21BB", action: () => checkForUpdate(true) });
@@ -1764,6 +1947,27 @@
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
     const k = e.key.toLowerCase();
+
+    // ⌘, opens Settings from anywhere, including while editing — Monaco has no
+    // claim on it, and it is the one shortcut every macOS app is expected to have.
+    if (k === ",") {
+      e.preventDefault();
+      if (settingsOpen) settingsOpen = false;
+      else openSettings();
+      return;
+    }
+
+    // ⌘↵ asks about the focused terminal. Terminal.svelte normally catches this
+    // first (and must, to stop xterm sending a bare CR); this is the fallback for
+    // when focus sits on the pane chrome rather than inside xterm.
+    if (e.metaKey && e.key === "Enter" && !inEditorContext()) {
+      if (activeTab?.kind === "term" && activeTermId) {
+        e.preventDefault();
+        if (ask.open) closeAsk();
+        else openAsk(activeTermId);
+      }
+      return;
+    }
 
     // While editing, let Monaco own its shortcuts (multi-cursor ⌘D, find ⌘F,
     // ⌘K chords, etc). We only add ⌘W to close the editor.
@@ -2384,7 +2588,21 @@
                   <button title="Split down (⇧⌘D)" onclick={() => splitPane(leaf.termId, "col")}>▤</button>
                   <button title="Close pane (⌘W)" onclick={() => closePane(leaf.termId)}>×</button>
                 </div>
-                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} fontSize={termFontSize} {persistScrollback} persistKey={leaf.key} runCommand={leaf.runOnce ?? null} active={leaf.termId === activeTermId && tab.id === activeTabId} register={registerTerm} unregister={unregisterTerm} onactivity={() => markActivity(tab.id)} onuserinput={onPaneInput} shellIntegration={shellIntegration} oncommand={(rec) => onShellCommand(leaf.termId, rec)} />
+                <Terminal id={leaf.termId} cwd={leaf.cwd} {theme} fontSize={termFontSize} {persistScrollback} persistKey={leaf.key} runCommand={leaf.runOnce ?? null} active={leaf.termId === activeTermId && tab.id === activeTabId} register={registerTerm} unregister={unregisterTerm} onactivity={() => markActivity(tab.id)} onuserinput={onPaneInput} shellIntegration={shellIntegration} oncommand={(rec) => onShellCommand(leaf.termId, rec)} onask={() => openAsk(leaf.termId)} />
+                {#if ask.open && ask.termId === leaf.termId}
+                  <AskBar
+                    open
+                    busy={ask.busy}
+                    answer={ask.answer}
+                    error={ask.error}
+                    contextNote={ask.note}
+                    onsend={sendAsk}
+                    oncancel={cancelAsk}
+                    onclose={closeAsk}
+                    oninsert={insertAskCommand}
+                    onescalate={escalateAsk}
+                  />
+                {/if}
               </div>
             {/each}
 
@@ -2534,6 +2752,33 @@
   <AboutModal open={aboutOpen} onclose={() => (aboutOpen = false)} />
   <DataTransferDialog open={dataTransferOpen} conns={dbConns} onconnect={dbConnectEntry} onclose={() => (dataTransferOpen = false)} />
   <SchemaDiffDialog open={schemaDiffOpen} conns={dbConns} onconnect={dbConnectEntry} onclose={() => (schemaDiffOpen = false)} />
+  <SettingsModal
+    open={settingsOpen}
+    {theme}
+    {termFontSize}
+    {persistScrollback}
+    {notifyOnFinish}
+    {shellIntegration}
+    {root}
+    {elyraVersion}
+    {elyraBin}
+    ontheme={(t) => (theme = t)}
+    onfont={(d) => adjustTermFont(d)}
+    onpersist={(v) => {
+      persistScrollback = v;
+      if (!v) clearStoredScrollback();
+    }}
+    onnotify={(v) => {
+      notifyOnFinish = v;
+      if (v) ensureNotifyPermission();
+    }}
+    onshellint={(v) => (shellIntegration = v)}
+    onchangeroot={() => {
+      settingsOpen = false;
+      changeRoot();
+    }}
+    onclose={() => (settingsOpen = false)}
+  />
   <GardenModal
     open={gardenOpen}
     rows={gardenRows}
