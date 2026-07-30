@@ -30,6 +30,14 @@ Two follow-ups to 0.9.5, where a pair of its own fixes were working against you.
   spacing now lives on the wrapper and the terminal element is padding-free, so the height
   the fit addon measures is the height it actually gets.
 
+### Internal
+
+- **pnpm is pinned to 10.11.0** via `packageManager`, so Corepack selects it
+  automatically. pnpm 11 treats a pnpm-10 `node_modules` as foreign and wants to purge and
+  reinstall it, which aborts without a TTY
+  (`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`) — including in
+  `scripts/release-build.sh`.
+
 ## [0.9.5] — 2026-07-30
 
 Two small legibility fixes where the theme was working against you.
