@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.5] — 2026-07-30
+
+Two small legibility fixes where the theme was working against you.
+
+### Changed
+
+- **Terminal bottom padding 10px → 20px.** The last output line sat too close to the
+  window edge. xterm's fit addon subtracts the padding from the available height, so this
+  costs a row rather than clipping one.
+
+### Fixed
+
+- **Text selection in the editor is visible again.** Monaco's stock `vs-dark` selection
+  colour (`#264F78`) is nearly indistinguishable from Conductor's darker `#1a1b26`
+  background, so selecting text to copy (`⌘C`) gave no feedback. The editor now uses
+  dedicated `conductor-dark` / `conductor-light` themes with a high-contrast selection
+  (`#3d59a1`), plus clearer inactive-selection, word-highlight and find-match colours.
+
 ## [0.9.4] — 2026-07-28
 
 AI help inside the terminal — including over SSH — and a Settings window, without a single
@@ -1007,7 +1025,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.5...HEAD
+[0.9.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.1...v0.9.2
