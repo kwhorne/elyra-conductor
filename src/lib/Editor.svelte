@@ -181,7 +181,7 @@
   }
 </script>
 
-<div class="editor-wrap">
+<div class="editor-wrap" class:light={theme === "light"}>
   <div class="tabbar">
     {#each openTabs as t (t.path)}
       <div class="tab" class:on={t.path === activePath}>
@@ -292,5 +292,27 @@
   .monaco {
     flex: 1;
     min-height: 0;
+  }
+
+  /* Force the text-selection colour with a static, component-compiled rule.
+     Monaco normally paints selection from the theme's `editor.selectionBackground`,
+     but it does so via a stylesheet it injects into <head> at runtime — and under
+     Tauri's WKWebView that injected rule can fail to apply, leaving the selection
+     transparent and invisible (the exact symptom: you select text and see nothing).
+     A style block that ships with the component is always applied, so this guarantees
+     the selection paints regardless of the runtime-injection quirk. Colours match the
+     conductor-dark / conductor-light themes above. */
+  .editor-wrap :global(.monaco-editor .view-overlays .selected-text) {
+    background-color: #3d59a1 !important;
+  }
+  .editor-wrap.light :global(.monaco-editor .view-overlays .selected-text) {
+    background-color: #aecbfa !important;
+  }
+  /* The line-highlight the current line's selection can otherwise wash out. */
+  .editor-wrap :global(.monaco-editor .focused .view-overlays .selected-text) {
+    background-color: #3d59a1 !important;
+  }
+  .editor-wrap.light :global(.monaco-editor .focused .view-overlays .selected-text) {
+    background-color: #aecbfa !important;
   }
 </style>

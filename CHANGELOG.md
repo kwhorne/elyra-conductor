@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Editor text selection now paints under Tauri's WKWebView.** 0.9.5/0.9.6 set the
+  selection colour through Monaco's theme (`editor.selectionBackground`), which is correct
+  — verified rendering at `#3d59a1` in a Chromium harness of the real component — but
+  Monaco applies that colour via a stylesheet it injects into `<head>` at runtime, and
+  under Tauri's WKWebView (the Safari engine, not Chromium) that injected rule can fail to
+  apply, leaving the selection transparent and invisible. Selecting text to copy therefore
+  showed nothing. The colour is now also set via a static, component-compiled `:global`
+  rule on `.monaco-editor .view-overlays .selected-text`, which WKWebView always applies.
+  Confirmed by neutralising Monaco's runtime rules in a harness: the selection still
+  paints.
+
 ## [0.9.6] — 2026-07-30
 
 Two follow-ups to 0.9.5, where a pair of its own fixes were working against you.
