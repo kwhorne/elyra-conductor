@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Selected text in the editor is visible even when the editor isn't focused.** 0.9.5
+  gave the *active* selection a high-contrast colour, but Monaco draws a dimmer
+  `inactiveSelectionBackground` whenever focus is elsewhere — and ours (`#2f3650`) was a
+  near-background grey. Since clicking a file in the tree leaves focus on the tree, a
+  selection made right after opening a file rendered as "inactive" and vanished. The
+  inactive colour is now a clearly-visible blue (`#33477e`), a notch dimmer than the
+  active `#3d59a1`.
 - **The terminal's last line is no longer clipped** after long output (e.g. `composer
   update`). 0.9.5 put the bottom padding on the element xterm renders into, which made it
   *worse*: xterm's fit addon derives the row count from

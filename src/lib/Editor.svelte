@@ -8,6 +8,13 @@
 
   // vs-dark's default selection (#264F78) is nearly invisible on our darker
   // #1a1b26 background, so define themes with a high-contrast selection.
+  //
+  // Monaco renders a *dimmer* colour when the editor doesn't hold focus
+  // (inactiveSelectionBackground). The obvious pick — a near-background grey —
+  // then vanishes: right after you click a file in the tree, focus is still on
+  // the tree, so a selection you make shows as "inactive" and is invisible. Keep
+  // the inactive colour a clearly-visible blue, just a notch dimmer than active,
+  // so the selection reads whether or not the editor is focused.
   monaco.editor.defineTheme("conductor-dark", {
     base: "vs-dark",
     inherit: true,
@@ -15,7 +22,7 @@
     colors: {
       "editor.background": "#1a1b26",
       "editor.selectionBackground": "#3d59a1",
-      "editor.inactiveSelectionBackground": "#2f3650",
+      "editor.inactiveSelectionBackground": "#33477e",
       "editor.selectionHighlightBackground": "#3d59a180",
       "editor.wordHighlightBackground": "#3d59a166",
       "editor.findMatchBackground": "#6c7bb3",
@@ -28,7 +35,7 @@
     rules: [],
     colors: {
       "editor.selectionBackground": "#aecbfa",
-      "editor.inactiveSelectionBackground": "#dbe4f7",
+      "editor.inactiveSelectionBackground": "#c3d6f7",
       "editor.selectionHighlightBackground": "#aecbfa80",
     },
   });
