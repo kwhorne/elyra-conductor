@@ -4,7 +4,12 @@ How to set up, run, and work on Conductor locally.
 
 ## Prerequisites
 
-- **Node.js** ≥ 20 (developed on 22) and **pnpm** ≥ 9
+- **Node.js** ≥ 20 (developed on 22) and **pnpm** — pinned to **10.11.0** via
+  `packageManager` in `package.json`, so [Corepack](https://nodejs.org/api/corepack.html)
+  (`corepack enable`) picks the right version automatically. Don't run the build with
+  pnpm 11: it considers a pnpm-10 `node_modules` foreign and wants to purge and reinstall
+  it, which aborts in any non-TTY context (`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`)
+  — including `scripts/release-build.sh`.
 - **Rust** stable (developed on 1.95) via [rustup](https://rustup.rs/)
 - Tauri platform build deps — see the
   [Tauri prerequisites guide](https://tauri.app/start/prerequisites/). On macOS:
