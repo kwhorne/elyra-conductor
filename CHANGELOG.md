@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.7] — 2026-07-30
+
+The editor-selection fix that finally targets the right rendering engine.
+
 ### Fixed
 
 - **Editor text selection now paints under Tauri's WKWebView.** 0.9.5/0.9.6 set the
@@ -1069,7 +1073,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.6...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.7...HEAD
+[0.9.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.3...v0.9.4
