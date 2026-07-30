@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The terminal's last line is no longer clipped** after long output (e.g. `composer
+  update`). 0.9.5 put the bottom padding on the element xterm renders into, which made it
+  *worse*: xterm's fit addon derives the row count from
+  `getComputedStyle(parent).height` minus that element's padding — but with the global
+  `box-sizing: border-box` and `height: 100%`, the computed height already includes the
+  padding. The padding was subtracted from a value that never contained it, so xterm sized
+  itself past the pane's bottom edge and `overflow: hidden` cut the last row in half. The
+  spacing now lives on the wrapper and the terminal element is padding-free, so the height
+  the fit addon measures is the height it actually gets.
+
 ## [0.9.5] — 2026-07-30
 
 Two small legibility fixes where the theme was working against you.
