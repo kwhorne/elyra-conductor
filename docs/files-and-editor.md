@@ -65,6 +65,10 @@ engine behind VS Code), loaded on demand so startup stays fast.
   (JSON/JS/TS/CSS/HTML/…), then writes through the `write_file` command.
 - **Close** the active tab with `⌘W` (you're asked before discarding unsaved changes);
   closing the last tab hides the editor.
+- **Theme** follows the app: `conductor-dark` / `conductor-light`, Monaco themes derived
+  from `vs-dark`/`vs` with a **high-contrast text selection**. Monaco's stock dark
+  selection (`#264F78`) is nearly invisible against Conductor's darker `#1a1b26`
+  background, so selecting text to copy (`⌘C`) looked like nothing happened.
 
 ## Find files & search contents (⌘P)
 

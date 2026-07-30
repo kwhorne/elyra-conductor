@@ -6,6 +6,34 @@
 
   let { path, gotoLine = null, openSeq = 0, onclose, theme = "dark" } = $props();
 
+  // vs-dark's default selection (#264F78) is nearly invisible on our darker
+  // #1a1b26 background, so define themes with a high-contrast selection.
+  monaco.editor.defineTheme("conductor-dark", {
+    base: "vs-dark",
+    inherit: true,
+    rules: [],
+    colors: {
+      "editor.background": "#1a1b26",
+      "editor.selectionBackground": "#3d59a1",
+      "editor.inactiveSelectionBackground": "#2f3650",
+      "editor.selectionHighlightBackground": "#3d59a180",
+      "editor.wordHighlightBackground": "#3d59a166",
+      "editor.findMatchBackground": "#6c7bb3",
+      "editor.findMatchHighlightBackground": "#3d59a180",
+    },
+  });
+  monaco.editor.defineTheme("conductor-light", {
+    base: "vs",
+    inherit: true,
+    rules: [],
+    colors: {
+      "editor.selectionBackground": "#aecbfa",
+      "editor.inactiveSelectionBackground": "#dbe4f7",
+      "editor.selectionHighlightBackground": "#aecbfa80",
+    },
+  });
+  const themeName = (t) => (t === "light" ? "conductor-light" : "conductor-dark");
+
   let el;
   let editor;
   let openTabs = $state([]); // [{ path, dirty }]
@@ -102,7 +130,7 @@
 
   onMount(() => {
     editor = monaco.editor.create(el, {
-      theme: theme === "light" ? "vs" : "vs-dark",
+      theme: themeName(theme),
       automaticLayout: true,
       fontSize: 13,
       fontFamily: '"JetBrains Mono", "SF Mono", Menlo, monospace',
@@ -133,7 +161,7 @@
 
   // Monaco theme is global.
   $effect(() => {
-    monaco.editor.setTheme(theme === "light" ? "vs" : "vs-dark");
+    monaco.editor.setTheme(themeName(theme));
   });
 
   onDestroy(() => {
