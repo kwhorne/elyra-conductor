@@ -27,6 +27,12 @@ main UI areas and the everyday workflow.
 - **Right sidebar (Files)** — a lazy-loaded file tree of the active project. Toggle with
   `⌘B`. See [Files & editor](files-and-editor.md).
 
+**Selecting text** looks the same wherever you do it — agent output, panel text, dialogs,
+table cells, the [editor](files-and-editor.md) and the [terminals](terminals.md) all mark
+a selection with the same blue, so what you are about to copy is never in doubt.
+Everywhere except the editor the selected characters are repainted as well (Monaco only
+recolours selected glyphs in high-contrast themes, so there the blue does the work alone).
+
 ## Typical workflow
 
 1. **Pick a project** from the sidebar (or `⌘K` → its name). A terminal tab opens in

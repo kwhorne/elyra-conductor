@@ -9,24 +9,32 @@
   // vs-dark's default selection (#264F78) is nearly invisible on our darker
   // #1a1b26 background, so define themes with a high-contrast selection.
   //
+  // The selection block has to stand out from the background on its own here:
+  // #4166c9 measures 3.2:1 against #1a1b26, where the old #3d59a1 measured
+  // 2.6:1. Recolouring the selected *glyphs* — which is what the terminal does
+  // via xterm's `selectionForeground` — is not available to us: Monaco only
+  // emits the `inline-selected-text` span that its `editor.selectionForeground`
+  // colours when the theme is high-contrast (viewLine.js gates it on
+  // `isHighContrast(themeType)`), so setting it on a vs-dark theme does nothing.
+  //
   // Monaco renders a *dimmer* colour when the editor doesn't hold focus
   // (inactiveSelectionBackground). The obvious pick — a near-background grey —
   // then vanishes: right after you click a file in the tree, focus is still on
   // the tree, so a selection you make shows as "inactive" and is invisible. Keep
-  // the inactive colour a clearly-visible blue, just a notch dimmer than active,
-  // so the selection reads whether or not the editor is focused.
+  // the inactive colour a clearly-visible blue (2.3:1), just a notch dimmer than
+  // active, so the selection reads whether or not the editor is focused.
   monaco.editor.defineTheme("conductor-dark", {
     base: "vs-dark",
     inherit: true,
     rules: [],
     colors: {
       "editor.background": "#1a1b26",
-      "editor.selectionBackground": "#3d59a1",
-      "editor.inactiveSelectionBackground": "#33477e",
-      "editor.selectionHighlightBackground": "#3d59a180",
-      "editor.wordHighlightBackground": "#3d59a166",
+      "editor.selectionBackground": "#4166c9",
+      "editor.inactiveSelectionBackground": "#3a5490",
+      "editor.selectionHighlightBackground": "#4166c980",
+      "editor.wordHighlightBackground": "#4166c966",
       "editor.findMatchBackground": "#6c7bb3",
-      "editor.findMatchHighlightBackground": "#3d59a180",
+      "editor.findMatchHighlightBackground": "#4166c980",
     },
   });
   monaco.editor.defineTheme("conductor-light", {
@@ -34,9 +42,9 @@
     inherit: true,
     rules: [],
     colors: {
-      "editor.selectionBackground": "#aecbfa",
+      "editor.selectionBackground": "#9dbdf7",
       "editor.inactiveSelectionBackground": "#c3d6f7",
-      "editor.selectionHighlightBackground": "#aecbfa80",
+      "editor.selectionHighlightBackground": "#9dbdf780",
     },
   });
   const themeName = (t) => (t === "light" ? "conductor-light" : "conductor-dark");
@@ -294,25 +302,25 @@
     min-height: 0;
   }
 
-  /* Force the text-selection colour with a static, component-compiled rule.
-     Monaco normally paints selection from the theme's `editor.selectionBackground`,
-     but it does so via a stylesheet it injects into <head> at runtime — and under
-     Tauri's WKWebView that injected rule can fail to apply, leaving the selection
-     transparent and invisible (the exact symptom: you select text and see nothing).
-     A style block that ships with the component is always applied, so this guarantees
-     the selection paints regardless of the runtime-injection quirk. Colours match the
-     conductor-dark / conductor-light themes above. */
+  /* A static mirror of the selection colours above, as a safety net in case the
+     stylesheet Monaco injects at runtime ever goes missing.
+     0.9.7 added this believing WKWebView drops that injected stylesheet. It does
+     not: measured inside the real WKWebView, Monaco's own rules match and
+     `--vscode-editor-selectionBackground` resolves correctly. What 0.9.7 got
+     wrong was the selectors — Monaco puts `focused` on `.view-overlays` itself,
+     not on an ancestor, so its `.focused .view-overlays` rules never matched and
+     the un-focused rule silently painted *both* states, discarding the dimmer
+     inactive colour. Keep the pair below in step with the themes above. */
   .editor-wrap :global(.monaco-editor .view-overlays .selected-text) {
-    background-color: #3d59a1 !important;
+    background-color: #3a5490;
+  }
+  .editor-wrap :global(.monaco-editor .view-overlays.focused .selected-text) {
+    background-color: #4166c9;
   }
   .editor-wrap.light :global(.monaco-editor .view-overlays .selected-text) {
-    background-color: #aecbfa !important;
+    background-color: #c3d6f7;
   }
-  /* The line-highlight the current line's selection can otherwise wash out. */
-  .editor-wrap :global(.monaco-editor .focused .view-overlays .selected-text) {
-    background-color: #3d59a1 !important;
-  }
-  .editor-wrap.light :global(.monaco-editor .focused .view-overlays .selected-text) {
-    background-color: #aecbfa !important;
+  .editor-wrap.light :global(.monaco-editor .view-overlays.focused .selected-text) {
+    background-color: #9dbdf7;
   }
 </style>

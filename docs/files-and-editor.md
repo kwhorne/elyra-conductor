@@ -69,6 +69,11 @@ engine behind VS Code), loaded on demand so startup stays fast.
   from `vs-dark`/`vs` with a **high-contrast text selection**. Monaco's stock dark
   selection (`#264F78`) is nearly invisible against Conductor's darker `#1a1b26`
   background, so selecting text to copy (`⌘C`) looked like nothing happened.
+- **Selected text** is `#4166c9` — measured at 3.2:1 against the editor background, so the
+  run you grabbed is unmistakable before you copy it. Click into the file tree or another
+  pane and the selection stays visible, just a notch dimmer (`#3a5490`, 2.3:1): Monaco
+  paints an *inactive* selection whenever focus is elsewhere, and a near-background grey
+  there would vanish exactly when you go looking for what you'd selected.
 
 ## Find files & search contents (⌘P)
 

@@ -52,9 +52,32 @@
 
   let lastActivity = 0;
 
+  // Selection has to survive being read against arbitrary output. #2f3650 (dark)
+  // measured 1.4:1 against the #1a1b26 background — a difference you cannot see,
+  // so dragging over terminal output to copy it showed nothing. #4166c9 measures
+  // 3.2:1. `selectionForeground` matters more here than in the editor: terminal
+  // text carries arbitrary ANSI colours, and a dark-blue or grey run of output
+  // would otherwise disappear into the selection; repainting the selected glyphs
+  // guarantees every character in the selection stays readable.
+  // `selectionInactiveBackground` covers the case where you select, then click
+  // another pane — the selection stays visible instead of dropping to a wash.
   const THEMES = {
-    dark: { background: "#1a1b26", foreground: "#c0caf5", cursor: "#c0caf5", selectionBackground: "#2f3650" },
-    light: { background: "#ffffff", foreground: "#2a2e3a", cursor: "#2a2e3a", selectionBackground: "#dbe4f7" },
+    dark: {
+      background: "#1a1b26",
+      foreground: "#c0caf5",
+      cursor: "#c0caf5",
+      selectionBackground: "#4166c9",
+      selectionInactiveBackground: "#3a5490",
+      selectionForeground: "#ffffff",
+    },
+    light: {
+      background: "#ffffff",
+      foreground: "#2a2e3a",
+      cursor: "#2a2e3a",
+      selectionBackground: "#9dbdf7",
+      selectionInactiveBackground: "#c3d6f7",
+      selectionForeground: "#10121a",
+    },
   };
 
   let el;

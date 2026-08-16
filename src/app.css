@@ -52,6 +52,34 @@ button {
   cursor: pointer;
 }
 
+/* Text selection everywhere the editor and the terminals don't reach: agent
+   output, panels, dialogs, file paths, table cells. Left unstyled, WebKit picks
+   its own colour, which lands close to the page background in a dark UI, so
+   dragging over agent output to copy it showed almost nothing. Same blue the
+   editor and the terminals use, with the selected text repainted so the run you
+   grabbed is unmistakable.
+   (WebKit dims the selection further while the window isn't key, which
+   `::selection:window-inactive` exists to override — but lightningcss, the
+   production CSS minifier, refuses to parse that pseudo-class anywhere except
+   after `::-webkit-scrollbar`, so it fails the build. Left out deliberately.)
+   Monaco and xterm each paint their own selection layer, and macOS additionally
+   allows a *native* selection over Monaco's lines (`.view-line:hover` sets
+   user-select: text for Look Up), so opt both out to avoid a second highlight
+   fighting the real one. */
+::selection {
+  background-color: #4166c9;
+  color: #ffffff;
+}
+:root[data-theme="light"] ::selection {
+  background-color: #9dbdf7;
+  color: #10121a;
+}
+.monaco-editor ::selection,
+.xterm ::selection {
+  background-color: transparent;
+  color: inherit;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

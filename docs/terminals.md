@@ -116,6 +116,16 @@ Only zsh is supported for now; other shells keep the lighter, process-name-based
 Press `⌘F` while a terminal is focused to open a find bar. Use `↵` / `⇧↵` to step
 through matches and `Esc` to close. Powered by the xterm search addon.
 
+## Selecting & copying
+
+Drag over terminal output to select it, then `⌘C`. The selection is `#4166c9` — 3.2:1
+against the terminal background, where the colour it replaced measured 1.4:1 and was
+effectively invisible, so copying a stack trace out of a pane meant guessing what you had
+grabbed. Selected characters are repainted white as well as backed with blue: terminal
+output carries arbitrary ANSI colours, and a dark-blue or grey run would otherwise
+disappear into the selection. Click another pane and the selection dims but stays
+readable, rather than dropping to a wash.
+
 ## Clickable links
 
 URLs in terminal output are underlined on hover and open in your **system browser** when

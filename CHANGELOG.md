@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.8] — 2026-08-16
+
+The selection fix that stopped guessing which surface was broken and measured it.
+
+### Fixed
+
+- **Selected text is now visible everywhere you can select it, with the contrast
+  measured rather than guessed.** 0.9.5, 0.9.6 and 0.9.7 all treated this as an editor
+  bug and all three left it in place. Measuring inside the real WKWebView — a harness of
+  the shipping components, reading back computed styles from the running app — showed
+  the editor was never the surface at fault, and turned up three separate defects:
+  - **Terminal selection was invisible.** `#2f3650` against the `#1a1b26` background
+    measures **1.4:1** — a difference the eye cannot resolve, so dragging over terminal
+    or agent output to copy it showed nothing at all. Now `#4166c9` at **3.2:1**, with
+    `selectionForeground` repainting the selected glyphs: terminal output carries
+    arbitrary ANSI colours, and a dark-blue run would otherwise disappear into the
+    selection. `selectionInactiveBackground` keeps it visible after you click away.
+  - **Plain text outside the editor and terminals had no selection styling at all** —
+    agent output, panels, dialogs, table cells fell back to whatever WebKit picks, which
+    in a dark UI lands close to the page background. There is now an explicit
+    `::selection`, with Monaco and xterm opted out since they paint their own.
+  - **The editor's own selection was dimmer than intended, and its inactive state had
+    been silently discarded.** 0.9.7's static CSS rested on a wrong diagnosis: Monaco's
+    runtime stylesheet *does* apply under WKWebView (measured — its rules match and
+    `--vscode-editor-selectionBackground` resolves). What was actually broken were the
+    selectors: Monaco puts `focused` on `.view-overlays` itself, not on an ancestor, so
+    two of the four rules never matched and the remaining one painted focused and
+    unfocused selections identically. Selectors corrected against the real DOM, and the
+    selection raised from `#3d59a1` (2.6:1) to `#4166c9` (3.2:1).
+
 ## [0.9.7] — 2026-07-30
 
 The editor-selection fix that finally targets the right rendering engine.
@@ -1073,7 +1103,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.7...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.8...HEAD
+[0.9.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.7...v0.9.8
 [0.9.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.4...v0.9.5
