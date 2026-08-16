@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.9] — 2026-08-16
+
+The release where the selection bug was finally reproduced instead of theorised — by
+verifying in a release build, where it turned out never to have been a colour problem.
+
+### Fixed
+
+- **Inline styles were dead in every release build, which is why the editor selection
+  was invisible.** 0.9.5 through 0.9.8 all treated this as a colour problem and all four
+  left it in place, because every verification ran against `pnpm tauri dev` — and the bug
+  cannot occur there. Measured inside a real release build: the selection existed (⌘A
+  followed by ⌘C returned the file byte for byte) while `.selected-text` measured
+  **0×0**. The colour was never wrong; the rectangles had no size.
+
+  The cause is a chain that starts in `index.html`. It carries a `<style>` block for the
+  splash screen, and Tauri injects a `nonce` into every `<style>` tag it finds, adding
+  `'nonce-…'` to `style-src`. Under CSP, a nonce in a directive makes `'unsafe-inline'`
+  inert — so the policy we ship as `style-src 'self' 'unsafe-inline'` was delivered as
+  `style-src 'self' 'unsafe-inline' 'nonce-11121979590700813696'`, and every inline
+  `style` attribute in the app stopped applying. Monaco writes its selection geometry as
+  markup (`style="width:203px"`), so the rectangles collapsed. Proven directly in the
+  running app: `setAttribute("style","width:123px")` computed to `1400px` (ignored) while
+  `el.style.width = "77px"` computed to `77px` (CSSOM is unaffected). `devCsp` never gets
+  a nonce, which is exactly why four rounds of dev-mode verification looked fine.
+
+  Fixed with `dangerousDisableAssetCspModification: ["style-src"]`, which stops the nonce
+  injection and lets the `'unsafe-inline'` the policy already declares take effect. The
+  effective policy is now precisely the one written in `tauri.conf.json`. Untrusted
+  markdown is unaffected: both `{@html}` sinks run through DOMPurify, which strips
+  `style` tags and attributes.
+
+- **The drifting grey circles over the editor** were the same bug, not a separate one.
+  They are Monaco's whitespace dots: each run of spaces is an `<svg>` sized by an inline
+  `style="width:156px;height:20px"`. With the attribute ignored the svg stretched to the
+  full container — measured at 2018×5045 — and the `viewBox` scaled its 1.11px dots up
+  into the blobs. Now measured back at their intended 156×20, and the dots render as
+  dots.
+
+  Verified in a real release build: 63 selection rectangles at their true sizes
+  (203×20, 10×20, 8×20 — previously all 0×0), whitespace svgs at 156×20 and 8×20, zero
+  CSP violations (previously 12 `style-src-elem`), zero nonced elements, and inline
+  `style` attributes applying again. `pnpm check` and `pnpm build` pass.
+
 ## [0.9.8] — 2026-08-16
 
 The selection fix that stopped guessing which surface was broken and measured it.
@@ -1103,7 +1146,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.8...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.9...HEAD
+[0.9.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.8...v0.9.9
 [0.9.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.7...v0.9.8
 [0.9.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.5...v0.9.6
