@@ -23,3 +23,6 @@ latest.json
 *.keystore
 *_rsa
 *_ed25519
+
+# Build output of the key re-encryption helper
+scripts/rekey-signing-key/target

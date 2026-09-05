@@ -61,3 +61,21 @@ export function rankDevTasks(tasks) {
     .sort((a, b) => b.s - a.s)
     .map((x) => x.t);
 }
+
+/**
+ * Resolve a runbook `[[task:name]]` link to the command of a task discovered in
+ * the project (package.json scripts, Makefile targets…). Returns null when no
+ * task carries that label — and callers must treat null as "do nothing", never
+ * as "run the label": runbooks arrive with whatever repository you clone and a
+ * link shows only its text, so running the label would let a note execute an
+ * arbitrary command the user never saw.
+ * @param {Array<{label: string, command: string}>} tasks
+ * @param {string} label
+ * @returns {string | null}
+ */
+export function resolveRunbookTask(tasks, label) {
+  const want = String(label ?? "").trim().toLowerCase();
+  if (!want) return null;
+  const t = (tasks || []).find((x) => String(x?.label ?? "").trim().toLowerCase() === want);
+  return t && typeof t.command === "string" && t.command ? t.command : null;
+}

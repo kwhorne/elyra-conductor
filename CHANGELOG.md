@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **A runbook link could run a command you never saw.** `[[task:name]]` links are
+  meant to run a task discovered in the project (package.json scripts, Makefile
+  targets…). When no task matched, the label itself was run instead — so a runbook
+  in a cloned repository could carry `[Start dev server](ctask:curl … | sh)`, show a
+  friendly label, and execute the hidden command on one click, with no confirmation.
+  Unknown task names are now refused with a dialog and nothing runs. The lookup lives
+  in `resolveRunbookTask()`, and `pnpm check` locks the behaviour in with five
+  regression tests.
+
+- **Command history recorded secrets verbatim.** Terminal scrollback was already
+  masked before it reached localStorage, but the same output went into `history.db`
+  unmasked, so a `cat .env` or an `export TOKEN=…` sat in plain SQLite under
+  Application Support indefinitely. Both the command line and its output now pass
+  through the same redaction. Existing rows are untouched; "Clear history" in the
+  Timeline panel removes them.
+
+- **The updater signing key must be private and password-protected.**
+  `release-build.sh` now refuses to build unless the key file is mode `600` and a
+  non-empty password is available — from `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` or the
+  login keychain item `elyra-conductor-signing`. Previously a world-readable key with
+  an empty password meant any process on the build machine could sign an update that
+  every install accepts as genuine. The public key is embedded in every shipped
+  build, so the key cannot simply be rotated without breaking auto-update;
+  `scripts/rekey-signing-key.sh` re-encrypts the existing key under a password
+  instead, keeping the keypair and proving the result against the original public
+  key before it removes the backup. See RELEASING.md → "Protecting the private key".
+
 ## [0.9.9] — 2026-08-16
 
 The release where the selection bug was finally reproduced instead of theorised — by

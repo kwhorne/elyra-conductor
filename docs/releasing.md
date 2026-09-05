@@ -20,6 +20,10 @@ pnpm tauri signer generate -w ~/.tauri/elyra-conductor.key
 
 If the private key is lost, existing installs can no longer auto-update.
 
+The private key must be mode `600` and password-protected; `release-build.sh` reads
+the password from the login keychain item `elyra-conductor-signing` and refuses to
+build otherwise. Details in [`RELEASING.md`](../RELEASING.md#protecting-the-private-key).
+
 ## Cutting a release
 
 1. **Update the changelog.** In [`CHANGELOG.md`](../CHANGELOG.md), rename `[Unreleased]`

@@ -18,6 +18,44 @@ pnpm tauri signer generate -w ~/.tauri/elyra-conductor.key
 > If the private key is lost, existing installs can no longer auto-update — you'd
 > have to ship a new signed build manually and rotate the pubkey.
 
+### Protecting the private key
+
+`release-build.sh` refuses to build unless both of these hold:
+
+- **The key file is mode `600`.** A world-readable signing key lets any process on
+  the machine — a dependency's `postinstall` script, say — read it and sign an
+  update that every install accepts as genuine.
+
+  ```bash
+  chmod 600 ~/.tauri/elyra-conductor.key
+  ```
+
+- **The key has a non-empty password.** Without one, the file alone is enough to
+  sign a release. The script reads the password from
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` or, by default, from the login keychain
+  item `elyra-conductor-signing`, so nothing has to be typed at release time:
+
+  ```bash
+  security add-generic-password -a "$USER" -s elyra-conductor-signing -w '<password>' -U
+  ```
+
+  Keep a copy of the password in your password manager: the key file is useless
+  without it, and so is a fresh build machine.
+
+Adding a password to a key that was generated without one must **not** be done by
+generating a new keypair — the public key is embedded in every shipped build, so a
+new pair would silently break auto-update for every existing install. Re-encrypt the
+existing key instead, which keeps the keypair:
+
+```bash
+OLD_PW='' ./scripts/rekey-signing-key.sh
+```
+
+The script builds `scripts/rekey-signing-key/`, generates a password into the keychain
+item above, re-encrypts the key, and — before deleting the backup — proves that
+`tauri signer sign` with the new password yields a signature the *original* public
+key verifies and that the empty password no longer works.
+
 ## Cutting a release
 
 1. **Update the changelog.** In [CHANGELOG.md](CHANGELOG.md), rename the

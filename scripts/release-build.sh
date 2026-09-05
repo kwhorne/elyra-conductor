@@ -29,8 +29,33 @@ for v in /Volumes/Elyra\ Conductor*; do
   hdiutil detach "$v" -force 2>/dev/null || diskutil unmount force "$v" 2>/dev/null || true
 done
 
+# The key must be private to this user. A world-readable signing key lets any
+# process on the machine — a dependency's postinstall, say — sign an update that
+# every install accepts as genuine.
+perms="$(stat -f '%Lp' "$KEY_FILE")"
+if [ "$perms" != "600" ] && [ "$perms" != "400" ]; then
+  echo "Signing key $KEY_FILE is mode $perms; it must be 600." >&2
+  echo "  chmod 600 \"$KEY_FILE\"" >&2
+  exit 1
+fi
+
+# The key must also be password-protected, and the password must not be empty —
+# otherwise the file alone is enough to sign a release. The password comes from
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD or, by default, the login keychain item
+# named below. See RELEASING.md → "Protecting the private key".
+KEYCHAIN_ITEM="${TAURI_SIGNING_KEYCHAIN_ITEM:-elyra-conductor-signing}"
+if [ -z "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" ]; then
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password -s "$KEYCHAIN_ITEM" -w 2>/dev/null || true)"
+fi
+if [ -z "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
+  echo "No signing-key password. Store it in the login keychain:" >&2
+  echo "  security add-generic-password -a \"\$USER\" -s $KEYCHAIN_ITEM -w '<password>' -U" >&2
+  echo "or export TAURI_SIGNING_PRIVATE_KEY_PASSWORD. Refusing to build with an unprotected key." >&2
+  exit 1
+fi
+
 export TAURI_SIGNING_PRIVATE_KEY="$(cat "$KEY_FILE")"
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 # Skip create-dmg's AppleScript window-styling step (flaky / needs Finder access).
 export CI=true
 
