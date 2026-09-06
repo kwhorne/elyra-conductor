@@ -1,0 +1,11 @@
+# pnpm 10 reads its settings from here, not from a "pnpm" field in package.json
+# (that field is silently ignored). Only the packages listed may run install
+# scripts; every other dependency's lifecycle scripts are blocked.
+onlyBuiltDependencies:
+  - esbuild
+
+# monaco-editor pins dompurify 3.4.8, which carries four published advisories.
+# 3.4.x releases are patch-compatible, so resolve every dompurify to the version
+# the app itself uses. Drop this once monaco-editor ships >= 3.4.14 on its own.
+overrides:
+  dompurify: ">=3.4.14"

@@ -3,6 +3,7 @@ mod ask;
 mod db;
 mod fs;
 mod history;
+mod path_policy;
 mod projects;
 mod pty;
 mod util;

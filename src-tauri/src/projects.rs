@@ -711,11 +711,57 @@ pub fn kill_process(pid: u32) -> Result<(), String> {
 /// Open a URL in the default browser.
 #[tauri::command]
 pub fn open_url(url: String) -> Result<(), String> {
+    openable_url(&url)?;
     std::process::Command::new("open")
         .arg(&url)
         .spawn()
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Only web URLs reach `open`. It will launch anything — `file:///…/x.app`, a
+/// custom scheme some other app registered — and every caller hands it text
+/// that ultimately came from elsewhere (terminal output, runbook links, `gh`
+/// output), so the allow-list lives here rather than in each caller.
+fn openable_url(url: &str) -> Result<(), String> {
+    let lower = url.trim().to_ascii_lowercase();
+    let rest = lower
+        .strip_prefix("https://")
+        .or_else(|| lower.strip_prefix("http://"))
+        .ok_or_else(|| format!("refusing to open a non-web URL: {url}"))?;
+    if rest.is_empty() || rest.starts_with('/') {
+        return Err(format!("refusing to open a malformed URL: {url}"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod open_url_tests {
+    use super::openable_url;
+
+    #[test]
+    fn web_urls_are_allowed() {
+        for u in ["https://github.com/kwhorne/elyra-conductor", "http://localhost:5173", "HTTPS://Example.com/x?y=1", "  https://a.b  "] {
+            assert!(openable_url(u).is_ok(), "{u}");
+        }
+    }
+
+    #[test]
+    fn everything_else_is_refused() {
+        for u in [
+            "file:///Applications/Calculator.app",
+            "javascript:alert(1)",
+            "ssh://host",
+            "x-apple.systempreferences:com.apple.preference.security",
+            "/Users/kh/.ssh/id_ed25519",
+            "mailto:a@b.c",
+            "https://",
+            "http:///etc",
+            "",
+        ] {
+            assert!(openable_url(u).is_err(), "{u:?} should be refused");
+        }
+    }
 }
 
 #[derive(Serialize)]

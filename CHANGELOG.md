@@ -36,6 +36,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead, keeping the keypair and proving the result against the original public
   key before it removes the backup. See RELEASING.md → "Protecting the private key".
 
+- **The webview can no longer reach credential and login files, even if everything
+  above it fails.** Every filesystem command (`read_file`, `write_file`, `list_dir`,
+  `trash_path`, …) took any absolute path, so a script that got past DOMPurify and the
+  CSP could have read `~/.ssh` or appended to `~/.zshrc`. A new `path_policy` module
+  now sits under all of them: everything in your home folder, on mounted volumes and
+  in the temp dir is allowed, minus the places that hold credentials (`~/.ssh`,
+  `~/.aws`, `~/.tauri`, the keychain, …) which are never read or written, and the
+  places that run code at login (`~/.zshrc`, `~/.gitconfig`, `LaunchAgents`, `~/bin`,
+  …) which the editor may still show but nothing may write. Paths are resolved before
+  they are judged — `..` lexically, symlinks through the deepest existing ancestor —
+  so `~/proj/link/id_rsa` with `link → ~/.ssh` is refused, and a dangling link to
+  `~/.zshrc` cannot be written through. Nine Rust tests pin this down.
+
+- **`open_url` only opens web URLs.** It handed whatever it was given to macOS `open`,
+  which will launch anything — `file:///…/x.app`, a custom scheme another app
+  registered. Callers already filtered, but the allow-list now lives in the command
+  itself: `http://` and `https://`, nothing else.
+
+- **Runbooks and release notes no longer load remote images.** `img-src` allowed any
+  `https:` host, so a runbook in a cloned repository could carry a tracking pixel that
+  fired the moment it was opened. Nothing in the app shows remote images, so the
+  directive is now `'self' data:` in both the release and the dev policy.
+
+### Changed
+
+- **Dependencies.** `monaco-editor` 0.55 → 0.56 (its worker imports now go through the
+  package's `exports` map) and `dompurify` 3.4.12 → 3.4.14, with Monaco's own copy
+  overridden to the same version so `pnpm audit` reports no known vulnerabilities
+  (down from 19). `cargo update` moved 241 crates within semver, clearing the
+  `postgres-protocol`, `tokio-postgres`, `crossbeam-epoch`, `quick-xml` and `rkyv`
+  advisories; the five that remain (`h2`, `rustls-webpki`) are pinned by `libsql 0.9`
+  and wait on its 0.10 release. That update also moved the Tauri notification and updater
+  plugins to 2.4 and 2.11, so their npm packages follow (the Tauri CLI refuses to build
+  when a plugin's crate and npm package disagree on the minor version). The pnpm
+  `onlyBuiltDependencies` setting moved to `pnpm-workspace.yaml`, where pnpm 10
+  actually reads it.
+
 ## [0.9.9] — 2026-08-16
 
 The release where the selection bug was finally reproduced instead of theorised — by

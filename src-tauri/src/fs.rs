@@ -1,3 +1,7 @@
+// Every command here takes a path the frontend chose. Each one is checked by
+// `path_policy` first — see that module for what is allowed and why. Keep the
+// check as the first statement so a new command cannot forget it by accident.
+use crate::path_policy::{check, Access};
 use serde::Serialize;
 use std::path::Path;
 
@@ -10,6 +14,7 @@ pub struct DirEntry {
 
 #[tauri::command(async)]
 pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
+    check(&path, Access::Read)?;
     let mut out = Vec::new();
     let entries = std::fs::read_dir(&path).map_err(|e| format!("{path}: {e}"))?;
     for entry in entries.flatten() {
@@ -30,11 +35,13 @@ pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
 
 #[tauri::command(async)]
 pub fn read_file(path: String) -> Result<String, String> {
+    check(&path, Access::Read)?;
     std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))
 }
 
 #[tauri::command(async)]
 pub fn write_file(path: String, content: String) -> Result<(), String> {
+    check(&path, Access::Write)?;
     // Create parent directories so saving e.g. a new .conductor/notes/foo.md
     // (or any file in a not-yet-existing folder) just works.
     if let Some(parent) = Path::new(&path).parent() {
@@ -55,6 +62,7 @@ pub struct SavedQuery {
 /// kept **private** (never committed) via a `.gitignore` that ignores the whole
 /// folder. Runbooks (`.conductor/notes`) stay versionable; queries do not.
 fn ensure_queries_dir(project: &str) -> Result<std::path::PathBuf, String> {
+    check(project, Access::Write)?;
     let dir = Path::new(project).join(".conductor").join("queries");
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let gi = dir.join(".gitignore");
@@ -87,6 +95,7 @@ pub fn save_queries(project: String, queries: Vec<SavedQuery>) -> Result<(), Str
 /// parent directories as needed.
 #[tauri::command(async)]
 pub fn write_bytes(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    check(&path, Access::Write)?;
     if let Some(parent) = Path::new(&path).parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -120,6 +129,7 @@ const SKIP_DIRS: &[&str] = &[
 /// Capped so a giant tree can't hang the UI.
 #[tauri::command(async)]
 pub fn list_files(root: String) -> Result<Vec<String>, String> {
+    check(&root, Access::Read)?;
     let root_path = Path::new(&root);
     let mut out: Vec<String> = Vec::new();
     let mut stack: Vec<std::path::PathBuf> = vec![root_path.to_path_buf()];
@@ -160,6 +170,7 @@ pub struct Match {
 /// (fast, respects .gitignore); otherwise falls back to a simple Rust walk.
 #[tauri::command(async)]
 pub fn search_content(root: String, query: String) -> Result<Vec<Match>, String> {
+    check(&root, Access::Read)?;
     if query.trim().is_empty() {
         return Ok(vec![]);
     }
@@ -248,6 +259,7 @@ fn fallback_search(root: &str, query: &str) -> Vec<Match> {
 /// we never silently clobber.
 #[tauri::command(async)]
 pub fn create_file(path: String) -> Result<(), String> {
+    check(&path, Access::Write)?;
     if Path::new(&path).exists() {
         return Err(format!("{path} already exists"));
     }
@@ -262,6 +274,7 @@ pub fn create_file(path: String) -> Result<(), String> {
 /// Create a new directory (including parents). Fails if it already exists.
 #[tauri::command(async)]
 pub fn create_folder(path: String) -> Result<(), String> {
+    check(&path, Access::Write)?;
     if Path::new(&path).exists() {
         return Err(format!("{path} already exists"));
     }
@@ -274,6 +287,8 @@ pub fn rename_path(from: String, to: String) -> Result<(), String> {
     if from == to {
         return Ok(());
     }
+    check(&from, Access::Write)?;
+    check(&to, Access::Write)?;
     if Path::new(&to).exists() {
         return Err(format!("{to} already exists"));
     }
@@ -283,6 +298,8 @@ pub fn rename_path(from: String, to: String) -> Result<(), String> {
 /// Recursively copy a file or directory to a new path. Refuses to overwrite.
 #[tauri::command(async)]
 pub fn copy_path(from: String, to: String) -> Result<(), String> {
+    check(&from, Access::Read)?;
+    check(&to, Access::Write)?;
     if Path::new(&to).exists() {
         return Err(format!("{to} already exists"));
     }
@@ -308,12 +325,14 @@ fn copy_recursive(from: &Path, to: &Path) -> std::io::Result<()> {
 /// Move a path to the OS trash (recoverable) rather than deleting permanently.
 #[tauri::command(async)]
 pub fn trash_path(path: String) -> Result<(), String> {
+    check(&path, Access::Write)?;
     trash::delete(&path).map_err(|e| format!("{e}"))
 }
 
 /// Reveal a path in Finder (selects the item).
 #[tauri::command]
 pub fn reveal_path(path: String) -> Result<(), String> {
+    check(&path, Access::Read)?;
     std::process::Command::new("open")
         .arg("-R")
         .arg(&path)
@@ -326,6 +345,7 @@ pub fn reveal_path(path: String) -> Result<(), String> {
 /// Creates the directory if it does not exist so the first save always works.
 #[tauri::command(async)]
 pub fn list_runbooks(project: String) -> Result<Vec<DirEntry>, String> {
+    check(&project, Access::Write)?;
     let dir = Path::new(&project).join(".conductor").join("notes");
     if !dir.exists() {
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -388,6 +408,9 @@ fn json_script_keys(dir: &Path, file: &str) -> Vec<String> {
 /// Scan a project folder for runnable tasks across common task runners.
 #[tauri::command(async)]
 pub fn list_tasks(path: String) -> Vec<Task> {
+    if check(&path, Access::Read).is_err() {
+        return Vec::new();
+    }
     let dir = Path::new(&path);
     let mut tasks = Vec::new();
 
