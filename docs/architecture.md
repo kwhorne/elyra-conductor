@@ -97,20 +97,32 @@ markdown Conductor renders is treated as **untrusted input**, because it is:
 - **Release notes** come from GitHub; the updater signature covers the binary, not the
   note text.
 
-Two independent layers guard this:
+Three independent layers guard this:
 
-1. **Sanitising.** Both `{@html}` sinks go through DOMPurify (`src/lib/sanitize.js`).
-   The runbook variant deliberately keeps the custom `cfile:` / `ctask:` schemes that
-   `[[file]]` and `[[task:name]]` links depend on — DOMPurify strips unknown schemes by
-   default, which would break the feature silently. `scripts/check-sanitize.mjs` asserts
-   both halves (attacks stripped, links preserved) and runs as part of `pnpm check`.
+1. **Sanitising.** All three `{@html}` sinks — runbooks, release notes, the ask bar —
+   go through DOMPurify (`src/lib/sanitize.js`) with `style` tags and attributes
+   forbidden. The runbook variant deliberately keeps the custom `cfile:` / `ctask:`
+   schemes that `[[file]]` and `[[task:name]]` links depend on — DOMPurify strips
+   unknown schemes by default, which would break the feature silently. A `ctask:` link
+   only ever runs a task the project itself declares; an unknown name is refused, never
+   run as text. `scripts/check-security.mjs` asserts all of it (attacks stripped, links
+   preserved, unknown tasks refused, secrets redacted) and runs as part of `pnpm check`.
 2. **Content-Security-Policy** (`app.security.csp`). `script-src 'self'` with no inline
-   scripts, `object-src`/`frame-src` `'none'`. Tauri injects its own nonces into
-   `script-src`/`style-src` automatically, so its bootstrap still runs. `connect-src`
-   must include `ipc:` — Tauri's IPC is a `fetch()` to an `ipc:` URL, so omitting it
-   breaks every command. `style-src` needs `'unsafe-inline'` because Monaco and xterm
-   inject stylesheets at runtime. Monaco's workers load from same-origin `/assets/`,
-   so `worker-src 'self'` is sufficient — no `blob:` needed.
+   scripts, `object-src`/`frame-src` `'none'`, `img-src 'self' data:` so a runbook cannot
+   load a tracking pixel. Tauri injects a nonce into `script-src` for its bootstrap.
+   It is told **not** to do the same for `style-src`
+   (`dangerousDisableAssetCspModification: ["style-src"]`): under CSP a nonce in a
+   directive makes `'unsafe-inline'` inert, and because `index.html` carries a `<style>`
+   block for the splash screen, Tauri's injected nonce silently disabled every inline
+   `style` attribute in release builds — which is why the editor selection was invisible
+   through 0.9.5–0.9.9 while dev builds (no nonce) looked fine. `style-src` needs
+   `'unsafe-inline'` because Monaco and xterm write inline styles and inject stylesheets
+   at runtime. `connect-src` must include `ipc:` — Tauri's IPC is a `fetch()` to an `ipc:`
+   URL, so omitting it breaks every command. Monaco's workers load from same-origin
+   `/assets/`, so `worker-src 'self'` is sufficient in release builds; `blob:` is a
+   dev-server need only.
+3. **Filesystem scope** (`src-tauri/src/path_policy.rs`). Every `fs.rs` command checks
+   its path before touching disk — see below.
 
 A separate `devCsp` relaxes just enough for the Vite HMR websocket, so the production
 policy stays strict.
@@ -119,20 +131,33 @@ External links inside runbooks are handed to the OS browser via `open_url` rathe
 followed in-place — a plain `<a href>` would navigate the whole webview away from the
 app, leaving a window you can only escape by restarting.
 
-### What is deliberately *not* locked down
+### Filesystem scope
 
-The filesystem commands (`read_file`, `write_file`, `rename_path`, …) accept absolute
-paths and are not scoped to a project root. That is intentional: Conductor is a file
-manager and editor, and scoping would break opening a file outside the tree, the `~/Code`
-scan, and “Reveal in Finder”. Their safety rests on the webview being trustworthy, which
-is what the two layers above exist to guarantee — the fix for “script could touch any
-file” is to stop script from running at all, not to fence off a file manager.
+The filesystem commands (`read_file`, `write_file`, `rename_path`, `trash_path`, …) take
+absolute paths, because Conductor is a file manager and editor: it opens files outside
+the project tree, scans `~/Code`, reveals paths in Finder and exports to external drives.
+So the scope is deliberately **coarse** rather than per-project: anything under the home
+folder, on a mounted volume or in the temp dir is allowed, minus
 
-This has been reviewed and **settled**, not left undone: a security audit will flag
-“unscoped filesystem access” every time, and the answer is the paragraph above. What
-*would* reopen it is the premise changing — if the webview ever loaded remote content, ran
-a third-party plugin, or rendered anything that escaped the sanitiser, then “the webview is
-trustworthy” stops being true and scoping becomes worth its cost in broken features.
+- **credential directories** — `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.docker`,
+  `~/.tauri`, `~/.config/gh`, `~/.netrc`, `~/.npmrc`, the keychain — never read, never
+  written;
+- **login files** — `~/.zshrc` and friends, `~/.gitconfig`, `~/.config/fish`,
+  `Library/LaunchAgents`, `~/bin`, `~/.local/bin` — the editor may show them, nothing
+  may write them.
+
+Paths are resolved before they are judged: `..` lexically, symlinks through the deepest
+existing ancestor, and dangling links by hand (refusing them is not the same as denying
+— the write would create the target). `~/proj/link/id_rsa` with `link → ~/.ssh` is
+therefore refused. `path_policy.rs` carries the tests for each escape route.
+
+This is defence in depth, not the primary defence: with the two layers above intact no
+script runs in the webview at all. It exists so that if one of them ever fails — a
+DOMPurify bypass, a CSP mistake like the one above — the blast radius is a project
+folder, not your SSH keys or your shell startup.
+
+`open_url` follows the same idea in miniature: it accepts `http(s)://` only, in the
+command itself rather than in each caller, because macOS `open` will launch anything.
 
 ### One ordering invariant worth keeping
 

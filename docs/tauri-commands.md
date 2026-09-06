@@ -35,6 +35,7 @@ registered in `src-tauri/src/lib.rs`.
 | `detect_elyra` | `projects.rs` | Resolve the `elyra` binary via the login shell. |
 | `detect_terminal` | `projects.rs` | Detect the external terminal app (iTerm2 / Terminal). |
 | `run_in_external_terminal` | `projects.rs` | Run a file in the external terminal. |
+| `open_url` | `projects.rs` | Open an `http(s)://` URL in the system browser; every other scheme is refused. |
 | `home_dir` | `projects.rs` | Resolve `$HOME` for the default root. |
 | `list_dir` | `fs.rs` | Directory listing for the file tree (directories first). |
 | `read_file` | `fs.rs` | Read a file (backs the Monaco editor). |
@@ -49,6 +50,16 @@ registered in `src-tauri/src/lib.rs`.
 | `db_query` | `db.rs` | Run SQL; returns columns + rows (or rows affected). Backs the [database browser](database.md). |
 | `db_transfer_tables` | `db.rs` | Copy one or more tables from one open connection to another (structure and/or data, with optional per-column masking); emits `db-transfer-progress` events. Backs [Tools ▸ Data Transfer](database.md#data-transfer-copy-a-database-or-just-some-tables). |
 | `db_schema_diff` | `db.rs` | Table/column diff between two open connections + a best-effort migration script. Backs [Tools ▸ Compare Schemas](database.md#compare-schemas-schema-diff--migration-script). |
+
+### Filesystem scope
+
+Every `fs.rs` command checks its path against `src-tauri/src/path_policy.rs` before it
+touches disk. Paths under the home folder, mounted volumes and the temp dir are allowed;
+credential directories (`~/.ssh`, `~/.aws`, `~/.tauri`, the keychain, …) are never read
+or written; login files (`~/.zshrc`, `~/.gitconfig`, `LaunchAgents`, …) are readable but
+never written. `..` and symlinks are resolved first. A refused path comes back as a
+normal command error naming the rule. See
+[Architecture → Filesystem scope](architecture.md#filesystem-scope).
 
 ## Events
 

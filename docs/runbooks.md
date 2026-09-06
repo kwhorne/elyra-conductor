@@ -88,9 +88,11 @@ clickable chip:
 [[task:dev]]  ·  [[task:build|Build it]]
 ```
 
-The name is matched against [discovered tasks](tasks.md); the task's command runs in the
-project's terminal. If no task matches, the text after `task:` is run literally, so
-`[[task:npm test]]` also works as an ad-hoc command.
+The name is matched (case-insensitively) against [discovered tasks](tasks.md) and the
+task's command runs in the project's terminal. If no task matches, **nothing runs** and
+Conductor tells you which name it could not find. A chip shows only its label, so running
+unmatched text would let a runbook you cloned execute a command you never saw. For an
+ad-hoc command, use a shell block instead — it shows the command and runs only on ▶ Run.
 
 ## Example
 
@@ -135,7 +137,8 @@ Runbooks are markdown files that live in the repository, which means a runbook c
 arrive from anywhere you cloned from — or be written by an agent. Conductor therefore
 treats runbook content as untrusted: the rendered HTML is sanitised before display, and
 external links open in your browser rather than inside the app. Shell blocks are never
-run on their own — `▶ Run` is always an explicit click, and you see the command first.
+run on their own — `▶ Run` is always an explicit click, and you see the command first —
+and `[[task:name]]` chips run only tasks the project itself declares, never the link text.
 See [Architecture](architecture.md#untrusted-content--the-webview-boundary).
 
 ## Related

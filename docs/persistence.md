@@ -55,6 +55,10 @@ restore is pragmatic, not a live resurrection:
 - `Terminal.svelte` uses the xterm **serialize addon** to snapshot a pane's buffer
   periodically (every ~4 s) and on teardown, storing it under `conductor:sb:<key>`.
 - Each buffer is **capped** (≈60 KB per pane) to stay well under the storage quota.
+- Before anything is written, `redactSecrets` (`src/lib/redact.js`) masks credential-shaped
+  text — `KEY=value` secrets, bearer tokens, provider token formats, connection-string
+  passwords, PEM blocks — because localStorage is plain text on disk. It is a mitigation,
+  not a guarantee; scrollback persistence can be switched off in the command palette.
 - On next launch the previous buffer is **written back as read-only history** with a
   `── previous session (restored) ──` divider, and a **fresh shell** starts beneath it
   in the same working directory.

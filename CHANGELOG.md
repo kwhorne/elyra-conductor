@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.10] — 2026-09-06
+
+The security-review release: the runbook link that ran what it hid, the history that kept
+what the scrollback masked, the signing key anyone on the machine could have used — and,
+underneath all of it, a filesystem boundary so the webview can no longer reach credentials
+even if every layer above it fails.
+
 ### Security
 
 - **A runbook link could run a command you never saw.** `[[task:name]]` links are
@@ -1212,7 +1219,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.9...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.10...HEAD
+[0.9.10]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.9...v0.9.10
 [0.9.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.8...v0.9.9
 [0.9.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.7...v0.9.8
 [0.9.7]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.6...v0.9.7

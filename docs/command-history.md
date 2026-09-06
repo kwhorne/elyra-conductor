@@ -23,6 +23,11 @@ Every shell-integrated command is persisted to an app-internal **SQLite store**
 (`history.db` in the app data dir) — distinct from the [database browser](database.md),
 which connects to *your* databases.
 
+Both the command line and the captured output pass through the same credential masking
+as [scrollback persistence](persistence.md#scrollback-read-only-history) before they are
+stored, so a `cat .env` or an `export TOKEN=…` does not sit in the database in plain
+text. **Clear history** in the timeline removes everything.
+
 Type in the timeline's search box to query the history **across every session**, not just
 the current one. The search matches both the **command** and its **captured output**, so
 you can find that fix you half-remember:

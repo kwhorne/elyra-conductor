@@ -326,7 +326,8 @@ elyra-conductor/
         ├── agent.rs              # elyra --mode rpc JSONL bridge
         ├── db.rs                 # database browser connections
         ├── history.rs            # persistent command history & insights (SQLite)
-        └── fs.rs                 # directory + file commands
+        ├── path_policy.rs        # where the webview may read and write on disk
+        └── fs.rs                 # directory + file commands (checked by path_policy)
 ```
 
 ### Tauri commands
