@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-09-26
+
+The first step of Conductor and eTerm working together: a button that hands a project
+folder to eTerm through the door it already has.
+
 ### Added
 
 - **Open in eTerm.** When [eTerm](https://elyracode.com/eterm) is installed, every project
@@ -1246,7 +1251,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/kwhorne/elyra-conductor/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.10...v1.0.0
 [0.9.10]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.9...v0.9.10
 [0.9.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.8...v0.9.9

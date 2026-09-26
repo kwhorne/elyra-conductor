@@ -1,6 +1,6 @@
 [package]
 name = "elyra-conductor"
-version = "1.0.0"
+version = "1.0.1"
 description = "Local project conductor: switcher, terminals, quick-edit"
 authors = ["kwhorne <kh@gets.no>"]
 license = "MIT"
