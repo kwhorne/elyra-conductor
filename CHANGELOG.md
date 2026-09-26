@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-26
+
+1.0 — not because something changed, but because it stopped moving. The boundary has held
+across the whole 0.9 series: Conductor starts processes and shows their output, and never
+reasons. The security review closed every finding it opened; the webview cannot reach
+credentials or login files even if the sanitiser fails; releases are signed with a key that
+needs a password, from a script that refuses to build without one; and what ships is
+verified in the build that ships, not in dev. From here, semantic versioning means what it
+says: a breaking change is a major version.
+
 ### Added
 
 - **Settings → Updates.** The version you are running, a **Check now** button, and the
@@ -1227,7 +1237,8 @@ project switcher, real PTY terminals, split panes, file tree, and quick-edit.
 - **Run modal:** use a dot-free PTY id so Tauri event names accept it and output
   streams correctly.
 
-[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.10...HEAD
+[Unreleased]: https://github.com/kwhorne/elyra-conductor/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.10...v1.0.0
 [0.9.10]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.9...v0.9.10
 [0.9.9]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.8...v0.9.9
 [0.9.8]: https://github.com/kwhorne/elyra-conductor/compare/v0.9.7...v0.9.8
