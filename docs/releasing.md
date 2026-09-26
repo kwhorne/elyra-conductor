@@ -56,7 +56,8 @@ build otherwise. Details in [`RELEASING.md`](../RELEASING.md#protecting-the-priv
 - `plugins.updater.endpoints` points at the repo's
   `releases/latest/download/latest.json`, which always resolves to the latest
   non-prerelease manifest.
-- On startup (and via `⌘K` → **Check for updates…**), the app fetches the manifest,
+- On startup (and via `⌘,` → **Updates** → **Check now**, or `⌘K` → **Check for updates…**),
+  the app fetches the manifest,
   compares versions, and offers a one-click install & restart for newer builds.
 - The downloaded `.app.tar.gz` is verified against the embedded public key before
   installing.

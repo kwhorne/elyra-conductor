@@ -111,7 +111,8 @@ key verifies and that the empty password no longer works.
 - The app's `plugins.updater.endpoints` points at
   `https://github.com/kwhorne/elyra-conductor/releases/latest/download/latest.json`,
   which always resolves to the **latest** (non-prerelease) release's manifest.
-- On startup (and via the command palette → "Check for updates…"), the app fetches
+- On startup (and via Settings → Updates → "Check now", or the command palette →
+  "Check for updates…"), the app fetches
   the manifest, compares versions, and if newer shows a toast to install & restart.
 - The downloaded `.app.tar.gz` is verified against the embedded public key before
   installing.

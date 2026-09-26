@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Settings → Updates.** The version you are running, a **Check now** button, and the
+  result where you can see it: *You're on the latest version* with when that was checked,
+  or the available version with **What's new** and **Install & restart**. The command
+  palette's **Check for updates…** still works and still answers with a dialog; this is
+  the same check with its answer kept on the page.
+
 ## [0.9.10] — 2026-09-06
 
 The security-review release: the runbook link that ran what it hid, the history that kept

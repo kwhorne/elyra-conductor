@@ -57,7 +57,8 @@ palette.
   [Releasing & auto-update](releasing.md).
 - On macOS, the first launch of a downloaded build is **not notarized**, so you may need
   right-click → **Open** once.
-- Trigger a manual check with `⌘K` → **Check for updates…**.
+- Trigger a manual check with `⌘,` → **Updates** → **Check now** (the result shows inline),
+  or `⌘K` → **Check for updates…**.
 
 ## Git status or commit isn't working
 

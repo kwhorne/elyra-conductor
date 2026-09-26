@@ -34,6 +34,7 @@
   import ShortcutsModal from "./lib/ShortcutsModal.svelte";
   import { check as checkUpdate } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
+  import { getVersion } from "@tauri-apps/api/app";
   import { marked } from "marked";
   import { sanitizeMarkdownHtml } from "./lib/sanitize.js";
   import { redactSecrets } from "./lib/redact.js";
@@ -69,18 +70,26 @@
   let updateError = $state("");
   let updateDismissed = $state(false);
   let updateNotesOpen = $state(false);
+  let appVersion = $state("");
+  // What the last check found, for Settings → Updates to show inline rather
+  // than through a blocking alert: idle | checking | latest | available | error.
+  let updateCheck = $state({ state: "idle", at: null, error: "" });
 
-  async function checkForUpdate(manual = false) {
+  async function checkForUpdate(manual = false, { alerts = manual } = {}) {
+    updateCheck = { state: "checking", at: updateCheck.at, error: "" };
     try {
       const u = await checkUpdate();
       if (u) {
         update = u;
         updateDismissed = false;
-      } else if (manual) {
-        alert("You're on the latest version.");
+        updateCheck = { state: "available", at: Date.now(), error: "" };
+      } else {
+        updateCheck = { state: "latest", at: Date.now(), error: "" };
+        if (alerts) alert("You're on the latest version.");
       }
     } catch (e) {
-      if (manual) alert(`Update check failed: ${e}`);
+      updateCheck = { state: "error", at: Date.now(), error: String(e) };
+      if (alerts) alert(`Update check failed: ${e}`);
       else console.warn("update check failed", e);
     }
   }
@@ -2396,6 +2405,7 @@
       setTimeout(() => splash.remove(), 450);
     }
 
+    getVersion().then((v) => (appVersion = v)).catch(() => {});
     checkForUpdate(false); // silent check on startup
     // Preload the editor in the background so the first open is instant.
     if ("requestIdleCallback" in window) requestIdleCallback(loadEditor);
@@ -2776,6 +2786,15 @@
     {root}
     {elyraVersion}
     {elyraBin}
+    {appVersion}
+    {update}
+    {updateCheck}
+    {updateStatus}
+    oncheckupdate={() => checkForUpdate(true, { alerts: false })}
+    oninstallupdate={() => {
+      settingsOpen = false; // the toast shows download progress
+      installUpdate();
+    }}
     ontheme={(t) => (theme = t)}
     onfont={(d) => adjustTermFont(d)}
     onpersist={(v) => {

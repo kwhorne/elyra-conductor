@@ -50,6 +50,15 @@ GUI-launched app whose `PATH` lacks nvm/volta).
 Terminal help itself lives at `⌘↵` in any pane — see
 [Ask about this terminal](terminals.md#ask-about-this-terminal-).
 
+## Updates
+
+The version you are running, a **Check now** button, and the answer inline: *You're on the
+latest version* with when that was checked, or the version that is available with
+**What's new** (the release notes on GitHub) and **Install & restart**. Conductor also checks
+silently on launch. Either way an update is downloaded only when you ask, and installed
+only after its signature verifies against the key built into the app — see
+[Releasing & auto-update](releasing.md).
+
 ## Where settings are stored
 
 In `localStorage`, alongside session and workspace state. See

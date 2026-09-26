@@ -6,6 +6,8 @@
   // opening this window looking for "where do I put my key?" should find a clear
   // answer rather than an unexplained gap, which is what the AI section is for.
   // See ARCHITECTURE.md — Conductor must not store credentials or choose models.
+  import { invoke } from "@tauri-apps/api/core";
+
   let {
     open = false,
     theme = "dark",
@@ -16,6 +18,12 @@
     root = "",
     elyraVersion = null,
     elyraBin = null,
+    appVersion = "",
+    update = null,
+    updateCheck = { state: "idle", at: null, error: "" },
+    updateStatus = "",
+    oncheckupdate,
+    oninstallupdate,
     ontheme,
     onfont,
     onpersist,
@@ -27,6 +35,21 @@
 
   function onKeydown(e) {
     if (e.key === "Escape") onclose?.();
+  }
+
+  function ago(ts) {
+    if (!ts) return "";
+    const m = Math.round((Date.now() - ts) / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m} min ago`;
+    const h = Math.round(m / 60);
+    return h < 24 ? `${h} h ago` : `${Math.round(h / 24)} d ago`;
+  }
+
+  // Release notes live on GitHub; open them in the browser rather than render
+  // remote markdown here.
+  function releaseNotes(version) {
+    invoke("open_url", { url: `https://github.com/kwhorne/elyra-conductor/releases/tag/v${version}` }).catch(() => {});
   }
 </script>
 
@@ -162,6 +185,38 @@
             <span class="badge" class:ok={!!elyraVersion}>{elyraVersion || "missing"}</span>
           </div>
         </section>
+
+        <section>
+          <h3>Updates</h3>
+          <div class="row">
+            <div class="label">
+              <span>Elyra Conductor <span class="mono">v{appVersion || "…"}</span></span>
+              <span class="sub">
+                {#if update}
+                  <b>v{update.version}</b> is available.
+                  <button class="link" onclick={() => releaseNotes(update.version)}>What's new</button>
+                {:else if updateCheck.state === "checking"}
+                  Checking…
+                {:else if updateCheck.state === "latest"}
+                  You're on the latest version — checked {ago(updateCheck.at)}.
+                {:else if updateCheck.state === "error"}
+                  Update check failed: {updateCheck.error}
+                {:else}
+                  Checked on launch. Updates are signed, and installed only when you say so.
+                {/if}
+              </span>
+            </div>
+            {#if update}
+              <button class="ghost primary" onclick={oninstallupdate} disabled={updateStatus === "downloading"}>
+                {updateStatus === "downloading" ? "Downloading…" : "Install & restart"}
+              </button>
+            {:else}
+              <button class="ghost" onclick={oncheckupdate} disabled={updateCheck.state === "checking"}>
+                {updateCheck.state === "checking" ? "Checking…" : "Check now"}
+              </button>
+            {/if}
+          </div>
+        </section>
       </div>
     </div>
   </div>
@@ -201,6 +256,11 @@
   .toggle.on .knob { transform: translateX(17px); background: #fff; }
   .ghost { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 10px; font-size: 11px; cursor: pointer; flex: none; }
   .ghost:hover { border-color: var(--accent); }
+  .ghost:disabled { opacity: 0.5; cursor: default; }
+  .ghost.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .link { background: none; border: none; padding: 0; color: var(--accent); font-size: 10px; cursor: pointer; }
+  .link:hover { text-decoration: underline; }
+  .sub b { color: var(--text); }
   .note { background: var(--bg-3); border-radius: 8px; padding: 11px 13px; margin-bottom: 6px; }
   .note p { margin: 0 0 8px; font-size: 11px; line-height: 1.55; color: var(--text-dim); }
   .note p:last-child { margin-bottom: 0; }
