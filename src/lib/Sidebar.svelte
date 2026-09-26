@@ -340,6 +340,9 @@
   }
   .actions {
     display: flex;
+    /* Six buttons no longer fit one line at the default sidebar width; wrapping
+       beats clipping, which silently hid whatever came last. */
+    flex-wrap: wrap;
     gap: 6px;
     margin-top: 6px;
   }

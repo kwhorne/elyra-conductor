@@ -373,6 +373,14 @@ enum EditorLauncher {
         /// when the app isn't in one of the common install locations.
         bundle_id: &'static str,
     },
+    /// An app that takes the folder the way Finder's "Open With" hands it over —
+    /// as an "open documents" Apple Event — and ignores argv. eTerm is one: it
+    /// listens for opened URLs and opens a new tab in the folder. `App` would
+    /// only bring it to the front wherever it already was.
+    Document {
+        app_name: &'static str,
+        bundle_id: &'static str,
+    },
 }
 
 /// Known launchers for supported editors, keyed by the id `detect_editors` /
@@ -386,6 +394,13 @@ const EDITORS: &[(&str, EditorLauncher)] = &[
         EditorLauncher::App {
             app_name: "e",
             bundle_id: "dev.e.editor",
+        },
+    ),
+    (
+        "eterm",
+        EditorLauncher::Document {
+            app_name: "eterm",
+            bundle_id: "dev.eterm.eterm",
         },
     ),
 ];
@@ -475,6 +490,10 @@ pub fn detect_editors() -> Vec<String> {
         .filter(|(_, launcher)| match launcher {
             EditorLauncher::Cli(bin) => find_bin(bin).is_some(),
             EditorLauncher::App {
+                app_name,
+                bundle_id,
+            }
+            | EditorLauncher::Document {
                 app_name,
                 bundle_id,
             } => find_app(app_name, bundle_id).is_some(),
@@ -591,6 +610,22 @@ pub fn open_in_editor(editor: String, path: String) -> Result<(), String> {
         EditorLauncher::Cli(bin) => {
             let resolved = find_bin(bin).ok_or_else(|| format!("{bin} not found on PATH"))?;
             std::process::Command::new(resolved)
+                .arg(&path)
+                .spawn()
+                .map_err(|e| format!("failed to launch {editor}: {e}"))?;
+        }
+        EditorLauncher::Document {
+            app_name,
+            bundle_id,
+        } => {
+            let app = find_app(app_name, bundle_id)
+                .ok_or_else(|| format!("{app_name}.app not found in /Applications"))?;
+            // No `--args`: this is the "open documents" Apple Event, the same
+            // door a folder dropped on the Dock icon goes through. It works
+            // because the app declares it handles folders — see the variant.
+            std::process::Command::new("open")
+                .arg("-a")
+                .arg(app)
                 .arg(&path)
                 .spawn()
                 .map_err(|e| format!("failed to launch {editor}: {e}"))?;
@@ -733,6 +768,27 @@ fn openable_url(url: &str) -> Result<(), String> {
         return Err(format!("refusing to open a malformed URL: {url}"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod editor_tests {
+    use super::*;
+
+    #[test]
+    fn eterm_is_launched_as_a_document_not_with_args() {
+        // eTerm receives the folder as an "open documents" event and ignores
+        // argv; launching it like the editors (`--args`) would only bring it to
+        // the front wherever it already was.
+        let (_, launcher) = EDITORS.iter().find(|(n, _)| *n == "eterm").expect("eterm registered");
+        assert!(matches!(launcher, EditorLauncher::Document { app_name: "eterm", bundle_id: "dev.eterm.eterm" }));
+    }
+
+    #[test]
+    fn detect_editors_reports_eterm_when_it_is_installed() {
+        if std::path::Path::new("/Applications/eterm.app").exists() {
+            assert!(detect_editors().contains(&"eterm".to_string()), "got {:?}", detect_editors());
+        }
+    }
 }
 
 #[cfg(test)]

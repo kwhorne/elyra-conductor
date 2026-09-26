@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Open in eTerm.** When [eTerm](https://elyracode.com/eterm) is installed, every project
+  gets an **eterm** button next to the editor buttons that opens the project folder as a
+  new tab there. eTerm takes a folder the way Finder's Open With hands it over — an "open
+  documents" event, not an argument — so this is a new launcher kind alongside the
+  CLI-and-argv ones the editors use. The button row now wraps instead of clipping, which
+  had been hiding whatever came last once there were more than five.
+
 ## [1.0.0] — 2026-09-26
 
 1.0 — not because something changed, but because it stopped moving. The boundary has held

@@ -15,8 +15,8 @@
 Elyra Conductor gives you a single cockpit for all your local projects. Pick a
 project from the sidebar and it opens in a terminal tab rooted at that folder.
 Split the terminal into as many panes as you like, browse the project's files,
-quick-edit a file inline with Monaco, or launch the whole project in your real
-editor (Zed / VS Code / Cursor).
+quick-edit a file inline with Monaco, launch the whole project in your real
+editor (Zed / VS Code / Cursor), or open its folder as a new tab in eTerm.
 
 Run several Elyra agents at once — each isolated in its own git worktree — and see
 at a glance which are working and which are waiting on you, with each branch's pull
@@ -123,7 +123,8 @@ boundary (including how the planned RPC integration stays a *host*, not an agent
   queries are private per project. ClickHouse uses its native protocol. Just a tool —
   no model calls.
 - 🚀 **Open in your editor** — auto-detects installed editors and launches the
-  project in Zed, VS Code, Cursor, or [e](https://e.dev).
+  project in Zed, VS Code, Cursor, or [e](https://e.dev) — and its folder as a new
+  tab in [eTerm](https://elyracode.com/eterm).
 - 🤖 **Elyra agent** — if the [Elyra](https://elyracode.com) coding agent CLI is
   installed, open a **native agent panel** in a tab (sidebar button, palette, or
   right-click → "Ask Elyra about this file"). Conductor drives `elyra --mode rpc`

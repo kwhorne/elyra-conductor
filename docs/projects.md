@@ -47,7 +47,9 @@ accurate even when they live outside the current root.
   project already exists, Conductor focuses it instead of opening a duplicate.
 - Use the per-project **zed / code / cursor** buttons to open the whole project in your
   real editor. Conductor auto-detects which editors are installed (`detect_editors`)
-  and launches the selected one (`open_in_editor`).
+  and launches the selected one (`open_in_editor`). **eterm** opens the project folder
+  as a new tab in [eTerm](https://elyracode.com/eterm), through the same door Finder's
+  Open With uses.
 - If the [Elyra](elyra-agent.md) CLI is installed, use the agent button to open a native
   agent panel in that project.
 
